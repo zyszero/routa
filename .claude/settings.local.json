@@ -43,7 +43,8 @@
       "Bash(gh issue comment:*)",
       "WebFetch(domain:github.com)",
       "WebSearch",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(gh issue edit:*)"
     ]
   }
 }
