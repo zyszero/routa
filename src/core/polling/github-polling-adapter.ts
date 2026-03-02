@@ -85,7 +85,25 @@ export class GitHubPollingAdapter {
     private webhookStore: GitHubWebhookStore,
     private backgroundTaskStore: BackgroundTaskStore,
     private workspaceId: string = "default"
-  ) {}
+  ) {
+    // Initialize from environment variables
+    this.initFromEnv();
+  }
+
+  private initFromEnv(): void {
+    const enabled = process.env.GITHUB_POLLING_ENABLED === "true";
+    const interval = parseInt(process.env.GITHUB_POLLING_INTERVAL ?? "30", 10);
+
+    this.config.enabled = enabled;
+    this.config.intervalSeconds = Math.max(10, interval); // Minimum 10 seconds
+
+    if (enabled) {
+      console.log(
+        `[GitHubPolling] Auto-starting from env: interval=${this.config.intervalSeconds}s`
+      );
+      this.start();
+    }
+  }
 
   // ─── Configuration ─────────────────────────────────────────────────────────
 

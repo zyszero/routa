@@ -91,6 +91,9 @@ pub async fn create_app_state(db_path: &str) -> Result<state::AppState, String> 
         .unwrap_or_else(|_| ".".to_string());
     state.skill_registry.reload(&cwd);
 
+    // Start polling if enabled via environment variables
+    api::polling::start_polling_if_enabled();
+
     Ok(state)
 }
 

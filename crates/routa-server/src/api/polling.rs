@@ -16,7 +16,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use crate::error::ServerError;
 use crate::state::AppState;
@@ -36,14 +37,50 @@ pub struct PollingConfig {
 
 impl Default for PollingConfig {
     fn default() -> Self {
+        // Initialize from environment variables
+        let enabled = std::env::var("GITHUB_POLLING_ENABLED")
+            .unwrap_or_else(|_| "false".to_string())
+            .parse()
+            .unwrap_or(false);
+        
+        let interval_seconds = std::env::var("GITHUB_POLLING_INTERVAL")
+            .unwrap_or_else(|_| "30".to_string())
+            .parse()
+            .unwrap_or(30)
+            .max(10); // Minimum 10 seconds
+
         Self {
-            enabled: false,
-            interval_seconds: 30,
+            enabled,
+            interval_seconds,
             last_event_ids: HashMap::new(),
             last_checked_at: None,
             is_running: false,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHubEvent {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub event_type: String,
+    pub actor: GitHubActor,
+    pub repo: GitHubRepo,
+    pub payload: serde_json::Value,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitHubActor {
+    pub login: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitHubRepo {
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -72,6 +109,79 @@ pub struct PollSummary {
 
 lazy_static::lazy_static! {
     static ref POLLING_CONFIG: Mutex<PollingConfig> = Mutex::new(PollingConfig::default());
+    static ref POLLING_HANDLE: Mutex<Option<Arc<tokio::task::JoinHandle<()>>>> = Mutex::new(None);
+}
+
+// ─── Background Polling Task ─────────────────────────────────────────────────
+
+/// Start the background polling task if enabled
+pub fn start_polling_if_enabled() {
+    let config = POLLING_CONFIG.lock().unwrap().clone();
+    if config.enabled {
+        tracing::info!(
+            "[Polling] Auto-starting from env: interval={}s",
+            config.interval_seconds
+        );
+        start_polling_task();
+    }
+}
+
+fn start_polling_task() {
+    let mut handle_guard = POLLING_HANDLE.lock().unwrap();
+    
+    // Don't start if already running
+    if handle_guard.is_some() {
+        return;
+    }
+
+    let handle = tokio::spawn(async {
+        loop {
+            let interval = {
+                let config = POLLING_CONFIG.lock().unwrap();
+                if !config.enabled {
+                    break;
+                }
+                config.interval_seconds
+            };
+
+            tokio::time::sleep(Duration::from_secs(interval as u64)).await;
+
+            // Perform polling check
+            if let Err(e) = poll_all_repos().await {
+                tracing::error!("[Polling] Error during poll: {}", e);
+            }
+        }
+        tracing::info!("[Polling] Background task stopped");
+    });
+
+    *handle_guard = Some(Arc::new(handle));
+}
+
+fn stop_polling_task() {
+    let mut handle_guard = POLLING_HANDLE.lock().unwrap();
+    if let Some(handle) = handle_guard.take() {
+        handle.abort();
+        tracing::info!("[Polling] Background task aborted");
+    }
+}
+
+async fn poll_all_repos() -> Result<Vec<PollResult>, String> {
+    // In a full implementation, we would:
+    // 1. Fetch webhook configs from database
+    // 2. Poll each repo's GitHub Events API
+    // 3. Process events and create background tasks
+    // 4. Send notifications for new events
+    //
+    // For now, return empty results
+    let results: Vec<PollResult> = vec![];
+    
+    let checked_at = chrono::Utc::now().to_rfc3339();
+    {
+        let mut config = POLLING_CONFIG.lock().unwrap();
+        config.last_checked_at = Some(checked_at);
+    }
+
+    Ok(results)
 }
 
 // ─── Router ──────────────────────────────────────────────────────────────────
@@ -109,23 +219,38 @@ async fn update_config(
         config.enabled = enabled;
         config.is_running = enabled;
         
-        // Send notification when polling is enabled/disabled
+        // Drop the lock before starting/stopping task
+        drop(config);
+        
         if enabled {
+            start_polling_task();
             send_notification(
                 "Routa Polling Enabled",
                 "GitHub event polling is now active",
             );
         } else {
+            stop_polling_task();
             send_notification(
                 "Routa Polling Disabled",
                 "GitHub event polling has been stopped",
             );
         }
+        
+        // Re-acquire lock
+        config = POLLING_CONFIG.lock().unwrap();
     }
     
     if let Some(interval) = body.interval_seconds {
         if interval >= 10 {
             config.interval_seconds = interval;
+            
+            // Restart polling task if running
+            if config.enabled {
+                drop(config);
+                stop_polling_task();
+                start_polling_task();
+                config = POLLING_CONFIG.lock().unwrap();
+            }
         }
     }
     
@@ -153,22 +278,9 @@ async fn get_status() -> Result<Json<serde_json::Value>, ServerError> {
 async fn check_now(
     State(_state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, ServerError> {
-    let checked_at = chrono::Utc::now().to_rfc3339();
-
-    // Update last checked timestamp
-    {
-        let mut config = POLLING_CONFIG.lock().unwrap();
-        config.last_checked_at = Some(checked_at.clone());
-    }
-
-    // In a full implementation, we would:
-    // 1. Fetch webhook configs from database
-    // 2. Poll each repo's GitHub Events API
-    // 3. Process events and create background tasks
-    // 4. Send notifications for new events
-    //
-    // For now, we simulate a check with no configured repos
-    let results: Vec<PollResult> = vec![];
+    let results = poll_all_repos().await.map_err(|e| {
+        ServerError::InternalError(format!("Polling failed: {}", e))
+    })?;
 
     let summary = PollSummary {
         repos_checked: results.len() as u32,
@@ -185,6 +297,11 @@ async fn check_now(
             summary.repos_checked, summary.total_events_found
         ),
     );
+
+    let checked_at = POLLING_CONFIG.lock().unwrap()
+        .last_checked_at
+        .clone()
+        .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
 
     tracing::info!(
         "[Polling] Check completed: {} repos, {} events",
