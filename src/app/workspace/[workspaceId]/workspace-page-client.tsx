@@ -112,12 +112,16 @@ export function WorkspacePageClient() {
 
   // BG task management state
   const [bgTaskFilter, setBgTaskFilter] = useState<"all" | "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED">("all");
+  const [bgSourceFilter, setBgSourceFilter] = useState<"all" | "manual" | "schedule" | "webhook" | "polling" | "workflow" | "fleet">("all");
   const [editingTask, setEditingTask] = useState<BackgroundTaskInfo | null>(null);
   const [editForm, setEditForm] = useState({ title: "", prompt: "", agentId: "", priority: "NORMAL" });
   const [editLoading, setEditLoading] = useState(false);
   const [clearingHistory, setClearingHistory] = useState(false);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [bgAutoRefresh, setBgAutoRefresh] = useState(false);
+  // Dispatch modal extras
+  const [dispatchWorkspaceId, setDispatchWorkspaceId] = useState(workspaceId);
+  const [specialists, setSpecialists] = useState<{ id: string; name: string; description?: string }[]>([]);
 
   // Auto-connect ACP
   useEffect(() => {
@@ -196,6 +200,14 @@ export function WorkspacePageClient() {
     if (ws) router.push(`/workspace/${ws.id}`);
   }, [workspacesHook, router]);
 
+  // Fetch specialists for the dispatch modal agent selector
+  useEffect(() => {
+    fetch("/api/specialists")
+      .then((r) => r.json())
+      .then((d) => setSpecialists((d.specialists ?? []).filter((s: { enabled?: boolean }) => s.enabled !== false)))
+      .catch(() => {});
+  }, []);
+
   if (workspacesHook.loading && !isDefaultWorkspace) {
     return (
       <div className="h-screen flex items-center justify-center bg-[#fafafa] dark:bg-[#0a0c12]">
@@ -237,7 +249,7 @@ export function WorkspacePageClient() {
         body: JSON.stringify({
           prompt: dispatchPrompt,
           agentId: dispatchAgentId,
-          workspaceId,
+          workspaceId: dispatchWorkspaceId || workspaceId,
           title: dispatchTitle.trim() || dispatchPrompt.slice(0, 80),
           priority: dispatchPriority,
         }),
@@ -247,11 +259,29 @@ export function WorkspacePageClient() {
       setDispatchAgentId("");
       setDispatchTitle("");
       setDispatchPriority("NORMAL");
+      setDispatchWorkspaceId(workspaceId);
       setDuplicateWarning(null);
       setRefreshKey((k) => k + 1);
     } finally {
       setDispatchLoading(false);
     }
+  };
+
+  const handleRerunTask = async (task: BackgroundTaskInfo) => {
+    await fetch("/api/background-tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: task.prompt,
+        agentId: task.agentId,
+        workspaceId,
+        title: task.title,
+        priority: task.priority ?? "NORMAL",
+        triggerSource: "manual",
+        triggeredBy: "rerun",
+      }),
+    });
+    setRefreshKey((k) => k + 1);
   };
 
   const handleCheckDuplicate = (prompt: string, agentId: string) => {
@@ -729,44 +759,82 @@ export function WorkspacePageClient() {
               {bgTasks.length > 0 && (() => {
                 const counts = { PENDING: 0, RUNNING: 0, COMPLETED: 0, FAILED: 0, CANCELLED: 0 };
                 for (const t of bgTasks) { if (t.status in counts) (counts as Record<string, number>)[t.status]++; }
+                const srcCounts: Record<string, number> = {};
+                for (const t of bgTasks) { srcCounts[t.triggerSource ?? "manual"] = (srcCounts[t.triggerSource ?? "manual"] ?? 0) + 1; }
                 return (
-                  <div className="flex gap-2 flex-wrap">
-                    {(["all", "PENDING", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"] as const).map((s) => {
-                      const cnt = s === "all" ? bgTasks.length : counts[s];
-                      if (s !== "all" && cnt === 0) return null;
-                      const active = bgTaskFilter === s;
-                      const colorMap: Record<string, string> = {
-                        all: "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300",
-                        PENDING: "bg-gray-100 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400",
-                        RUNNING: "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400",
-                        COMPLETED: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400",
-                        FAILED: "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400",
-                        CANCELLED: "bg-gray-100 dark:bg-gray-700/30 text-gray-400",
-                      };
-                      return (
-                        <button
-                          key={s}
-                          onClick={() => setBgTaskFilter(s)}
-                          className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all border ${
-                            active
-                              ? "ring-2 ring-amber-400 border-amber-400 " + colorMap[s]
-                              : "border-transparent " + colorMap[s] + " hover:opacity-80"
-                          }`}
-                        >
-                          <span className="capitalize">{s === "all" ? "All" : s.charAt(0) + s.slice(1).toLowerCase()}</span>
-                          <span className="font-bold">{cnt}</span>
-                        </button>
-                      );
-                    })}
+                  <div className="space-y-1.5">
+                    {/* Status filter */}
+                    <div className="flex gap-2 flex-wrap">
+                      {(["all", "PENDING", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"] as const).map((s) => {
+                        const cnt = s === "all" ? bgTasks.length : counts[s];
+                        if (s !== "all" && cnt === 0) return null;
+                        const active = bgTaskFilter === s;
+                        const colorMap: Record<string, string> = {
+                          all: "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300",
+                          PENDING: "bg-gray-100 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400",
+                          RUNNING: "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400",
+                          COMPLETED: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400",
+                          FAILED: "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400",
+                          CANCELLED: "bg-gray-100 dark:bg-gray-700/30 text-gray-400",
+                        };
+                        return (
+                          <button
+                            key={s}
+                            onClick={() => setBgTaskFilter(s)}
+                            className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all border ${
+                              active
+                                ? "ring-2 ring-amber-400 border-amber-400 " + colorMap[s]
+                                : "border-transparent " + colorMap[s] + " hover:opacity-80"
+                            }`}
+                          >
+                            <span className="capitalize">{s === "all" ? "All" : s.charAt(0) + s.slice(1).toLowerCase()}</span>
+                            <span className="font-bold">{cnt}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {/* Source / trigger-type filter */}
+                    {Object.keys(srcCounts).length > 1 && (
+                      <div className="flex gap-1.5 flex-wrap items-center">
+                        <span className="text-[10px] text-gray-400 dark:text-gray-600 mr-0.5">Source:</span>
+                        {(["all", "manual", "schedule", "webhook", "polling", "workflow", "fleet"] as const).map((src) => {
+                          const cnt = src === "all" ? bgTasks.length : (srcCounts[src] ?? 0);
+                          if (src !== "all" && cnt === 0) return null;
+                          const active = bgSourceFilter === src;
+                          const srcLabel: Record<string, string> = { all: "All", manual: "Manual", schedule: "Scheduled", webhook: "Webhook", polling: "Polling", workflow: "Workflow", fleet: "Fleet" };
+                          const srcColor: Record<string, string> = {
+                            all: "text-gray-500 dark:text-gray-400",
+                            manual: "text-violet-600 dark:text-violet-400",
+                            schedule: "text-amber-600 dark:text-amber-400",
+                            webhook: "text-blue-600 dark:text-blue-400",
+                            polling: "text-teal-600 dark:text-teal-400",
+                            workflow: "text-indigo-600 dark:text-indigo-400",
+                            fleet: "text-pink-600 dark:text-pink-400",
+                          };
+                          return (
+                            <button
+                              key={src}
+                              onClick={() => setBgSourceFilter(src)}
+                              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-all border ${
+                                active
+                                  ? "border-amber-400 ring-1 ring-amber-400 " + srcColor[src]
+                                  : "border-gray-200 dark:border-[#252838] " + srcColor[src] + " hover:opacity-80"
+                              }`}
+                            >
+                              {srcLabel[src]} <span className="opacity-70">{cnt}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })()}
 
               {/* ── Task list ─────────────────────────────────────── */}
               {(() => {
-                const filtered = bgTaskFilter === "all"
-                  ? bgTasks
-                  : bgTasks.filter((t) => t.status === bgTaskFilter);
+                let filtered = bgTaskFilter === "all" ? bgTasks : bgTasks.filter((t) => t.status === bgTaskFilter);
+                if (bgSourceFilter !== "all") filtered = filtered.filter((t) => (t.triggerSource ?? "manual") === bgSourceFilter);
                 if (filtered.length === 0) {
                   return (
                     <div className="flex flex-col items-center justify-center py-16 text-gray-400 dark:text-gray-600">
@@ -850,6 +918,16 @@ export function WorkspacePageClient() {
                                   </svg>
                                 </button>
                               )}
+                              {/* Rerun — available for any terminal or failed state */}
+                              {["COMPLETED", "CANCELLED", "FAILED"].includes(task.status) && (
+                                <button
+                                  onClick={() => handleRerunTask(task)}
+                                  className="text-[10px] font-medium px-2 py-0.5 rounded bg-violet-500 hover:bg-violet-600 text-white transition-colors"
+                                  title="Re-dispatch this task with the same prompt and agent"
+                                >
+                                  ↺ Rerun
+                                </button>
+                              )}
                               {/* Retry (FAILED) */}
                               {task.status === "FAILED" && task.attempts < task.maxAttempts && (
                                 <button
@@ -858,7 +936,7 @@ export function WorkspacePageClient() {
                                     setRefreshKey((k) => k + 1);
                                   }}
                                   className="text-[10px] font-medium px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-600 text-white transition-colors"
-                                  title="Retry"
+                                  title="Retry (increments attempt counter)"
                                 >
                                   Retry
                                 </button>
@@ -967,14 +1045,28 @@ export function WorkspacePageClient() {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-[12px] font-medium text-gray-600 dark:text-gray-400 mb-1">Agent / Provider</label>
-                        <input
-                          data-testid="dispatch-agent-input"
-                          type="text"
-                          placeholder="e.g. opencode, claude"
-                          value={dispatchAgentId}
-                          onChange={(e) => { setDispatchAgentId(e.target.value); handleCheckDuplicate(dispatchPrompt, e.target.value); }}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-[#252838] bg-gray-50 dark:bg-[#151720] text-[13px] text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
-                        />
+                        {specialists.length > 0 ? (
+                          <select
+                            data-testid="dispatch-agent-input"
+                            value={dispatchAgentId}
+                            onChange={(e) => { setDispatchAgentId(e.target.value); handleCheckDuplicate(dispatchPrompt, e.target.value); }}
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-[#252838] bg-gray-50 dark:bg-[#151720] text-[13px] text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                          >
+                            <option value="">— Select agent —</option>
+                            {specialists.map((s) => (
+                              <option key={s.id} value={s.id}>{s.name}{s.description ? ` — ${s.description}` : ""}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            data-testid="dispatch-agent-input"
+                            type="text"
+                            placeholder="e.g. opencode, claude"
+                            value={dispatchAgentId}
+                            onChange={(e) => { setDispatchAgentId(e.target.value); handleCheckDuplicate(dispatchPrompt, e.target.value); }}
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-[#252838] bg-gray-50 dark:bg-[#151720] text-[13px] text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                          />
+                        )}
                       </div>
                       <div>
                         <label className="block text-[12px] font-medium text-gray-600 dark:text-gray-400 mb-1">Priority</label>
@@ -988,6 +1080,22 @@ export function WorkspacePageClient() {
                           <option value="HIGH">High</option>
                         </select>
                       </div>
+                    </div>
+                    {/* Workspace selector */}
+                    <div>
+                      <label className="block text-[12px] font-medium text-gray-600 dark:text-gray-400 mb-1">Workspace</label>
+                      <select
+                        value={dispatchWorkspaceId}
+                        onChange={(e) => setDispatchWorkspaceId(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-[#252838] bg-gray-50 dark:bg-[#151720] text-[13px] text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                      >
+                        {workspacesHook.workspaces.map((w) => (
+                          <option key={w.id} value={w.id}>{w.title || w.id}{w.id === workspaceId ? " (current)" : ""}</option>
+                        ))}
+                        {workspacesHook.workspaces.length === 0 && (
+                          <option value={workspaceId}>{workspaceId} (current)</option>
+                        )}
+                      </select>
                     </div>
                     <div className="flex justify-end gap-2 pt-1">
                       <button
