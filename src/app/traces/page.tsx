@@ -5,10 +5,20 @@
  *
  * Full-page view for browsing and analyzing Agent Trace records.
  * Sessions are cross-referenced with /api/sessions to show names.
+ *
+ * Three view modes:
+ * - Chat (original TracePanel)
+ * - Trace (EventBridge semantic blocks)
+ * - Trace(AG-UI) (AG-UI protocol events)
  */
 
 import { useState, useEffect, useCallback } from "react";
 import { TracePanel } from "@/client/components/trace-panel";
+import { EventBridgeTracePanel } from "@/client/components/event-bridge-trace-panel";
+import { AGUITracePanel } from "@/client/components/ag-ui-trace-panel";
+import type { TraceRecord } from "@/core/trace";
+
+type ViewTab = "chat" | "event-bridge" | "ag-ui";
 
 interface Session {
   sessionId: string;
@@ -24,6 +34,9 @@ export default function TracePage() {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
+  const [activeTab, setActiveTab] = useState<ViewTab>("chat");
+  const [sessionTraces, setSessionTraces] = useState<TraceRecord[]>([]);
+  const [tracesLoading, setTracesLoading] = useState(false);
 
   const fetchSessions = useCallback(async () => {
     setLoading(true);
@@ -82,9 +95,34 @@ export default function TracePage() {
     }
   }, [selectedSessionId]);
 
+  // Fetch traces for the selected session (shared across all view tabs)
+  const fetchSessionTraces = useCallback(async () => {
+    if (!selectedSessionId) {
+      setSessionTraces([]);
+      return;
+    }
+    setTracesLoading(true);
+    try {
+      const params = new URLSearchParams({ sessionId: selectedSessionId });
+      const res = await fetch(`/api/traces?${params}`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setSessionTraces(data.traces || []);
+      }
+    } catch (err) {
+      console.error("[TracePage] Failed to fetch traces:", err);
+    } finally {
+      setTracesLoading(false);
+    }
+  }, [selectedSessionId]);
+
   useEffect(() => {
     fetchSessions();
   }, [fetchSessions]);
+
+  useEffect(() => {
+    fetchSessionTraces();
+  }, [fetchSessionTraces]);
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -120,6 +158,26 @@ export default function TracePage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* View tab switcher */}
+          <div className="inline-flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 p-0.5">
+            {([
+              { key: "chat" as ViewTab, label: "Chat", color: "bg-blue-500" },
+              { key: "event-bridge" as ViewTab, label: "Trace", color: "bg-purple-500" },
+              { key: "ag-ui" as ViewTab, label: "Trace(AG-UI)", color: "bg-indigo-500" },
+            ]).map(({ key, label, color }) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${
+                  activeTab === key
+                    ? `${color} text-white shadow-sm`
+                    : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <button
             onClick={() => setShowSidebar(!showSidebar)}
             className="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors"
@@ -218,7 +276,17 @@ export default function TracePage() {
         {/* Trace Panel */}
         <main className="flex-1 min-w-0">
           {selectedSessionId ? (
-            <TracePanel sessionId={selectedSessionId} />
+            <>
+              {activeTab === "chat" && (
+                <TracePanel sessionId={selectedSessionId} />
+              )}
+              {activeTab === "event-bridge" && (
+                <EventBridgeTracePanel sessionId={selectedSessionId} traces={sessionTraces} />
+              )}
+              {activeTab === "ag-ui" && (
+                <AGUITracePanel sessionId={selectedSessionId} traces={sessionTraces} />
+              )}
+            </>
           ) : (
             <div className="h-full flex items-center justify-center p-8">
               <div className="text-center">
