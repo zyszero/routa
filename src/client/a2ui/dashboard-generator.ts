@@ -80,7 +80,15 @@ function buildStatsSurface(data: DashboardData): A2UIMessage[] {
   const failedBg = data.bgTasks.filter((t) => t.status === "FAILED").length;
 
   const components: A2UIComponent[] = [
-    { id: "root", component: "Row", children: ["stat_sessions", "stat_agents", "stat_tasks", "stat_bg"], justify: "spaceBetween", align: "stretch", gap: "md" },
+    // Outer column: stats row + quick-action row
+    { id: "root", component: "Column", children: ["stats_row", "actions_divider", "actions_row"], align: "stretch", gap: "sm" },
+    { id: "stats_row", component: "Row", children: ["stat_sessions", "stat_agents", "stat_tasks", "stat_bg"], justify: "spaceBetween", align: "stretch", gap: "md" },
+    { id: "actions_divider", component: "Divider" },
+    { id: "actions_row", component: "Row", children: ["btn_new_session", "btn_install_agent"], justify: "end", align: "center", gap: "sm" },
+    { id: "btn_new_session", component: "Button", child: "btn_new_session_label", variant: "primary", action: { event: { name: "new_session" } } },
+    { id: "btn_new_session_label", component: "Text", text: "+ New Session", variant: "caption" },
+    { id: "btn_install_agent", component: "Button", child: "btn_install_agent_label", variant: "default", action: { event: { name: "install_agent" } } },
+    { id: "btn_install_agent_label", component: "Text", text: "Install Agent", variant: "caption" },
 
     // Sessions card — info accent
     { id: "stat_sessions", component: "Card", child: "stat_sessions_inner", accent: "info", weight: 1 },
@@ -223,11 +231,13 @@ function buildTasksSurface(data: DashboardData): A2UIMessage[] {
     // Active tab
     { id: "tasks_active", component: "Column", children: ["tasks_active_list"], align: "stretch" },
     { id: "tasks_active_list", component: "List", children: { componentId: "task_active_row", path: "/activeTasks" }, direction: "vertical" },
-    { id: "task_active_row", component: "Row", children: ["task_active_info", "task_active_status"], align: "center", justify: "spaceBetween" },
+    { id: "task_active_row", component: "Row", children: ["task_active_info", "task_active_status", "task_active_btn"], align: "center", justify: "spaceBetween" },
     { id: "task_active_info", component: "Column", children: ["task_active_title", "task_active_time"], align: "start", weight: 1, gap: "none" },
     { id: "task_active_title", component: "Text", text: { path: "title" }, variant: "h5" },
     { id: "task_active_time", component: "Text", text: { path: "time" }, variant: "caption", accent: "muted" },
     { id: "task_active_status", component: "Text", text: { path: "status" }, variant: "caption", pill: true, accent: { path: "statusAccent" } as never },
+    { id: "task_active_btn", component: "Button", child: "task_active_btn_label", variant: "borderless", action: { event: { name: "view_task", context: { taskId: { path: "id" } } } } },
+    { id: "task_active_btn_label", component: "Text", text: "View →", variant: "caption", accent: "info" },
     // Pending tab
     { id: "tasks_pending", component: "Column", children: ["tasks_pending_list"], align: "stretch" },
     { id: "tasks_pending_list", component: "List", children: { componentId: "task_pending_row", path: "/pendingTasks" }, direction: "vertical" },
@@ -257,6 +267,7 @@ function buildTasksSurface(data: DashboardData): A2UIMessage[] {
         surfaceId: "dashboard_tasks",
         value: {
           activeTasks: [...inProgress, ...review].map((t) => ({
+            id: t.id,
             title: t.title,
             status: t.status.replace(/_/g, " "),
             statusAccent: statusAccent(t.status),
@@ -595,8 +606,11 @@ export function generateWorkspaceSummarySurface(data: DashboardData): A2UIMessag
 
 // ─── Helpers ──────────────────────────────────────────────────────
 
-function formatRelative(dateStr: string): string {
-  const diffMs = Date.now() - new Date(dateStr).getTime();
+function formatRelative(dateStr: string | undefined | null): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  const diffMs = Date.now() - d.getTime();
   const mins = Math.floor(diffMs / 60000);
   if (mins < 1) return "now";
   if (mins < 60) return `${mins}m`;

@@ -31,6 +31,7 @@ import { A2UIViewer } from "@/client/a2ui/renderer";
 import { generateDashboardA2UI, generateTaskKanbanSurface, generateAgentMonitorSurface, generateTimelineSurface, generateWorkspaceSummarySurface } from "@/client/a2ui/dashboard-generator";
 import type { A2UIMessage } from "@/client/a2ui/types";
 import type { DashboardData } from "@/client/a2ui/dashboard-generator";
+import { CodeEditor } from "@/client/components/codemirror";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -183,7 +184,14 @@ export function WorkspacePageClient() {
       try {
         const res = await fetch(`/api/traces?limit=10`, { cache: "no-store" });
         const data = await res.json();
-        setTraces(Array.isArray(data?.traces) ? data.traces.slice(0, 8) : []);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setTraces(Array.isArray(data?.traces) ? data.traces.slice(0, 8).map((t: any) => ({
+          id: t.id,
+          agentName: t.contributor?.provider ?? t.agentName ?? undefined,
+          action: t.eventType ?? t.action ?? undefined,
+          summary: t.conversation?.contentPreview?.slice(0, 100) ?? t.summary ?? undefined,
+          createdAt: t.timestamp ?? t.createdAt,
+        })) : []);
       } catch { /* ignore */ }
     })();
   }, [workspaceId, refreshKey]);
@@ -611,7 +619,17 @@ export function WorkspacePageClient() {
               showSource={showA2UISource}
               onToggleSource={() => setShowA2UISource((v) => !v)}
               onAction={(action) => {
-                console.log("[A2UI Action]", action);
+                if (action.name === "install_agent") {
+                  setShowAgentInstallPopup(true);
+                } else if (action.name === "new_session") {
+                  // Scroll to top where the chat input is
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                } else if (action.name === "view_task") {
+                  // Navigate to note-tasks tab
+                  setActiveTab("note_tasks");
+                } else {
+                  console.log("[A2UI Action]", action);
+                }
               }}
               onAddCustomSurface={(messages) => {
                 setCustomA2UISurfaces((prev) => [...prev, ...messages]);
@@ -1879,6 +1897,9 @@ function OverviewA2UITab({
   const [showTemplateGallery, setShowTemplateGallery] = useState(false);
   const [customJsonInput, setCustomJsonInput] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
+  const [sourceEditValue, setSourceEditValue] = useState<string>("");
+  const [sourceApplyError, setSourceApplyError] = useState<string | null>(null);
+  const [sourceIsOverridden, setSourceIsOverridden] = useState(false);
 
   // Build dashboard data from workspace state
   const dashboardData: DashboardData = {
@@ -1923,12 +1944,51 @@ function OverviewA2UITab({
     })),
   };
 
-  // Generate A2UI messages
-  const a2uiMessages = React.useMemo(
+  // Generate A2UI messages (auto-computed from live data)
+  const autoMessages = React.useMemo(
     () => [...generateDashboardA2UI(dashboardData), ...customSurfaces],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [JSON.stringify(dashboardData), customSurfaces]
   );
+
+  // The messages actually rendered — may be overridden by direct Source edits
+  const [messagesOverride, setMessagesOverride] = React.useState<A2UIMessage[] | null>(null);
+  const a2uiMessages = messagesOverride ?? autoMessages;
+
+  // Sync editor value when Source panel opens (if not overridden)
+  React.useEffect(() => {
+    if (showSource && !sourceIsOverridden) {
+      setSourceEditValue(JSON.stringify(autoMessages, null, 2));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showSource]);
+
+  // When live data changes, update editor (unless user is in override mode)
+  React.useEffect(() => {
+    if (showSource && !sourceIsOverridden) {
+      setSourceEditValue(JSON.stringify(autoMessages, null, 2));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoMessages]);
+
+  const handleApplySource = () => {
+    try {
+      const parsed = JSON.parse(sourceEditValue);
+      const messages: A2UIMessage[] = Array.isArray(parsed) ? parsed : [parsed];
+      setMessagesOverride(messages);
+      setSourceIsOverridden(true);
+      setSourceApplyError(null);
+    } catch (e) {
+      setSourceApplyError(e instanceof Error ? e.message : "Invalid JSON");
+    }
+  };
+
+  const handleResetSource = () => {
+    setMessagesOverride(null);
+    setSourceIsOverridden(false);
+    setSourceEditValue(JSON.stringify(autoMessages, null, 2));
+    setSourceApplyError(null);
+  };
 
   const exportJson = () => {
     const json = JSON.stringify(a2uiMessages, null, 2);
@@ -2256,21 +2316,45 @@ function OverviewA2UITab({
 
       {/* ─── Source View ──────────────────────────────────────── */}
       {showSource && (
-        <div className="bg-gray-50 dark:bg-[#0a0c12] rounded-xl border border-gray-200/60 dark:border-[#1c1f2e] p-4 overflow-hidden">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">A2UI Protocol Messages (JSON)</h3>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(JSON.stringify(a2uiMessages, null, 2));
-              }}
-              className="text-[10px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-            >
-              Copy
-            </button>
+        <div className="bg-gray-50 dark:bg-[#0a0c12] rounded-xl border border-gray-200/60 dark:border-[#1c1f2e] overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-200/40 dark:border-[#191c28]">
+            <div className="flex items-center gap-2">
+              <h3 className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">A2UI Protocol Messages (JSON)</h3>
+              {sourceIsOverridden && (
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                  Overridden
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              {sourceIsOverridden && (
+                <button
+                  onClick={handleResetSource}
+                  className="px-2 py-1 rounded text-[10px] font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#191c28] transition-colors"
+                >
+                  Reset
+                </button>
+              )}
+              <button
+                onClick={handleApplySource}
+                className="px-2.5 py-1 rounded-md text-[10px] font-semibold text-white bg-amber-500 hover:bg-amber-600 transition-colors shadow-sm"
+              >
+                Apply
+              </button>
+            </div>
           </div>
-          <pre className="text-[11px] text-gray-600 dark:text-gray-400 font-mono whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto">
-            {JSON.stringify(a2uiMessages, null, 2)}
-          </pre>
+          {sourceApplyError && (
+            <div className="mx-4 mt-2 text-[11px] text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-md">
+              {sourceApplyError}
+            </div>
+          )}
+          <CodeEditor
+            value={sourceEditValue}
+            language="json"
+            onChange={setSourceEditValue}
+            maxHeight="480px"
+            className="border-0"
+          />
         </div>
       )}
 
