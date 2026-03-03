@@ -127,6 +127,8 @@ class HttpSessionStore {
   private agentEventBridges = new Map<string, AgentEventBridge>();
   /** Subscribers for WorkspaceAgentEvents per session */
   private agentEventSubscribers = new Map<string, Set<(event: WorkspaceAgentEvent) => void>>();
+  /** AG-UI notification interceptors per session (for protocol bridging) */
+  private notificationInterceptors = new Map<string, Set<(n: SessionUpdateNotification) => void>>();
   /**
    * Sessions currently streaming a prompt response via their own SSE body.
    * While in streaming mode, pushNotification() stores to history/trace but
@@ -232,6 +234,38 @@ class HttpSessionStore {
   }
 
   /**
+   * Add a notification interceptor for AG-UI protocol bridging.
+   * The interceptor receives a copy of every notification for the given session.
+   */
+  addNotificationInterceptor(
+    sessionId: string,
+    handler: (n: SessionUpdateNotification) => void
+  ): void {
+    let interceptors = this.notificationInterceptors.get(sessionId);
+    if (!interceptors) {
+      interceptors = new Set();
+      this.notificationInterceptors.set(sessionId, interceptors);
+    }
+    interceptors.add(handler);
+  }
+
+  /**
+   * Remove a previously registered notification interceptor.
+   */
+  removeNotificationInterceptor(
+    sessionId: string,
+    handler: (n: SessionUpdateNotification) => void
+  ): void {
+    const interceptors = this.notificationInterceptors.get(sessionId);
+    if (interceptors) {
+      interceptors.delete(handler);
+      if (interceptors.size === 0) {
+        this.notificationInterceptors.delete(sessionId);
+      }
+    }
+  }
+
+  /**
    * Flush and trace any remaining buffered agent message/thought content.
    * Call this when a prompt completes or session ends.
    */
@@ -334,6 +368,18 @@ class HttpSessionStore {
     history.push(notification);
     this.messageHistory.set(sessionId, history);
     this.limitHistorySize(sessionId); // Apply memory limit
+
+    // ── Notify AG-UI interceptors (protocol bridging) ──
+    const interceptors = this.notificationInterceptors.get(sessionId);
+    if (interceptors && interceptors.size > 0) {
+      for (const handler of interceptors) {
+        try {
+          handler(notification);
+        } catch {
+          // interceptor errors must not break the notification pipeline
+        }
+      }
+    }
 
     // ── Trace recording using Provider Adapter pattern ──
     const sessionRecord = this.sessions.get(sessionId);
