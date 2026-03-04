@@ -130,6 +130,7 @@ export function SessionPageClient() {
   const { workspaceId, sessionId, isResolved } = useRealParams();
 
   const [refreshKey, setRefreshKey] = useState(0);
+  const [contextRefreshTrigger, setContextRefreshTrigger] = useState(0); // 用于刷新 SessionContextPanel
   const [selectedAgent, setSelectedAgent] = useState<AgentRole>("ROUTA");
   const [selectedSpecialistId, setSelectedSpecialistId] = useState<string | null>(null);
   const [specialists, setSpecialists] = useState<SpecialistOption[]>([]);
@@ -233,6 +234,14 @@ export function SessionPageClient() {
   const [crafterAgents, setCrafterAgents] = useState<CrafterAgent[]>([]);
   const [activeCrafterId, setActiveCrafterId] = useState<string | null>(null);
   const [concurrency, setConcurrency] = useState(1);
+
+  // ── Refresh SessionContextPanel when new child sessions are created ──
+  useEffect(() => {
+    // 当 crafterAgents 数组长度变化时，说明有新的 child session 创建
+    if (crafterAgents.length > 0) {
+      setContextRefreshTrigger((prev) => prev + 1);
+    }
+  }, [crafterAgents.length]);
 
   // ── Tool mode state ──────────────────────────────────────────────────
   const [toolMode, setToolMode] = useState<"essential" | "full">("essential");
@@ -1517,6 +1526,7 @@ export function SessionPageClient() {
             workspaceId={workspaceId}
             onSelectSession={handleSelectSession}
             notes={sessionNotes}
+            refreshTrigger={contextRefreshTrigger}
           />
 
           {/* New Session Button */}

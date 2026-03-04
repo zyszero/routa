@@ -36,6 +36,7 @@ interface SessionContextPanelProps {
     };
     sessionId?: string;
   }>;
+  refreshTrigger?: number; // 用于触发刷新
 }
 
 export function SessionContextPanel({
@@ -43,6 +44,7 @@ export function SessionContextPanel({
   workspaceId,
   onSelectSession,
   notes = [],
+  refreshTrigger = 0,
 }: SessionContextPanelProps) {
   const [context, setContext] = useState<SessionContext | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,7 +71,7 @@ export function SessionContextPanel({
 
   useEffect(() => {
     fetchContext();
-  }, [fetchContext]);
+  }, [fetchContext, refreshTrigger]); // 添加 refreshTrigger 依赖
 
   if (loading) {
     return (
