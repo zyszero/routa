@@ -678,19 +678,32 @@ function TaskNoteCard({
         className="flex items-start gap-2.5 px-3 py-2.5 cursor-pointer hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
         onClick={onToggleExpand}
       >
-        {onToggleSelect && status === "PENDING" && (
-          <input
-            type="checkbox"
-            checked={!!selected}
-            onChange={(e) => {
-              e.stopPropagation();
-              onToggleSelect();
-            }}
+        {onToggleSelect && status === "PENDING" ? (
+          <label
+            className="flex-shrink-0 cursor-pointer"
             onClick={(e) => e.stopPropagation()}
-            className="mt-0.5 w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 shrink-0 cursor-pointer"
-          />
+          >
+            <input
+              type="checkbox"
+              checked={!!selected}
+              onChange={() => onToggleSelect()}
+              className="sr-only peer"
+            />
+            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
+              selected
+                ? "bg-blue-600 border-blue-600"
+                : "border-gray-300 dark:border-gray-600 hover:border-blue-400"
+            }`}>
+              {selected && (
+                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </div>
+          </label>
+        ) : (
+          statusIcon[status as keyof typeof statusIcon] ?? statusIcon.PENDING
         )}
-        {statusIcon[status as keyof typeof statusIcon] ?? statusIcon.PENDING}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500">
