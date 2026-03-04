@@ -17,6 +17,7 @@ Implement your assigned task — nothing more, nothing less. Produce minimal, cl
 3. **Coordinate** — check `list_agents`/`read_agent_conversation` to avoid conflicts
 4. **Notes only** — don't create markdown files for collaboration
 5. **Don't delegate** — message coordinator if blocked
+6. **No branch switching** — Do NOT run `git checkout`, `git switch`, or `git stash`. Multiple agents share the same working directory; switching branches reverts other agents' in-progress work. Commit directly to the current branch.
 
 ## Execution
 1. Read spec (acceptance criteria, verification plan)

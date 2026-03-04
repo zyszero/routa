@@ -9,6 +9,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { RoutaMcpToolManager, ToolMode } from "./routa-mcp-tool-manager";
 import { RoutaSystem, getRoutaSystem } from "../routa-system";
 import { initRoutaOrchestrator } from "../orchestration/orchestrator-singleton";
+import { getHttpSessionStore } from "../acp/http-session-store";
+import { persistSessionToDb } from "../acp/session-db-persister";
 
 export interface RoutaMcpServerResult {
   server: McpServer;
@@ -65,6 +67,42 @@ export function createRoutaMcpServer(
   // Wire in orchestrator — auto-initialize if not yet created (e.g. after server restart).
   // initRoutaOrchestrator is idempotent: returns existing instance if already created.
   const orchestrator = initRoutaOrchestrator();
+
+  // Ensure child sessions spawned by the orchestrator are always registered in the
+  // HttpSessionStore (so they show in the sidebar). The ACP route also sets this
+  // handler when creating new ROUTA sessions, but when the orchestrator is first
+  // initialized via the MCP route (e.g. after a server restart), there is no ACP
+  // request to set it — so we set a default here.
+  const store = getHttpSessionStore();
+  orchestrator.setSessionRegistrationHandler((childSession) => {
+    store.upsertSession({
+      sessionId: childSession.sessionId,
+      name: childSession.name,
+      cwd: childSession.cwd,
+      workspaceId: childSession.workspaceId,
+      routaAgentId: childSession.routaAgentId,
+      provider: childSession.provider,
+      role: childSession.role,
+      parentSessionId: childSession.parentSessionId,
+      createdAt: new Date().toISOString(),
+    });
+    persistSessionToDb({
+      id: childSession.sessionId,
+      name: childSession.name,
+      cwd: childSession.cwd,
+      workspaceId: childSession.workspaceId,
+      routaAgentId: childSession.routaAgentId ?? "",
+      provider: childSession.provider ?? "",
+      role: childSession.role ?? "CRAFTER",
+      parentSessionId: childSession.parentSessionId,
+    }).catch((err: unknown) =>
+      console.error(`[MCP Server] Failed to persist child session ${childSession.sessionId}:`, err)
+    );
+    console.log(
+      `[MCP Server] Child session registered: ${childSession.sessionId} (parent: ${childSession.parentSessionId})`
+    );
+  });
+
   toolManager.setOrchestrator(orchestrator);
 
   // Wire in note tools and workspace tools
