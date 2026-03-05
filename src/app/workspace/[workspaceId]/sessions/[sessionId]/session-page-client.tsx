@@ -357,21 +357,35 @@ export function SessionPageClient() {
 
   // Track if we've already sent the pending prompt for this session
   const pendingPromptSentRef = useRef<Set<string>>(new Set());
+  // Holds the consumed pending text across effect re-runs (survives cleanup/re-run cycles)
+  const pendingPromptTextRef = useRef<string | null>(null);
 
   // Check for and send pending prompt after session is selected.
   // Waits for the ACP process to be ready (acp_status: "ready" SSE event)
-  // before sending, replacing the old 100ms delay hack.
+  // before sending.
+  //
+  // Fix: previously the sessionId was marked as "sent" before actually sending,
+  // so when acp.updates changed (acp_status: ready fires), the effect re-ran,
+  // the cleanup cancelled the fallback timer, and the early-exit guard prevented
+  // the prompt from ever being sent. Now we:
+  //   1. Store consumed text in a ref (survives re-runs without re-consuming storage)
+  //   2. Only mark as "sent" when we actually call acp.prompt()
   useEffect(() => {
     if (!sessionId || !acp.connected || acp.loading) return;
 
     // Only send once per session per page load
     if (pendingPromptSentRef.current.has(sessionId)) return;
 
-    // Check for pending prompt from home page navigation
-    const pendingText = consumePendingPrompt(sessionId);
-    if (!pendingText) return;
+    // Consume from sessionStorage on first run; reuse stored text on re-runs
+    if (!pendingPromptTextRef.current) {
+      const text = consumePendingPrompt(sessionId);
+      if (!text) return;
+      pendingPromptTextRef.current = text;
+    }
 
-    // Check if ACP is already ready (e.g. session was reused)
+    const pendingText = pendingPromptTextRef.current;
+
+    // Check if ACP is already ready (e.g. session was reused or event already fired)
     const lastUpdate = acp.updates.findLast(
       (u) => (u as Record<string, unknown>).update &&
         ((u as Record<string, unknown>).update as Record<string, unknown>).sessionUpdate === "acp_status"
@@ -382,17 +396,22 @@ export function SessionPageClient() {
     if (acpReady) {
       console.log(`[SessionPage] ACP ready, sending pending prompt for session ${sessionId}`);
       pendingPromptSentRef.current.add(sessionId);
+      pendingPromptTextRef.current = null;
       acp.prompt(pendingText);
       return;
     }
 
-    // Not ready yet — wait for the acp_status event via polling updates
+    // Not ready yet — wait for acp_status: ready via acp.updates dependency.
+    // Use a timeout as fallback in case the ready event is missed.
     console.log(`[SessionPage] Waiting for ACP ready before sending pending prompt for session ${sessionId}`);
-    pendingPromptSentRef.current.add(sessionId);
 
-    // Use a timeout as fallback (ACP might already be ready but event was missed)
     const timer = setTimeout(() => {
-      acp.prompt(pendingText);
+      if (!pendingPromptSentRef.current.has(sessionId) && pendingPromptTextRef.current) {
+        console.log(`[SessionPage] Timeout fallback: sending pending prompt for session ${sessionId}`);
+        pendingPromptSentRef.current.add(sessionId);
+        pendingPromptTextRef.current = null;
+        acp.prompt(pendingText);
+      }
     }, 8000);
 
     return () => clearTimeout(timer);
