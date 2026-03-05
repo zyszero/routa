@@ -195,7 +195,12 @@ impl ClaudeCodeProcess {
 
     /// Start the Claude Code process with stream-json mode.
     async fn start(&self) -> Result<(), String> {
-        let mut cmd = Command::new(&self.config.command);
+        // Resolve the actual binary path using the full shell PATH
+        // (macOS GUI apps have a minimal PATH that won't find user CLI tools)
+        let resolved_command = crate::shell_env::which(&self.config.command)
+            .unwrap_or_else(|| self.config.command.clone());
+
+        let mut cmd = Command::new(&resolved_command);
         cmd.arg("-p");
         cmd.args(["--output-format", "stream-json"]);
         cmd.args(["--input-format", "stream-json"]);
@@ -219,6 +224,8 @@ impl ClaudeCodeProcess {
         }
 
         cmd.current_dir(&self.config.cwd);
+        cmd.env("PATH", crate::shell_env::full_path());
+        cmd.env("NODE_NO_READLINE", "1");
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
@@ -226,12 +233,15 @@ impl ClaudeCodeProcess {
         tracing::info!(
             "[ClaudeCode:{}] Spawning: {} -p --output-format stream-json ... (cwd: {})",
             self.config.display_name,
-            self.config.command,
+            resolved_command,
             self.config.cwd
         );
 
         let mut child = cmd.spawn().map_err(|e| {
-            format!("Failed to spawn Claude Code - is '{}' installed? Error: {}", self.config.command, e)
+            format!(
+                "Failed to spawn Claude Code - is '{}' installed? Error: {}. Resolved path: '{}'",
+                self.config.command, e, resolved_command
+            )
         })?;
 
         let stdin = child.stdin.take().ok_or("Failed to get stdin")?;

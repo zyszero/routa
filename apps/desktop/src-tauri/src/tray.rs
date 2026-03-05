@@ -280,8 +280,8 @@ fn navigate_to(app: &AppHandle, path: &str) {
 
 /// Open the given URL in the user's default browser.
 fn open_url_in_browser(app: &AppHandle, url: &str) {
-    use tauri_plugin_shell::ShellExt;
-    if let Err(e) = app.shell().open(url, None) {
+    use tauri_plugin_opener::OpenerExt;
+    if let Err(e) = app.opener().open_url(url, None::<&str>) {
         eprintln!("[tray] Failed to open URL {}: {}", url, e);
     }
 }
