@@ -85,6 +85,23 @@ function normalizeNote(raw: Record<string, unknown>): NoteData {
   };
 }
 
+function shouldIncludeSessionNote(note: NoteData, sessionId?: string): boolean {
+  if (!sessionId) return true;
+
+  const noteSessionId = note.sessionId;
+  const noteType = note.metadata?.type;
+
+  if (noteType === "task") {
+    return noteSessionId === sessionId;
+  }
+
+  if (noteType === "spec" || noteType === "general") {
+    return !noteSessionId || noteSessionId === sessionId;
+  }
+
+  return noteSessionId === sessionId;
+}
+
 export function useNotes(workspaceId: string, sessionId?: string): UseNotesReturn {
   const [notes, setNotes] = useState<NoteData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -101,15 +118,15 @@ export function useNotes(workspaceId: string, sessionId?: string): UseNotesRetur
     setLoading(true);
     setError(null);
     try {
-      let url = `/api/notes?workspaceId=${encodeURIComponent(workspaceId)}`;
-      if (sessionId) {
-        url += `&sessionId=${encodeURIComponent(sessionId)}`;
-      }
+      const url = `/api/notes?workspaceId=${encodeURIComponent(workspaceId)}`;
       const res = await desktopAwareFetch(url);
       if (!res.ok) throw new Error(`Failed to fetch notes: ${res.status}`);
       const data = await res.json();
       if (tearingDownRef.current) return;
-      setNotes(data.notes ?? []);
+      const fetchedNotes = Array.isArray(data.notes)
+        ? (data.notes as Record<string, unknown>[]).map(normalizeNote)
+        : [];
+      setNotes(fetchedNotes.filter((note) => shouldIncludeSessionNote(note, sessionId)));
     } catch (err) {
       if (tearingDownRef.current || shouldSuppressTeardownError(err)) {
         return;
@@ -215,21 +232,7 @@ export function useNotes(workspaceId: string, sessionId?: string): UseNotesRetur
    * - Spec/general notes: include if no sessionId or matching sessionId
    */
   const shouldIncludeNote = useCallback((note: NoteData): boolean => {
-    if (!sessionId) return true; // No filter, include all
-
-    const noteSessionId = note.sessionId;
-    const noteType = note.metadata?.type;
-
-    // Task notes: strict session match
-    if (noteType === "task") {
-      return noteSessionId === sessionId;
-    }
-    // Spec notes: strict session match
-    if (noteType === "spec") {
-      return noteSessionId === sessionId;
-    }
-    // General notes: strict session match
-    return noteSessionId === sessionId;
+    return shouldIncludeSessionNote(note, sessionId);
   }, [sessionId]);
 
   const connectSSE = useCallback(() => {

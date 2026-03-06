@@ -10,6 +10,7 @@ import type {RepoSelection} from "@/client/components/repo-picker";
 import type {NoteData} from "@/client/hooks/use-notes";
 
 type SidebarTab = "sessions" | "spec" | "tasks";
+const SESSIONS_QUICK_ACCESS_RATIO_KEY = "routa.session.sidebar-sessions-quick-access-ratio";
 
 interface LeftSidebarProps {
   // Sidebar dimensions & collapse
@@ -105,12 +106,14 @@ function TaskSnapshotSummary({
   taskCount,
   runningCount,
   hasSpec,
+  specPreviewLines,
   onOpenTasks,
   onOpenSpec,
 }: {
   taskCount: number;
   runningCount: number;
   hasSpec: boolean;
+  specPreviewLines: string[];
   onOpenTasks: () => void;
   onOpenSpec?: () => void;
 }) {
@@ -150,6 +153,26 @@ function TaskSnapshotSummary({
           )}
         </div>
       </div>
+      {specPreviewLines.length > 0 && hasSpec && onOpenSpec && (
+        <button
+          type="button"
+          onClick={onOpenSpec}
+          data-testid="session-spec-preview"
+          className="mx-3 mb-3 flex w-[calc(100%-1.5rem)] flex-col gap-1 rounded-lg border border-blue-100 bg-white/80 px-3 py-2 text-left transition-colors hover:border-blue-200 hover:bg-white dark:border-blue-900/40 dark:bg-[#121722] dark:hover:border-blue-800"
+        >
+          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-500 dark:text-blue-300">
+            Spec Preview
+          </span>
+          {specPreviewLines.map((line, index) => (
+            <span
+              key={`${index}-${line}`}
+              className="text-[11px] leading-5 text-gray-600 dark:text-gray-300 line-clamp-1"
+            >
+              {line}
+            </span>
+          ))}
+        </button>
+      )}
     </div>
   );
 }
@@ -317,8 +340,11 @@ function SessionsSplitPane({
   hasCollabNotes,
   sessionNotes,
   routaTasks,
+  specNote,
   onSwitchToTasks,
   onSwitchToSpec,
+  onExecuteNoteTask,
+  onExecuteTask,
   hasSpec,
 }: {
   sessionId: string;
@@ -328,10 +354,16 @@ function SessionsSplitPane({
   hasCollabNotes: boolean;
   sessionNotes: NoteData[];
   routaTasks: ParsedTask[];
+  specNote?: NoteData;
   onSwitchToTasks: () => void;
   onSwitchToSpec?: () => void;
+  onExecuteNoteTask: (noteId: string) => Promise<CrafterAgent | null>;
+  onExecuteTask: (taskId: string) => Promise<CrafterAgent | null>;
   hasSpec: boolean;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [splitRatio, setSplitRatio] = useState(0.62);
+  const [isDraggingSplit, setIsDraggingSplit] = useState(false);
   const hasTasks = hasCollabNotes
     ? sessionNotes.some((n) => n.metadata.type === "task")
     : routaTasks.length > 0;
@@ -341,10 +373,66 @@ function SessionsSplitPane({
   const runningCount = hasCollabNotes
     ? sessionNotes.filter((n) => n.metadata.taskStatus === "IN_PROGRESS").length
     : routaTasks.filter((task) => task.status === "running").length;
+  const specPreviewLines = useMemo(() => {
+    if (!specNote?.content) return [];
+    return specNote.content
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^[-#*>\s`]+/, "").trim())
+      .filter(Boolean)
+      .slice(0, 3);
+  }, [specNote]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(SESSIONS_QUICK_ACCESS_RATIO_KEY);
+    const parsed = stored ? Number.parseFloat(stored) : Number.NaN;
+    if (Number.isFinite(parsed)) {
+      setSplitRatio(Math.max(0.35, Math.min(0.82, parsed)));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(SESSIONS_QUICK_ACCESS_RATIO_KEY, String(splitRatio));
+  }, [splitRatio]);
+
+  useEffect(() => {
+    if (!isDraggingSplit) return;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const container = containerRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const relativeY = event.clientY - rect.top;
+      const nextRatio = relativeY / rect.height;
+      setSplitRatio(Math.max(0.35, Math.min(0.82, nextRatio)));
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingSplit(false);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "row-resize";
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+  }, [isDraggingSplit]);
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-      <div className="flex-1 min-h-0 overflow-y-auto">
+    <div ref={containerRef} className="flex-1 min-h-0 flex flex-col overflow-hidden">
+      <div
+        className="min-h-0 overflow-y-auto"
+        style={(hasTasks || hasSpec) ? { flexBasis: `${splitRatio * 100}%` } : undefined}
+      >
         <SessionContextPanel
           sessionId={sessionId}
           workspaceId={workspaceId}
@@ -353,25 +441,39 @@ function SessionsSplitPane({
         />
       </div>
       {(hasTasks || hasSpec) && (
-        <div className="shrink-0">
+        <>
+          <div
+            className="hidden md:flex h-2 shrink-0 cursor-row-resize items-center justify-center border-y border-gray-100 bg-gray-50/90 transition-colors hover:bg-indigo-50 dark:border-gray-800 dark:bg-[#13151d] dark:hover:bg-indigo-950/20"
+            onMouseDown={() => setIsDraggingSplit(true)}
+            data-testid="session-sidebar-split-handle"
+          >
+            <div className="h-1 w-10 rounded-full bg-gray-300 dark:bg-gray-600" />
+          </div>
+          <div
+            className="min-h-44 shrink-0 overflow-hidden"
+            style={{ flexBasis: `${(1 - splitRatio) * 100}%` }}
+          >
           <TaskSnapshotSummary
             taskCount={taskCount}
             runningCount={runningCount}
             hasSpec={hasSpec}
+            specPreviewLines={specPreviewLines}
             onOpenTasks={onSwitchToTasks}
             onOpenSpec={onSwitchToSpec}
           />
           {hasTasks && (
-            <div className="border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-[#13151d]">
+            <div className="flex-1 min-h-0 overflow-y-auto border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-[#13151d]">
               <MiniTaskList
                 hasCollabNotes={hasCollabNotes}
                 sessionNotes={sessionNotes}
                 routaTasks={routaTasks}
-                onSwitchToTasks={onSwitchToTasks}
+                onExecuteNoteTask={onExecuteNoteTask}
+                onExecuteTask={onExecuteTask}
               />
             </div>
           )}
-        </div>
+          </div>
+        </>
       )}
     </div>
   );
@@ -400,13 +502,16 @@ function MiniTaskList({
   hasCollabNotes,
   sessionNotes,
   routaTasks,
-  onSwitchToTasks,
+  onExecuteNoteTask,
+  onExecuteTask,
 }: {
   hasCollabNotes: boolean;
   sessionNotes: NoteData[];
   routaTasks: ParsedTask[];
-  onSwitchToTasks: () => void;
+  onExecuteNoteTask: (noteId: string) => Promise<CrafterAgent | null>;
+  onExecuteTask: (taskId: string) => Promise<CrafterAgent | null>;
 }) {
+  const [executingId, setExecutingId] = useState<string | null>(null);
   const items = useMemo(() => {
     if (hasCollabNotes) {
       return sessionNotes
@@ -415,20 +520,19 @@ function MiniTaskList({
           id: n.id,
           title: n.title,
           status: (n.metadata.taskStatus as string) || "PENDING",
-          detail: n.content,
+          run: () => onExecuteNoteTask(n.id),
         }));
     }
     return routaTasks.map((t) => ({
       id: t.id,
       title: t.title,
       status: t.status,
-      detail: [t.objective, t.scope, t.definitionOfDone].filter(Boolean).join("\n\n"),
+      run: () => onExecuteTask(t.id),
     }));
-  }, [hasCollabNotes, sessionNotes, routaTasks]);
+  }, [hasCollabNotes, onExecuteNoteTask, onExecuteTask, routaTasks, sessionNotes]);
 
   if (items.length === 0) return null;
 
-  const previewItems = items.slice(0, 3);
   const runningCount = items.filter((item) => ["running", "IN_PROGRESS"].includes(item.status)).length;
   const completedCount = items.filter((item) => ["completed", "COMPLETED"].includes(item.status)).length;
 
@@ -453,21 +557,16 @@ function MiniTaskList({
             </span>
           )}
         </div>
-        <button
-          onClick={onSwitchToTasks}
-          className="text-[10px] font-medium text-indigo-500 dark:text-indigo-400 hover:underline shrink-0"
-        >
-          view all →
-        </button>
+        <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500 shrink-0">
+          quick run
+        </span>
       </div>
       <div className="space-y-1.5">
         {items.map((item) => (
-          <button
+          <div
             key={item.id}
-            type="button"
-            onClick={onSwitchToTasks}
             data-testid="session-task-snapshot-item"
-            className="w-full text-left flex items-start gap-2 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#171a23] px-2.5 py-2 hover:border-indigo-300 dark:hover:border-indigo-700 hover:bg-indigo-50/40 dark:hover:bg-indigo-900/10 transition-colors"
+            className="w-full flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#171a23] px-2.5 py-2"
           >
             <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_COLORS[item.status] ?? "bg-gray-300"}`} />
             <div className="min-w-0 flex-1">
@@ -479,13 +578,28 @@ function MiniTaskList({
                   {STATUS_LABEL[item.status] ?? item.status}
                 </span>
               </div>
-              {item.detail && (
-                <p className="mt-1 text-[10px] text-gray-500 dark:text-gray-400 line-clamp-2">
-                  {item.detail}
-                </p>
-              )}
             </div>
-          </button>
+            <button
+              type="button"
+              data-testid="session-task-quick-run"
+              disabled={executingId === item.id}
+              onClick={async () => {
+                setExecutingId(item.id);
+                try {
+                  await item.run();
+                } finally {
+                  setExecutingId((current) => current === item.id ? null : current);
+                }
+              }}
+              className="shrink-0 inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-wait disabled:opacity-60 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/30"
+              title={`Run ${item.title}`}
+            >
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-5.197-3.03A1 1 0 008 9v6a1 1 0 001.555.832l5.197-3.03a1 1 0 000-1.664z" />
+              </svg>
+              {executingId === item.id ? "Running" : "Run"}
+            </button>
+          </div>
         ))}
       </div>
     </div>
@@ -570,8 +684,9 @@ export function LeftSidebar({
     : routaTasks.length;
 
   const specNote = useMemo(
-    () => sessionNotes.find((n) => n.metadata.type === "spec"),
-    [sessionNotes]
+    () => sessionNotes.find((n) => n.metadata.type === "spec" && n.sessionId === sessionId)
+      ?? sessionNotes.find((n) => n.metadata.type === "spec"),
+    [sessionId, sessionNotes]
   );
 
   const hasRunningTasks = hasCollabNotes
@@ -762,8 +877,11 @@ export function LeftSidebar({
                   hasCollabNotes={hasCollabNotes}
                   sessionNotes={sessionNotes}
                   routaTasks={routaTasks}
+                  specNote={specNote}
                   onSwitchToTasks={() => setActiveTab("tasks")}
                   onSwitchToSpec={() => setActiveTab("spec")}
+                  onExecuteNoteTask={onExecuteNoteTask}
+                  onExecuteTask={onExecuteTask}
                   hasSpec={Boolean(specNote)}
                 />
               )}

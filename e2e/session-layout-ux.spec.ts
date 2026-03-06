@@ -28,12 +28,17 @@ test.describe("Session layout UX", () => {
     await expect(page.locator("text=Quick Access")).toBeVisible();
     await expect(page.locator("text=Task Snapshot")).toBeVisible();
     await expect(page.locator('button:has-text("Open Tasks")')).toBeVisible();
+    await expect(page.getByTestId("session-sidebar-split-handle")).toBeVisible();
 
     const snapshot = page.getByTestId("session-task-snapshot");
     const totalLabel = await snapshot.locator("text=/\\d+ total/").first().textContent();
     const totalCount = Number(totalLabel?.match(/(\d+)/)?.[1] ?? 0);
     const visibleItems = await page.getByTestId("session-task-snapshot-item").count();
+    const quickRunButtons = await page.getByTestId("session-task-quick-run").count();
+    const inlineDetails = await page.getByTestId("session-task-snapshot-item").locator("p").count();
     expect(visibleItems).toBe(totalCount);
+    expect(quickRunButtons).toBe(totalCount);
+    expect(inlineDetails).toBe(0);
   });
 
   test("mobile opens the session sidebar as a drawer", async ({ page }) => {
