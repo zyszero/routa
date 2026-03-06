@@ -85,6 +85,17 @@ export const ACP_AGENT_PRESETS: readonly AcpAgentPreset[] = [
     preferredTier: ModelTier.BALANCED,
   },
   {
+    id: "docker-opencode",
+    name: "Docker OpenCode",
+    command: "docker",
+    args: [],
+    description: "OpenCode running in an isolated Docker container",
+    nonStandardApi: true,
+    capabilities: ["mcp_tool", "code_generation", "file_operations"],
+    supportedRoles: [AgentRole.CRAFTER, AgentRole.GATE, AgentRole.DEVELOPER],
+    preferredTier: ModelTier.BALANCED,
+  },
+  {
     id: "gemini",
     name: "Gemini",
     command: "gemini",

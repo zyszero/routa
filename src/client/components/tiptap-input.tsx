@@ -443,6 +443,7 @@ interface ProviderItem {
   status?: "available" | "unavailable" | "checking";
   /** Source of the provider: "static" for builtin, "registry" for ACP registry */
   source?: "static" | "registry";
+  unavailableReason?: string;
 }
 
 interface SessionItem {
@@ -955,14 +956,20 @@ export function TiptapInput({
                     <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                       Built-in - Not Installed ({builtinUnavailable.length})
                     </div>
-                    {builtinUnavailable.map((p) => (
+                    {builtinUnavailable.map((p) => {
+                      const isDockerProvider = p.id === "docker-opencode";
+                      const isDisabled = isDockerProvider;
+                      return (
                       <button
                         key={p.id}
                         type="button"
                         onClick={() => {
+                          if (isDisabled) return;
                           onProviderChange?.(p.id);
                           setProviderDropdownOpen(false);
                         }}
+                        disabled={isDisabled}
+                        title={p.unavailableReason ?? p.description}
                         className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-xs transition-colors opacity-60 ${
                           p.id === selectedProvider
                             ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
@@ -973,7 +980,8 @@ export function TiptapInput({
                         <span className="font-medium truncate flex-1">{p.name}</span>
                         <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[140px]">{p.command}</span>
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
 

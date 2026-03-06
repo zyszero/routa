@@ -13,6 +13,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { TiptapInput, type InputContext } from "./tiptap-input";
+import { DockerStatusIndicator } from "./docker-status-indicator";
 import { useAcp } from "../hooks/use-acp";
 import { useSkills } from "../hooks/use-skills";
 import { useWorkspaces, useCodebases } from "../hooks/use-workspaces";
@@ -357,6 +358,8 @@ export function HomeInput({
             )}
 
             {/* Workspace Pill */}
+            <DockerStatusIndicator />
+
             {workspacesHook.workspaces.length > 0 && (
               <div className="relative" ref={wsDropdownRef}>
                 <button

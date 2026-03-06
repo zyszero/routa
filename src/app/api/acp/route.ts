@@ -29,6 +29,7 @@ import { v4 as uuidv4 } from "uuid";
 import { isServerlessEnvironment } from "@/core/acp/api-based-providers";
 import { shouldUseOpencodeAdapter, isOpencodeServerConfigured } from "@/core/acp/opencode-sdk-adapter";
 import type { OpencodeSdkAdapter } from "@/core/acp/opencode-sdk-adapter";
+import { getDockerDetector, DEFAULT_DOCKER_AGENT_IMAGE } from "@/core/acp/docker";
 import { isClaudeCodeSdkConfigured } from "@/core/acp/claude-code-sdk-adapter";
 import type { AgentInstanceConfig } from "@/core/acp/agent-instance-factory";
 import { initRoutaOrchestrator, getRoutaOrchestrator } from "@/core/orchestration/orchestrator-singleton";
@@ -309,6 +310,7 @@ export async function POST(request: NextRequest) {
       const isClaudeCodeSdk = provider === "claude-code-sdk";
       // opencode-sdk is the SDK-based adapter for connecting to remote OpenCode server
       const isOpencodeSdk = provider === "opencode-sdk";
+      const isDockerOpenCode = provider === "docker-opencode";
 
       // ── Early validation (fail fast before async work) ─────────────
       if (isOpencodeSdk && !isOpencodeServerConfigured()) {
@@ -322,6 +324,17 @@ export async function POST(request: NextRequest) {
           code: -32002,
           message: "Claude Code SDK not configured. Set ANTHROPIC_AUTH_TOKEN environment variable.",
         });
+      }
+      if (isDockerOpenCode) {
+        const dockerStatus = await getDockerDetector().checkAvailability();
+        if (!dockerStatus.available) {
+          return jsonrpcResponse(id ?? null, null, {
+            code: -32003,
+            message: dockerStatus.error
+              ? `Docker unavailable: ${dockerStatus.error}`
+              : "Docker daemon is unavailable. Please start Docker or Colima first.",
+          });
+        }
       }
 
       // ── Register session in memory immediately (UI can navigate now) ──
@@ -399,6 +412,13 @@ export async function POST(request: NextRequest) {
             acpSessionId = await manager.createOpencodeSdkSession(
               sessionId,
               forwardSessionUpdate
+            );
+          } else if (isDockerOpenCode) {
+            acpSessionId = await manager.createDockerSession(
+              sessionId,
+              cwd,
+              forwardSessionUpdate,
+              process.env.ROUTA_DOCKER_OPENCODE_IMAGE ?? DEFAULT_DOCKER_AGENT_IMAGE,
             );
           } else if (isClaudeCodeSdk) {
             const instanceConfig: AgentInstanceConfig = {
@@ -655,6 +675,7 @@ export async function POST(request: NextRequest) {
       const sessionExists =
         manager.getProcess(sessionId) !== undefined ||
         manager.getClaudeProcess(sessionId) !== undefined ||
+        manager.isDockerAdapterSession(sessionId) ||
         manager.isClaudeCodeSdkSession(sessionId) ||
         manager.isOpencodeAdapterSession(sessionId) ||
         (await manager.isClaudeCodeSdkSessionAsync(sessionId)) ||
@@ -677,6 +698,7 @@ export async function POST(request: NextRequest) {
           const isClaudeCode = preset?.nonStandardApi === true || provider === "claude";
           const isClaudeCodeSdk = provider === "claude-code-sdk";
           const isOpencodeSdk = provider === "opencode-sdk";
+          const isDockerOpenCode = provider === "docker-opencode";
 
           let acpSessionId: string;
 
@@ -692,6 +714,23 @@ export async function POST(request: NextRequest) {
             acpSessionId = await manager.createOpencodeSdkSession(
               sessionId,
               forwardSessionUpdate
+            );
+          } else if (isDockerOpenCode) {
+            const dockerStatus = await getDockerDetector().checkAvailability();
+            if (!dockerStatus.available) {
+              return jsonrpcResponse(id ?? null, null, {
+                code: -32003,
+                message: dockerStatus.error
+                  ? `Cannot auto-create Docker session: ${dockerStatus.error}`
+                  : "Cannot auto-create Docker session: Docker daemon unavailable.",
+              });
+            }
+
+            acpSessionId = await manager.createDockerSession(
+              sessionId,
+              cwd,
+              forwardSessionUpdate,
+              process.env.ROUTA_DOCKER_OPENCODE_IMAGE ?? DEFAULT_DOCKER_AGENT_IMAGE,
             );
           } else if (isClaudeCodeSdk) {
             // Claude Code SDK session
@@ -874,6 +913,69 @@ export async function POST(request: NextRequest) {
                   sessionId,
                   type: "error",
                   error: { message: err instanceof Error ? err.message : "OpenCode SDK prompt failed" },
+                },
+              };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorNotification)}\n\n`));
+              controller.close();
+            }
+          },
+        });
+
+        return new Response(stream, {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+          },
+        });
+      }
+
+      // ── Docker OpenCode session ─────────────────────────────────────
+      if (manager.isDockerAdapterSession(sessionId)) {
+        const dockerAdapter = manager.getDockerAdapter(sessionId);
+        if (!dockerAdapter) {
+          return jsonrpcResponse(id ?? null, null, {
+            code: -32000,
+            message: `No Docker OpenCode adapter for session: ${sessionId}`,
+          });
+        }
+
+        if (!dockerAdapter.alive) {
+          return jsonrpcResponse(id ?? null, null, {
+            code: -32000,
+            message: "Docker OpenCode adapter is not connected",
+          });
+        }
+
+        store.enterStreamingMode(sessionId);
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream({
+          async start(controller) {
+            try {
+              for await (const event of dockerAdapter.promptStream(
+                promptText,
+                sessionId,
+                skillContent,
+                sessionRecord?.workspaceId ?? undefined,
+              )) {
+                controller.enqueue(encoder.encode(event));
+              }
+              store.flushAgentBuffer(sessionId);
+              store.exitStreamingMode(sessionId);
+              await persistSessionHistorySnapshot(sessionId, store);
+              controller.close();
+            } catch (err) {
+              store.flushAgentBuffer(sessionId);
+              store.exitStreamingMode(sessionId);
+              await persistSessionHistorySnapshot(sessionId, store);
+              const errorNotification = {
+                jsonrpc: "2.0",
+                method: "session/update",
+                params: {
+                  sessionId,
+                  type: "error",
+                  error: { message: err instanceof Error ? err.message : "Docker OpenCode prompt failed" },
                 },
               };
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorNotification)}\n\n`));
@@ -1118,6 +1220,13 @@ export async function POST(request: NextRequest) {
           const opcAdapter = manager.getOpencodeAdapter(sessionId);
           if (opcAdapter) {
             opcAdapter.cancel();
+          }
+        }
+        // Check if Docker OpenCode session
+        else if (manager.isDockerAdapterSession(sessionId)) {
+          const dockerAdapter = manager.getDockerAdapter(sessionId);
+          if (dockerAdapter) {
+            dockerAdapter.cancel();
           }
         }
         // Check if Claude Code SDK session
