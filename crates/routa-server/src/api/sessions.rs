@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, Query, State},
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use serde::Deserialize;
@@ -14,6 +14,7 @@ pub fn router() -> Router<AppState> {
         .route("/{session_id}", get(get_session).patch(rename_session).delete(delete_session))
         .route("/{session_id}/history", get(get_session_history))
         .route("/{session_id}/context", get(get_session_context))
+        .route("/{session_id}/disconnect", post(disconnect_session))
 }
 
 #[derive(Debug, Deserialize)]
@@ -218,6 +219,39 @@ async fn delete_session(
         // Return 404 only when we have confirmation it doesn't exist
         // (delete is idempotent, so we just return ok even if not found)
     }
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// POST /api/sessions/{session_id}/disconnect — Disconnect and kill an active session process.
+///
+/// Persists history to the database, then kills the in-memory process.
+/// Unlike DELETE, this does not remove the session from the database.
+async fn disconnect_session(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ServerError> {
+    // Check if session exists in memory
+    let session = state.acp_manager.get_session(&session_id).await;
+    if session.is_none() {
+        return Err(ServerError::NotFound(format!(
+            "Session {} not found",
+            session_id
+        )));
+    }
+
+    // Persist history before killing
+    if let Some(history) = state.acp_manager.get_session_history(&session_id).await {
+        if !history.is_empty() {
+            let _ = state
+                .acp_session_store
+                .save_history(&session_id, &history)
+                .await;
+        }
+    }
+
+    // Kill the process
+    state.acp_manager.kill_session(&session_id).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getHttpSessionStore } from "@/core/acp/http-session-store";
-import { getAcpProcessManager } from "@/core/acp/acp-process-manager";
+import { getAcpProcessManager } from "@/core/acp/processer";
 import { saveHistoryToDb } from "@/core/acp/session-db-persister";
 
 export const dynamic = "force-dynamic";
