@@ -377,7 +377,7 @@ export function CraftersView({
               title={agent.taskTitle}
             >
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusColor} ${agent.status === "running" ? "animate-pulse" : ""}`} />
-              <span className="truncate max-w-[120px]">
+              <span className="truncate max-w-30">
                 {agent.taskTitle || `CRAFTER #${i + 1}`}
               </span>
             </button>
@@ -588,24 +588,24 @@ function TaskCard({
 
   const statusIcons = {
     pending: (
-      <div className="w-5 h-5 rounded-md border-2 border-gray-300 dark:border-gray-600 flex-shrink-0" />
+      <div className="w-5 h-5 rounded-md border-2 border-gray-300 dark:border-gray-600 shrink-0" />
     ),
     confirmed: (
-      <div className="w-5 h-5 rounded-md bg-blue-500 flex items-center justify-center flex-shrink-0">
+      <div className="w-5 h-5 rounded-md bg-blue-500 flex items-center justify-center shrink-0">
         <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
         </svg>
       </div>
     ),
     running: (
-      <div className="w-5 h-5 rounded-md bg-amber-500 flex items-center justify-center flex-shrink-0 animate-pulse">
+      <div className="w-5 h-5 rounded-md bg-amber-500 flex items-center justify-center shrink-0 animate-pulse">
         <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
       </div>
     ),
     completed: (
-      <div className="w-5 h-5 rounded-md bg-green-500 flex items-center justify-center flex-shrink-0">
+      <div className="w-5 h-5 rounded-md bg-green-500 flex items-center justify-center shrink-0">
         <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
         </svg>
@@ -617,7 +617,7 @@ function TaskCard({
     <div className={`rounded-lg border transition-all ${statusColors[task.status]}`}>
       {/* Header - always visible */}
       <div
-        className="flex items-start gap-2.5 px-3 py-2.5 cursor-pointer hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
+        className="flex items-start gap-2.5 px-3 py-2.5 cursor-pointer hover:bg-black/2 dark:hover:bg-white/2 transition-colors"
         onClick={onToggleExpand}
       >
         {statusIcons[task.status]}
@@ -637,7 +637,7 @@ function TaskCard({
           )}
         </div>
         <svg
-          className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 mt-0.5 ${expanded ? "rotate-180" : ""}`}
+          className={`w-4 h-4 text-gray-400 transition-transform shrink-0 mt-0.5 ${expanded ? "rotate-180" : ""}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"

@@ -202,6 +202,7 @@ export function SessionPageClient() {
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const [showSpecialistManager, setShowSpecialistManager] = useState(false);
   const navigationTargetRef = useRef<string | null>(null);
+  const providerChildClientsRef = useRef<Map<string, BrowserAcpClient>>(new Map());
 
   // Handle custom events for specialist manager
   useEffect(() => {
@@ -213,6 +214,15 @@ export function SessionPageClient() {
   }, []);
   const agentInstallCloseRef = useRef<HTMLButtonElement>(null);
   const installAgentsButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    return () => {
+      for (const client of providerChildClientsRef.current.values()) {
+        client.disconnect();
+      }
+      providerChildClientsRef.current.clear();
+    };
+  }, []);
 
   // ── Load custom specialists for agent selector ──────────────────────
   useEffect(() => {
@@ -1526,6 +1536,112 @@ export function SessionPageClient() {
 
       childSessionId = sessionResult.sessionId;
       crafterAgentId = sessionResult.routaAgentId ?? sessionResult.sessionId;
+      providerChildClientsRef.current.set(childSessionId, providerClient);
+
+      providerClient.onUpdate((notification) => {
+        const raw = notification as Record<string, unknown>;
+        const update = (raw.update ?? raw) as Record<string, unknown>;
+        const notificationSessionId = (notification.sessionId ?? raw.sessionId) as string | undefined;
+
+        if (!childSessionId || notificationSessionId !== childSessionId || !crafterAgentId) {
+          return;
+        }
+
+        setCrafterAgents((prev) => {
+          const agentIndex = prev.findIndex((agent) => agent.id === crafterAgentId);
+          if (agentIndex < 0) return prev;
+
+          const nextAgents = [...prev];
+          const nextAgent = { ...nextAgents[agentIndex] };
+          const messages = [...nextAgent.messages];
+          const kind = update.sessionUpdate as string | undefined;
+
+          const extractText = () => {
+            const content = update.content as { type?: string; text?: string } | undefined;
+            if (content?.text) return content.text;
+            if (typeof update.text === "string") return update.text;
+            return "";
+          };
+
+          switch (kind) {
+            case "agent_message_chunk": {
+              const text = extractText();
+              if (!text) return prev;
+              const lastMessage = messages[messages.length - 1];
+              if (lastMessage && lastMessage.role === "assistant" && !lastMessage.toolName) {
+                messages[messages.length - 1] = {
+                  ...lastMessage,
+                  content: lastMessage.content + text,
+                };
+              } else {
+                messages.push({
+                  id: crypto.randomUUID(),
+                  role: "assistant",
+                  content: text,
+                  timestamp: new Date(),
+                });
+              }
+              break;
+            }
+            case "agent_thought_chunk": {
+              const text = extractText();
+              if (!text) return prev;
+              const lastMessage = messages[messages.length - 1];
+              if (lastMessage && lastMessage.role === "thought") {
+                messages[messages.length - 1] = {
+                  ...lastMessage,
+                  content: lastMessage.content + text,
+                };
+              } else {
+                messages.push({
+                  id: crypto.randomUUID(),
+                  role: "thought",
+                  content: text,
+                  timestamp: new Date(),
+                });
+              }
+              break;
+            }
+            case "tool_call": {
+              const toolCallId = (update.toolCallId as string | undefined) ?? crypto.randomUUID();
+              const title = (update.title as string | undefined) ?? "tool";
+              messages.push({
+                id: toolCallId,
+                role: "tool",
+                content: title,
+                timestamp: new Date(),
+                toolName: title,
+                toolStatus: (update.status as string | undefined) ?? "running",
+              });
+              break;
+            }
+            case "tool_call_update": {
+              const toolCallId = update.toolCallId as string | undefined;
+              if (!toolCallId) return prev;
+              const messageIndex = messages.findIndex((message) => message.id === toolCallId);
+              if (messageIndex >= 0) {
+                messages[messageIndex] = {
+                  ...messages[messageIndex],
+                  toolStatus: (update.status as string | undefined) ?? messages[messageIndex].toolStatus,
+                };
+              }
+              break;
+            }
+            case "completed":
+            case "ended":
+            case "turn_complete": {
+              nextAgent.status = "completed";
+              break;
+            }
+            default:
+              return prev;
+          }
+
+          nextAgent.messages = messages;
+          nextAgents[agentIndex] = nextAgent;
+          return nextAgents;
+        });
+      });
 
       const crafterAgent: CrafterAgent = {
         id: crafterAgentId,
@@ -1569,6 +1685,9 @@ export function SessionPageClient() {
         },
       });
 
+      providerClient.disconnect();
+      providerChildClientsRef.current.delete(childSessionId);
+
       return {
         id: crafterAgent.id,
         sessionId: childSessionId,
@@ -1586,6 +1705,10 @@ export function SessionPageClient() {
       };
     } catch (err) {
       if (shouldSuppressTeardownError(err)) {
+        if (childSessionId) {
+          providerClient.disconnect();
+          providerChildClientsRef.current.delete(childSessionId);
+        }
         return null;
       }
 
@@ -1616,6 +1739,11 @@ export function SessionPageClient() {
           provider,
         },
       });
+
+      if (childSessionId) {
+        providerClient.disconnect();
+        providerChildClientsRef.current.delete(childSessionId);
+      }
 
       return null;
     }

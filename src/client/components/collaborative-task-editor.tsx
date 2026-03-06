@@ -656,7 +656,8 @@ function TaskNoteCard({
               </div>
 
               {/* Actions */}
-              <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border-gray-100 dark:border-gray-700/50">
+              <div className="mt-3 border-t border-gray-100 pt-2.5 dark:border-gray-700/50">
+                <div className="flex flex-wrap items-center gap-1.5">
                 {/* Execute button for pending tasks */}
                 {(status === "PENDING") && onExecute && (
                   <button
@@ -665,7 +666,7 @@ function TaskNoteCard({
                       onExecute();
                     }}
                     disabled={executeDisabled}
-                    className={`text-xs font-medium px-2.5 py-1 rounded-md transition-colors ${
+                    className={`text-[11px] font-medium px-2 py-1 rounded-md transition-colors ${
                       executeDisabled
                         ? "bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed"
                         : "bg-emerald-600 text-white hover:bg-emerald-700"
@@ -676,12 +677,12 @@ function TaskNoteCard({
                   </button>
                 )}
                 {status === "IN_PROGRESS" && (
-                  <span className="text-xs text-amber-600 dark:text-amber-400 font-medium animate-pulse">
+                  <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium animate-pulse px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-900/20">
                     Running...
                   </span>
                 )}
                 {status === "COMPLETED" && (
-                  <span className="text-xs text-green-600 dark:text-green-400 font-medium flex items-center gap-1">
+                  <span className="text-[11px] text-green-600 dark:text-green-400 font-medium flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 dark:bg-green-900/20">
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
@@ -694,7 +695,7 @@ function TaskNoteCard({
                     e.stopPropagation();
                     onEdit();
                   }}
-                  className="text-xs font-medium px-2.5 py-1 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  className="text-[11px] font-medium px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                 >
                   Edit
                 </button>
@@ -707,7 +708,7 @@ function TaskNoteCard({
                     onStatusChange(e.target.value);
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  className="text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  className="min-w-29.5 text-[11px] px-2 py-1 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
                 >
                   <option value="PENDING">Pending</option>
                   <option value="IN_PROGRESS">In Progress</option>
@@ -721,11 +722,12 @@ function TaskNoteCard({
                       e.stopPropagation();
                       onDelete();
                     }}
-                    className="text-xs font-medium px-2.5 py-1 rounded-md text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors ml-auto"
+                    className="text-[11px] font-medium px-2 py-1 rounded-md text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                   >
                     Delete
                   </button>
                 )}
+                </div>
               </div>
             </>
           )}
