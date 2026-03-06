@@ -557,28 +557,20 @@ export function AskUserQuestionBubble({
     };
 
     return (
-        <div className="w-full rounded-xl border border-amber-200 dark:border-amber-800/50 bg-amber-50/60 dark:bg-amber-950/20 overflow-hidden">
-            <div className="px-3 py-2 border-b border-amber-200/70 dark:border-amber-800/40 flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${isCompleted ? "bg-green-500" : isFailed ? "bg-red-500" : "bg-amber-500 animate-pulse"}`} />
-                <span className="text-xs font-semibold text-amber-800 dark:text-amber-200">AskUserQuestion</span>
-                <span className="text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400">
-                    {isCompleted ? "answered" : isFailed ? "failed" : "waiting for input"}
-                </span>
-            </div>
-            <div className="px-3 py-3 space-y-4">
+        <div className="w-full rounded-md border border-amber-200/80 dark:border-amber-800/40 bg-amber-50/40 dark:bg-amber-950/10 overflow-hidden">
+            <div className="px-2.5 py-1.5 space-y-2">
                 {questions.map((item) => {
                     const selectedValues = answers[item.question]
                         ? answers[item.question].split(",").map((value) => value.trim()).filter(Boolean)
                         : [];
                     return (
-                        <div key={item.question} className="space-y-2">
-                            <div>
-                                <div className="inline-flex items-center rounded-full bg-white/80 dark:bg-black/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
-                                    {item.header}
-                                </div>
-                                <div className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">{item.question}</div>
+                        <div key={item.question}>
+                            <div className="flex items-center gap-1.5 mb-1">
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isCompleted ? "bg-green-500" : isFailed ? "bg-red-500" : "bg-amber-500 animate-pulse"}`} />
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">{item.header}</span>
+                                <span className="text-xs text-gray-700 dark:text-gray-300">{item.question}</span>
                             </div>
-                            <div className="grid gap-2">
+                            <div className="flex flex-wrap gap-1.5 pl-3">
                                 {(item.options ?? []).map((option) => {
                                     const selected = selectedValues.includes(option.label);
                                     return (
@@ -589,41 +581,23 @@ export function AskUserQuestionBubble({
                                             onClick={() => item.multiSelect
                                                 ? toggleMultiAnswer(item.question, option.label)
                                                 : updateSingleAnswer(item.question, option.label)}
-                                            className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${selected
-                                                ? "border-amber-500 bg-amber-100/80 dark:bg-amber-900/30"
-                                                : "border-amber-200/80 dark:border-amber-800/40 bg-white/70 dark:bg-white/5 hover:border-amber-300 dark:hover:border-amber-700"
-                                            } ${!isAwaitingInput ? "cursor-default" : ""}`}
+                                            title={option.description}
+                                            className={`rounded-md border px-2 py-0.5 text-[11px] transition-colors ${selected
+                                                ? "border-amber-500 bg-amber-500 text-white dark:bg-amber-600"
+                                                : "border-amber-200 dark:border-amber-700/50 bg-white/80 dark:bg-white/5 text-gray-700 dark:text-gray-300 hover:border-amber-400 dark:hover:border-amber-600"
+                                            } ${!isAwaitingInput ? "cursor-default" : "cursor-pointer"}`}
                                         >
-                                            <div className="flex items-start gap-2">
-                                                <span className={`mt-0.5 flex h-4 w-4 items-center justify-center rounded-full border text-[10px] ${selected ? "border-amber-600 bg-amber-600 text-white" : "border-gray-300 dark:border-gray-600 text-transparent"}`}>
-                                                    {item.multiSelect ? "✓" : "•"}
-                                                </span>
-                                                <div>
-                                                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{option.label}</div>
-                                                    {option.description && (
-                                                        <div className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">{option.description}</div>
-                                                    )}
-                                                </div>
-                                            </div>
+                                            {option.label}
                                         </button>
                                     );
                                 })}
                             </div>
-                            {selectedValues.length > 0 && (
-                                <div className="flex flex-wrap gap-1.5">
-                                    {selectedValues.map((value) => (
-                                        <span key={`${item.question}-${value}`} className="rounded-full bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 text-[11px] text-amber-700 dark:text-amber-300">
-                                            {value}
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
                         </div>
                     );
                 })}
 
                 {submitError && (
-                    <div className="rounded-lg border border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-950/20 px-3 py-2 text-xs text-red-700 dark:text-red-300">
+                    <div className="rounded-md border border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-950/20 px-2 py-1 text-[11px] text-red-700 dark:text-red-300">
                         {submitError}
                     </div>
                 )}
@@ -634,9 +608,9 @@ export function AskUserQuestionBubble({
                             type="button"
                             onClick={handleSubmit}
                             disabled={submitting || questions.length === 0}
-                            className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="rounded-md bg-amber-600 px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {submitting ? "Submitting..." : "Submit answers"}
+                            {submitting ? "..." : "Submit"}
                         </button>
                     </div>
                 )}
