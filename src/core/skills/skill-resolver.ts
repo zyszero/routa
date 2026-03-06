@@ -81,7 +81,7 @@ export async function resolveSkillContent(
     if (driver === "sqlite") {
       const { getSqliteDatabase } = require("../db/sqlite") as typeof import("../db/sqlite");
       const { SqliteSkillStore } = require("../db/sqlite-stores") as typeof import("../db/sqlite-stores");
-      const db = getSqliteDatabase() as object;
+      const db = getSqliteDatabase();
       const store = new SqliteSkillStore(db) as {
         get(id: string): Promise<{ files: Array<{ path: string; content: string }> } | undefined>;
         toSkillDefinition(s: object): SkillDefinition;

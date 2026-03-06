@@ -15,7 +15,7 @@
  * - Task status management
  */
 
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { desktopAwareFetch } from "../utils/diagnostics";
 import type { NoteData } from "../hooks/use-notes";
 import { MarkdownViewer } from "./markdown/markdown-viewer";

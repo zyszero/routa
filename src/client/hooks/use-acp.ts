@@ -17,6 +17,7 @@ import {
   AcpProviderInfo,
   AcpClientError,
   AcpAuthMethod,
+  AcpSessionNotification,
 } from "../acp-client";
 import {
   getDesktopApiBaseUrl,
