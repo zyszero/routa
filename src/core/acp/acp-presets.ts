@@ -20,6 +20,7 @@ import {
   detectPlatformTarget,
 } from "./acp-registry";
 import { type DistributionType, buildAgentCommand } from "./acp-installer";
+import { AgentRole, ModelTier } from "../models/agent";
 
 /** Source of the preset configuration */
 export type PresetSource = "static" | "registry";
@@ -60,6 +61,12 @@ export interface AcpAgentPreset {
   repository?: string;
   /** License */
   license?: string;
+  /** Capabilities supported by this provider (e.g., "mcp_tool", "code_generation", "file_operations") */
+  capabilities?: string[];
+  /** Agent roles that this provider is suitable for (ROUTA, CRAFTER, GATE, DEVELOPER) */
+  supportedRoles?: AgentRole[];
+  /** Preferred model tier for this provider (SMART, BALANCED, FAST) */
+  preferredTier?: ModelTier;
 }
 
 /**
@@ -73,6 +80,9 @@ export const ACP_AGENT_PRESETS: readonly AcpAgentPreset[] = [
     args: ["acp"],
     description: "OpenCode AI coding agent",
     envBinOverride: "OPENCODE_BIN",
+    capabilities: ["mcp_tool", "code_generation", "file_operations", "web_search"],
+    supportedRoles: [AgentRole.CRAFTER, AgentRole.GATE, AgentRole.DEVELOPER],
+    preferredTier: ModelTier.BALANCED,
   },
   {
     id: "gemini",
@@ -81,6 +91,9 @@ export const ACP_AGENT_PRESETS: readonly AcpAgentPreset[] = [
     args: ["--experimental-acp"],
     description: "Google Gemini CLI",
     envBinOverride: "GEMINI_BIN",
+    capabilities: ["mcp_tool", "code_generation", "file_operations"],
+    supportedRoles: [AgentRole.CRAFTER, AgentRole.DEVELOPER],
+    preferredTier: ModelTier.BALANCED,
   },
   {
     id: "codex",
@@ -89,6 +102,9 @@ export const ACP_AGENT_PRESETS: readonly AcpAgentPreset[] = [
     args: [],
     description: "OpenAI Codex CLI (via codex-acp wrapper)",
     envBinOverride: "CODEX_ACP_BIN",
+    capabilities: ["code_generation", "file_operations"],
+    supportedRoles: [AgentRole.CRAFTER, AgentRole.DEVELOPER],
+    preferredTier: ModelTier.SMART,
   },
   {
     id: "copilot",
@@ -100,6 +116,9 @@ export const ACP_AGENT_PRESETS: readonly AcpAgentPreset[] = [
     args: ["--acp", "--allow-all-tools", "--no-ask-user"],
     description: "GitHub Copilot CLI",
     envBinOverride: "COPILOT_BIN",
+    capabilities: ["mcp_tool", "code_generation", "file_operations"],
+    supportedRoles: [AgentRole.CRAFTER, AgentRole.DEVELOPER],
+    preferredTier: ModelTier.BALANCED,
   },
   {
     id: "auggie",
@@ -108,6 +127,9 @@ export const ACP_AGENT_PRESETS: readonly AcpAgentPreset[] = [
     args: ["--acp"],
     description: "Augment Code's AI agent",
     envBinOverride: "AUGGIE_BIN",
+    capabilities: ["mcp_tool", "code_generation", "codebase_search", "file_operations"],
+    supportedRoles: [AgentRole.CRAFTER, AgentRole.GATE, AgentRole.DEVELOPER],
+    preferredTier: ModelTier.BALANCED,
   },
   {
     id: "kimi",
@@ -116,6 +138,9 @@ export const ACP_AGENT_PRESETS: readonly AcpAgentPreset[] = [
     args: ["acp"],
     description: "Moonshot AI's Kimi CLI",
     envBinOverride: "KIMI_BIN",
+    capabilities: ["mcp_tool", "code_generation", "file_operations", "web_search"],
+    supportedRoles: [AgentRole.CRAFTER, AgentRole.DEVELOPER],
+    preferredTier: ModelTier.BALANCED,
   },
   {
     id: "kiro",
@@ -124,6 +149,9 @@ export const ACP_AGENT_PRESETS: readonly AcpAgentPreset[] = [
     args: ["acp"],
     description: "Amazon Kiro AI coding agent",
     envBinOverride: "KIRO_BIN",
+    capabilities: ["mcp_tool", "code_generation", "file_operations"],
+    supportedRoles: [AgentRole.CRAFTER, AgentRole.DEVELOPER],
+    preferredTier: ModelTier.BALANCED,
   },
   {
     id: "qoder",
@@ -134,6 +162,9 @@ export const ACP_AGENT_PRESETS: readonly AcpAgentPreset[] = [
     args: ["--acp", "--yolo"],
     description: "Qoder AI coding agent",
     envBinOverride: "QODER_BIN",
+    capabilities: ["mcp_tool", "code_generation", "file_operations"],
+    supportedRoles: [AgentRole.CRAFTER, AgentRole.DEVELOPER],
+    preferredTier: ModelTier.BALANCED,
   },
   // Claude Code uses a non-standard API and requires separate handling
   {
@@ -143,6 +174,9 @@ export const ACP_AGENT_PRESETS: readonly AcpAgentPreset[] = [
     args: [],
     description: "Anthropic Claude Code (native ACP support)",
     nonStandardApi: true,
+    capabilities: ["mcp_tool", "code_generation", "file_operations", "web_search", "image_analysis"],
+    supportedRoles: [AgentRole.ROUTA, AgentRole.CRAFTER, AgentRole.GATE, AgentRole.DEVELOPER],
+    preferredTier: ModelTier.SMART,
   },
   // Workspace Agent runs natively via Vercel AI SDK (no external CLI)
   {
@@ -152,6 +186,9 @@ export const ACP_AGENT_PRESETS: readonly AcpAgentPreset[] = [
     args: [],
     description: "Native Routa workspace agent powered by Vercel AI SDK",
     nonStandardApi: true,
+    capabilities: ["code_generation", "file_operations"],
+    supportedRoles: [AgentRole.ROUTA, AgentRole.DEVELOPER],
+    preferredTier: ModelTier.BALANCED,
   },
 ] as const;
 
