@@ -1,7 +1,7 @@
 /**
  * Session DB Persister — persists ACP sessions to DB + local JSONL files.
  *
- * In local/desktop environments, sessions are also written to JSONL files
+ * In local Node.js environments, sessions are also written to JSONL files
  * under ~/.routa/projects/{folder-slug}/sessions/ for file-level persistence.
  *
  * Kept in core/acp/ so relative require paths to ../db/* are stable
@@ -187,8 +187,9 @@ export async function saveHistoryToDb(
   history: import("@/core/acp/http-session-store").SessionUpdateNotification[]
 ): Promise<void> {
   const driver = getDatabaseDriver();
+  const normalizedHistory = normalizeSessionHistory(history);
 
-  // 1. Save to DB
+  // 1. Save full history snapshot to DB
   if (driver !== "memory") {
     try {
       if (driver === "postgres") {
@@ -196,16 +197,14 @@ export async function saveHistoryToDb(
         const pgStore = new PgAcpSessionStore(db);
         const session = await pgStore.get(sessionId);
         if (!session) return;
-        const merged = mergeHistory(session.messageHistory ?? [], history);
-        await pgStore.save({ ...session, messageHistory: merged, updatedAt: new Date() });
+        await pgStore.save({ ...session, messageHistory: normalizedHistory, updatedAt: new Date() });
       } else {
         const { getSqliteDatabase } = require("../db/sqlite") as typeof import("../db/sqlite");
         const db = getSqliteDatabase();
         const sqliteStore = new SqliteAcpSessionStore(db);
         const session = await sqliteStore.get(sessionId);
         if (!session) return;
-        const merged = mergeHistory(session.messageHistory ?? [], history);
-        await sqliteStore.save({ ...session, messageHistory: merged, updatedAt: new Date() });
+        await sqliteStore.save({ ...session, messageHistory: normalizedHistory, updatedAt: new Date() });
       }
     } catch (err) {
       console.error(`[SessionDB] Failed to save history to ${driver}:`, err);
@@ -239,53 +238,12 @@ export async function saveHistoryToDb(
 
       if (cwd) {
         const local = new LocalSessionProvider(cwd);
-        for (const entry of history) {
-          const jsonlEntry: SessionJsonlEntry = {
-            uuid: (entry as Record<string, unknown>).uuid as string ?? sessionId,
-            type: (entry as Record<string, unknown>).type as string ?? "notification",
-            message: entry,
-            sessionId,
-            timestamp: new Date().toISOString(),
-          };
-          await local.appendMessage(sessionId, jsonlEntry);
-        }
+        await local.replaceHistory(sessionId, toJsonlHistoryEntries(sessionId, normalizedHistory));
       }
     } catch {
       // Non-fatal — JSONL write is best-effort
     }
   }
-}
-
-/**
- * Merge DB history with in-memory history to avoid losing older entries
- * that were trimmed by limitHistorySize.
- */
-function mergeHistory(
-  dbHistory: unknown[],
-  inMemoryHistory: import("@/core/acp/http-session-store").SessionUpdateNotification[]
-): import("@/core/acp/http-session-store").SessionUpdateNotification[] {
-  if (dbHistory.length === 0) return inMemoryHistory;
-  if (inMemoryHistory.length === 0) return dbHistory as import("@/core/acp/http-session-store").SessionUpdateNotification[];
-
-  const firstInMemory = JSON.stringify(inMemoryHistory[0]);
-  let overlapIndex = -1;
-  for (let i = dbHistory.length - 1; i >= 0; i--) {
-    if (JSON.stringify(dbHistory[i]) === firstInMemory) {
-      overlapIndex = i;
-      break;
-    }
-  }
-
-  if (overlapIndex >= 0) {
-    const prefix = dbHistory.slice(0, overlapIndex) as import("@/core/acp/http-session-store").SessionUpdateNotification[];
-    return [...prefix, ...inMemoryHistory];
-  }
-
-  if (dbHistory.length > inMemoryHistory.length) {
-    return [...(dbHistory as import("@/core/acp/http-session-store").SessionUpdateNotification[]), ...inMemoryHistory];
-  }
-
-  return inMemoryHistory;
 }
 
 export async function loadHistoryFromDb(
@@ -300,12 +258,16 @@ export async function loadHistoryFromDb(
   try {
     if (driver === "postgres") {
       const db = getPostgresDatabase();
-      dbHistory = (await new PgAcpSessionStore(db).getHistory(sessionId)) as import("@/core/acp/http-session-store").SessionUpdateNotification[];
+      dbHistory = normalizeSessionHistory(
+        (await new PgAcpSessionStore(db).getHistory(sessionId)) as import("@/core/acp/http-session-store").SessionUpdateNotification[]
+      );
     } else {
       const { getSqliteDatabase } = require("../db/sqlite") as typeof import("../db/sqlite");
       const db = getSqliteDatabase();
       const sqliteStore = new SqliteAcpSessionStore(db);
-      dbHistory = (await sqliteStore.getHistory(sessionId)) as import("@/core/acp/http-session-store").SessionUpdateNotification[];
+      dbHistory = normalizeSessionHistory(
+        (await sqliteStore.getHistory(sessionId)) as import("@/core/acp/http-session-store").SessionUpdateNotification[]
+      );
       // Also capture cwd from SQLite so we can try the JSONL fallback below
       if (!isServerless()) {
         const session = await sqliteStore.get(sessionId);
@@ -324,9 +286,9 @@ export async function loadHistoryFromDb(
       const local = new LocalSessionProvider(sessionCwd);
       const rawEntries = await local.getHistory(sessionId);
       // Each entry is a SessionJsonlEntry wrapper: { uuid, type, message, sessionId, timestamp }
-      const jsonlHistory = rawEntries
+      const jsonlHistory = normalizeSessionHistory(rawEntries
         .map((e) => (e as Record<string, unknown>).message)
-        .filter(Boolean) as import("@/core/acp/http-session-store").SessionUpdateNotification[];
+        .filter(Boolean) as import("@/core/acp/http-session-store").SessionUpdateNotification[]);
 
       if (jsonlHistory.length > dbHistory.length) {
         console.log(`[SessionDB] JSONL has more history (${jsonlHistory.length}) than DB (${dbHistory.length}) for session ${sessionId}, using JSONL`);
@@ -338,4 +300,54 @@ export async function loadHistoryFromDb(
   }
 
   return dbHistory;
+}
+
+function toJsonlHistoryEntries(
+  sessionId: string,
+  history: import("@/core/acp/http-session-store").SessionUpdateNotification[]
+): SessionJsonlEntry[] {
+  return history.map((entry, index) => {
+    const raw = entry as Record<string, unknown>;
+    return {
+      uuid: raw.uuid as string ?? `${sessionId}-${index}`,
+      type: raw.type as string ?? ((raw.update as Record<string, unknown> | undefined)?.sessionUpdate as string | undefined) ?? "notification",
+      message: entry,
+      sessionId,
+      timestamp: new Date().toISOString(),
+    };
+  });
+}
+
+export function normalizeSessionHistory<T>(history: T[]): T[] {
+  if (history.length < 2) return history;
+
+  const serialized = history.map((entry) => JSON.stringify(entry));
+
+  for (let blockSize = 1; blockSize <= Math.floor(history.length / 2); blockSize++) {
+    if (history.length % blockSize !== 0) continue;
+    const repeats = history.length / blockSize;
+    if (repeats < 2) continue;
+
+    let allBlocksMatch = true;
+    for (let i = blockSize; i < history.length; i++) {
+      if (serialized[i] !== serialized[i % blockSize]) {
+        allBlocksMatch = false;
+        break;
+      }
+    }
+
+    if (!allBlocksMatch) continue;
+
+    const block = history.slice(0, blockSize);
+    const hasConversationPayload = block.some((entry) => {
+      const text = JSON.stringify(entry);
+      return text.includes("user_message") || text.includes("agent_message") || text.includes("tool_call");
+    });
+
+    if (hasConversationPayload) {
+      return block;
+    }
+  }
+
+  return history;
 }

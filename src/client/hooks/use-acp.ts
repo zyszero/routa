@@ -21,6 +21,7 @@ import {
 import {
   getDesktopApiBaseUrl,
   logRuntime,
+  shouldSuppressTeardownError,
   toErrorMessage,
 } from "../utils/diagnostics";
 import { loadCustomAcpProviders, type CustomAcpProvider } from "../utils/custom-acp-providers";
@@ -177,6 +178,7 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
 
       // Background task 1: Check local provider status
       client.listProviders(true, false).then((checkedLocalProviders) => {
+        if (tearingDownRef.current) return;
         // Only update local providers (source === 'static'), keep existing registry providers
         // Re-merge custom providers (they are always "available")
         const customProvs = loadCustomAcpProviders().map(toAcpProviderInfo);
@@ -188,6 +190,9 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
           };
         });
       }).catch((err) => {
+        if (tearingDownRef.current || shouldSuppressTeardownError(err)) {
+          return;
+        }
         logRuntime("warn", "useAcp.connect", "Failed to check local provider status", err);
       });
 
@@ -195,6 +200,7 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
       // This runs in parallel and adds registry providers when ready
       // First, quickly load registry providers (without checking status)
       client.loadRegistryProviders().then((allProviders) => {
+        if (tearingDownRef.current) return;
         // loadRegistryProviders returns ALL providers (local + registry)
         // Filter to get only registry providers to avoid duplicates
         const registryProviders = allProviders.filter((p) => p.source === "registry");
@@ -211,6 +217,7 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
           // Background task 3: Check registry provider availability (slower)
           // This updates the status from "checking" to "available" or "unavailable"
           client.listProviders(true, true).then((checkedAllProviders) => {
+            if (tearingDownRef.current) return;
             const checkedRegistry = checkedAllProviders.filter((p) => p.source === "registry");
             if (checkedRegistry.length > 0) {
               setState((s) => {
@@ -222,14 +229,24 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
               });
             }
           }).catch((err) => {
+            if (tearingDownRef.current || shouldSuppressTeardownError(err)) {
+              return;
+            }
             logRuntime("info", "useAcp.connect", "Failed to check registry provider status", err);
           });
         }
       }).catch((err) => {
+        if (tearingDownRef.current || shouldSuppressTeardownError(err)) {
+          return;
+        }
         // Registry load failed (timeout or network error) - not critical
         logRuntime("info", "useAcp.connect", "Registry providers unavailable (network/timeout)", err);
       });
     } catch (err) {
+      if (tearingDownRef.current || shouldSuppressTeardownError(err)) {
+        setState((s) => ({ ...s, loading: false }));
+        return;
+      }
       logRuntime("error", "useAcp.connect", "Failed to connect ACP client", err);
       setState((s) => ({
         ...s,

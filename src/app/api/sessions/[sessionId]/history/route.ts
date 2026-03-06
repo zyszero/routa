@@ -12,7 +12,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getHttpSessionStore, consolidateMessageHistory } from "@/core/acp/http-session-store";
-import { loadHistoryFromDb } from "@/core/acp/session-db-persister";
+import { loadHistoryFromDb, normalizeSessionHistory } from "@/core/acp/session-db-persister";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +57,7 @@ export async function GET(
     history = inMemoryHistory;
   }
 
-  const result = consolidated ? consolidateMessageHistory(history) : history;
+  const result = normalizeSessionHistory(consolidated ? consolidateMessageHistory(history) : history);
 
   return NextResponse.json(
     { history: result },

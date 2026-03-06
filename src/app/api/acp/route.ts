@@ -64,6 +64,15 @@ function getSessionWriteBuffer(): SessionWriteBuffer {
   return _writeBuffer;
 }
 
+function persistSessionHistorySnapshot(
+  sessionId: string,
+  store: ReturnType<typeof getHttpSessionStore>
+): Promise<void> {
+  const buffer = getSessionWriteBuffer();
+  buffer.replace(sessionId, store.getConsolidatedHistory(sessionId));
+  return buffer.flush(sessionId);
+}
+
 // ─── Idempotency cache for session/new requests ─────────────────────────
 // Prevents duplicate session creation when user clicks multiple times
 // before navigation completes. Cache entries expire after 30 seconds.
@@ -844,16 +853,12 @@ export async function POST(request: NextRequest) {
               }
               store.flushAgentBuffer(sessionId);
               store.exitStreamingMode(sessionId);
-              const wb = getSessionWriteBuffer();
-              for (const n of store.getConsolidatedHistory(sessionId)) wb.add(sessionId, n);
-              await wb.flush(sessionId);
+              await persistSessionHistorySnapshot(sessionId, store);
               controller.close();
             } catch (err) {
               store.flushAgentBuffer(sessionId);
               store.exitStreamingMode(sessionId);
-              const wb = getSessionWriteBuffer();
-              for (const n of store.getConsolidatedHistory(sessionId)) wb.add(sessionId, n);
-              await wb.flush(sessionId);
+              await persistSessionHistorySnapshot(sessionId, store);
               const errorNotification = {
                 jsonrpc: "2.0",
                 method: "session/update",
@@ -918,16 +923,12 @@ export async function POST(request: NextRequest) {
               }
               store.flushAgentBuffer(sessionId);
               store.exitStreamingMode(sessionId);
-              const wb2 = getSessionWriteBuffer();
-              for (const n of store.getConsolidatedHistory(sessionId)) wb2.add(sessionId, n);
-              await wb2.flush(sessionId);
+              await persistSessionHistorySnapshot(sessionId, store);
               controller.close();
             } catch (err) {
               store.flushAgentBuffer(sessionId);
               store.exitStreamingMode(sessionId);
-              const wb2 = getSessionWriteBuffer();
-              for (const n of store.getConsolidatedHistory(sessionId)) wb2.add(sessionId, n);
-              await wb2.flush(sessionId);
+              await persistSessionHistorySnapshot(sessionId, store);
               // Send error event before closing
               const errorNotification = {
                 jsonrpc: "2.0",
@@ -1006,11 +1007,11 @@ export async function POST(request: NextRequest) {
           try {
             const result = await restarted.prompt(sessionId, promptText);
             store.flushAgentBuffer(sessionId);
-            { const wb = getSessionWriteBuffer(); for (const n of store.getConsolidatedHistory(sessionId)) wb.add(sessionId, n); void wb.flush(sessionId); }
+            void persistSessionHistorySnapshot(sessionId, store);
             return jsonrpcResponse(id ?? null, result);
           } catch (err) {
             store.flushAgentBuffer(sessionId);
-            { const wb = getSessionWriteBuffer(); for (const n of store.getConsolidatedHistory(sessionId)) wb.add(sessionId, n); void wb.flush(sessionId); }
+            void persistSessionHistorySnapshot(sessionId, store);
             return jsonrpcResponse(id ?? null, null, {
               code: -32000,
               message: err instanceof Error ? err.message : "Claude Code prompt failed after restart",
@@ -1021,11 +1022,11 @@ export async function POST(request: NextRequest) {
         try {
           const result = await claudeProc.prompt(sessionId, promptText);
           store.flushAgentBuffer(sessionId);
-          { const wb = getSessionWriteBuffer(); for (const n of store.getConsolidatedHistory(sessionId)) wb.add(sessionId, n); void wb.flush(sessionId); }
+          void persistSessionHistorySnapshot(sessionId, store);
           return jsonrpcResponse(id ?? null, result);
         } catch (err) {
           store.flushAgentBuffer(sessionId);
-          { const wb = getSessionWriteBuffer(); for (const n of store.getConsolidatedHistory(sessionId)) wb.add(sessionId, n); void wb.flush(sessionId); }
+          void persistSessionHistorySnapshot(sessionId, store);
           return jsonrpcResponse(id ?? null, null, {
             code: -32000,
             message: err instanceof Error ? err.message : "Claude Code prompt failed",
@@ -1055,11 +1056,11 @@ export async function POST(request: NextRequest) {
       try {
         const result = await proc.prompt(acpSessionId, promptText);
         store.flushAgentBuffer(sessionId);
-        { const wb = getSessionWriteBuffer(); for (const n of store.getConsolidatedHistory(sessionId)) wb.add(sessionId, n); void wb.flush(sessionId); }
+        void persistSessionHistorySnapshot(sessionId, store);
         return jsonrpcResponse(id ?? null, result);
       } catch (err) {
         store.flushAgentBuffer(sessionId);
-        { const wb = getSessionWriteBuffer(); for (const n of store.getConsolidatedHistory(sessionId)) wb.add(sessionId, n); void wb.flush(sessionId); }
+        void persistSessionHistorySnapshot(sessionId, store);
         return jsonrpcResponse(id ?? null, null, {
           code: -32000,
           message: err instanceof Error ? err.message : "Prompt failed",

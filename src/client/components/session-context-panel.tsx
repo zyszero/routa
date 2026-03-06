@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { desktopAwareFetch } from "../utils/diagnostics";
+import { desktopAwareFetch, shouldSuppressTeardownError } from "../utils/diagnostics";
 
 interface SessionInfo {
   sessionId: string;
@@ -41,6 +41,14 @@ export function SessionContextPanel({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const tearingDownRef = useRef(false);
+
+  useEffect(() => {
+    tearingDownRef.current = false;
+    return () => {
+      tearingDownRef.current = true;
+    };
+  }, []);
 
   const fetchContext = useCallback(async () => {
     try {
@@ -51,16 +59,22 @@ export function SessionContextPanel({
       );
 
       if (!res.ok) {
+        if (tearingDownRef.current) return;
         setContext(null);
         return;
       }
 
       const data = await res.json();
+      if (tearingDownRef.current) return;
       setContext(data);
     } catch (e) {
+      if (tearingDownRef.current || shouldSuppressTeardownError(e)) {
+        return;
+      }
       console.error("Failed to fetch session context", e);
       setContext(null);
     } finally {
+      if (tearingDownRef.current) return;
       setLoading(false);
     }
   }, [sessionId]);

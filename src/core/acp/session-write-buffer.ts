@@ -60,6 +60,17 @@ export class SessionWriteBuffer {
   }
 
   /**
+   * Replace the buffered content for a session with a full history snapshot.
+   * This is used at turn boundaries where the caller already has the complete,
+   * consolidated history and wants the persistence layer to overwrite the
+   * previous snapshot rather than append duplicate entries.
+   */
+  replace(sessionId: string, history: SessionUpdateNotification[]): void {
+    this.buffers.set(sessionId, [...history]);
+    this.resetTimer(sessionId);
+  }
+
+  /**
    * Flush all buffered notifications for a session to the database.
    * Consolidates message chunks before writing.
    * Safe to call multiple times — concurrent flushes are serialized.

@@ -15,6 +15,7 @@ import {
   desktopAwareFetch,
   getDesktopApiBaseUrl,
   logRuntime,
+  shouldSuppressTeardownError,
   toErrorMessage,
 } from "../utils/diagnostics";
 
@@ -91,10 +92,12 @@ export function useNotes(workspaceId: string, sessionId?: string): UseNotesRetur
   const [connected, setConnected] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tearingDownRef = useRef(false);
 
   // ─── Fetch Notes ──────────────────────────────────────────────────
 
   const fetchNotes = useCallback(async () => {
+    tearingDownRef.current = false;
     setLoading(true);
     setError(null);
     try {
@@ -105,11 +108,16 @@ export function useNotes(workspaceId: string, sessionId?: string): UseNotesRetur
       const res = await desktopAwareFetch(url);
       if (!res.ok) throw new Error(`Failed to fetch notes: ${res.status}`);
       const data = await res.json();
+      if (tearingDownRef.current) return;
       setNotes(data.notes ?? []);
     } catch (err) {
+      if (tearingDownRef.current || shouldSuppressTeardownError(err)) {
+        return;
+      }
       logRuntime("warn", "useNotes.fetchNotes", "Failed to fetch notes", err);
       setError(toErrorMessage(err) || "Failed to fetch notes");
     } finally {
+      if (tearingDownRef.current) return;
       setLoading(false);
     }
   }, [workspaceId, sessionId]);
@@ -237,6 +245,7 @@ export function useNotes(workspaceId: string, sessionId?: string): UseNotesRetur
     eventSourceRef.current = es;
 
     es.onopen = () => {
+      if (tearingDownRef.current) return;
       setConnected(true);
       setError(null);
     };
@@ -291,6 +300,11 @@ export function useNotes(workspaceId: string, sessionId?: string): UseNotesRetur
     };
 
     es.onerror = () => {
+      if (tearingDownRef.current || document.visibilityState === "hidden") {
+        es.close();
+        eventSourceRef.current = null;
+        return;
+      }
       logRuntime("warn", "useNotes.connectSSE", "SSE connection error");
       setConnected(false);
       es.close();
@@ -313,10 +327,13 @@ export function useNotes(workspaceId: string, sessionId?: string): UseNotesRetur
     // Skip if workspaceId is a placeholder (static export mode)
     if (workspaceId === "__placeholder__") return;
 
+    tearingDownRef.current = false;
+
     fetchNotes();
     connectSSE();
 
     return () => {
+      tearingDownRef.current = true;
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;

@@ -405,7 +405,7 @@ export async function POST(request: NextRequest) {
         store.removeNotificationInterceptor(sessionId!, interceptor);
 
         // Save history
-        { const wb = getAgUiWriteBuffer(); for (const n of store.getConsolidatedHistory(sessionId!)) wb.add(sessionId!, n); await wb.flush(sessionId!); }
+        { const wb = getAgUiWriteBuffer(); wb.replace(sessionId!, store.getConsolidatedHistory(sessionId!)); await wb.flush(sessionId!); }
 
         try {
           controller.close();
