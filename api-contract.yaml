@@ -1992,6 +1992,140 @@ paths:
         "200":
           description: Warmup triggered
 
+  # ── Docker ACP ──
+  /api/acp/docker/status:
+    get:
+      operationId: getDockerStatus
+      summary: Get Docker daemon status
+      description: Check if Docker is available and running
+      responses:
+        "200":
+          description: Docker status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  available:
+                    type: boolean
+                  daemonRunning:
+                    type: boolean
+                  version:
+                    type: string
+                  apiVersion:
+                    type: string
+                  checkedAt:
+                    type: string
+                    format: date-time
+                  error:
+                    type: string
+
+  /api/acp/docker/pull:
+    post:
+      operationId: pullDockerImage
+      summary: Pull a Docker image
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                image:
+                  type: string
+                  description: Image name to pull (e.g., routa/opencode-agent:latest)
+      responses:
+        "200":
+          description: Pull result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  image:
+                    type: string
+                  output:
+                    type: string
+                  error:
+                    type: string
+
+  /api/acp/docker/containers:
+    get:
+      operationId: listDockerContainers
+      summary: List Docker containers for OpenCode agents
+      responses:
+        "200":
+          description: Container list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  containers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        containerId:
+                          type: string
+                        sessionId:
+                          type: string
+                        port:
+                          type: integer
+                        status:
+                          type: string
+
+  /api/acp/docker/container/start:
+    post:
+      operationId: startDockerContainer
+      summary: Start a Docker container for OpenCode agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sessionId:
+                  type: string
+                image:
+                  type: string
+                workdir:
+                  type: string
+                authJson:
+                  type: string
+      responses:
+        "200":
+          description: Container started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  containerId:
+                    type: string
+                  port:
+                    type: integer
+
+  /api/acp/docker/container/stop:
+    post:
+      operationId: stopDockerContainer
+      summary: Stop a Docker container
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                containerId:
+                  type: string
+      responses:
+        "200":
+          description: Container stopped
+
   # ── Files ──
   /api/files/search:
     get:
