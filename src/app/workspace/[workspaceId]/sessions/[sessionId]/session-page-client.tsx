@@ -24,7 +24,7 @@ import {AppHeader} from "@/client/components/app-header";
 import {CodebasePicker} from "@/client/components/codebase-picker";
 import {useWorkspaces, useCodebases} from "@/client/hooks/use-workspaces";
 import {useAcp} from "@/client/hooks/use-acp";
-import {useNotes} from "@/client/hooks/use-notes";
+import {type NoteData, useNotes} from "@/client/hooks/use-notes";
 import {BrowserAcpClient} from "@/client/acp-client";
 import type {RepoSelection} from "@/client/components/repo-picker";
 import type {ParsedTask} from "@/client/utils/task-block-parser";
@@ -1357,18 +1357,23 @@ export function SessionPageClient() {
     }
   }, [bumpRefresh, crafterAgents]);
 
+  const findCrafterForNote = useCallback((note: NoteData) => {
+    const childSessionId = note.metadata.childSessionId;
+    const assignedAgentIds = note.metadata.assignedAgentIds ?? [];
+    return crafterAgents.find((agent) =>
+      agent.taskId === note.id ||
+      (childSessionId ? agent.sessionId === childSessionId : false) ||
+      agent.taskTitle === note.title ||
+      assignedAgentIds.includes(agent.id)
+    ) ?? null;
+  }, [crafterAgents]);
+
   const handleSelectNoteTask = useCallback((noteId: string) => {
     const note = notesHook.notes.find((item) => item.id === noteId);
     if (!note) return;
 
     const childSessionId = note.metadata.childSessionId;
-    const assignedAgentIds = note.metadata.assignedAgentIds ?? [];
-    const matchedAgent = crafterAgents.find((agent) =>
-      agent.taskId === noteId ||
-      (childSessionId ? agent.sessionId === childSessionId : false) ||
-      agent.taskTitle === note.title ||
-      assignedAgentIds.includes(agent.id)
-    );
+    const matchedAgent = findCrafterForNote(note);
 
     if (matchedAgent) {
       setActiveCrafterId(matchedAgent.id);
@@ -1383,7 +1388,7 @@ export function SessionPageClient() {
       setFocusedSessionId(childSessionId);
       bumpRefresh();
     }
-  }, [bumpRefresh, crafterAgents, notesHook.notes]);
+  }, [bumpRefresh, findCrafterForNote, notesHook.notes]);
 
   const handleConcurrencyChange = useCallback((n: number) => {
     setConcurrency(n);
@@ -1422,7 +1427,7 @@ export function SessionPageClient() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [crafterAgents]);
 
-  // ── Sync CRAFTER completion status to collaborative notes ────────────
+  // ── Sync CRAFTER state to collaborative notes ────────────────────────
   const syncedCrafterStatusRef = useRef<Map<string, string>>(new Map());
   useEffect(() => {
     for (const agent of crafterAgents) {
@@ -1431,22 +1436,78 @@ export function SessionPageClient() {
       if (prevStatus === syncKey) continue;
       syncedCrafterStatusRef.current.set(agent.id, syncKey);
 
-      // Only sync terminal statuses (completed/error) to notes
-      if (agent.status !== "completed" && agent.status !== "error") continue;
       if (!agent.taskId) continue;
 
-      // Check if the taskId corresponds to a collaborative note
       const note = notesHook.notes.find((n) => n.id === agent.taskId);
       if (!note) continue;
 
-      const newTaskStatus = agent.status === "completed" ? "COMPLETED" : "FAILED";
-      if (note.metadata.taskStatus !== newTaskStatus) {
+      const nextTaskStatus = agent.status === "completed"
+        ? "COMPLETED"
+        : agent.status === "error"
+          ? "FAILED"
+          : agent.status === "running"
+            ? "IN_PROGRESS"
+            : note.metadata.taskStatus;
+
+      const assignedAgentIds = note.metadata.assignedAgentIds ?? [];
+      const shouldSyncAgentId = assignedAgentIds.length !== 1 || assignedAgentIds[0] !== agent.id;
+      const shouldSyncChildSessionId = Boolean(agent.sessionId) && note.metadata.childSessionId !== agent.sessionId;
+      const shouldSyncTaskStatus = Boolean(nextTaskStatus) && note.metadata.taskStatus !== nextTaskStatus;
+
+      if (shouldSyncAgentId || shouldSyncChildSessionId || shouldSyncTaskStatus) {
         notesHook.updateNote(agent.taskId, {
-          metadata: { ...note.metadata, taskStatus: newTaskStatus },
+          metadata: {
+            ...note.metadata,
+            ...(nextTaskStatus ? { taskStatus: nextTaskStatus } : {}),
+            assignedAgentIds: [agent.id],
+            ...(agent.sessionId ? { childSessionId: agent.sessionId } : {}),
+          },
         });
       }
     }
   }, [crafterAgents, notesHook]);
+
+  useEffect(() => {
+    const staleTasks = notesHook.notes.filter((note) => {
+      if (note.metadata.type !== "task" || note.metadata.taskStatus !== "IN_PROGRESS") {
+        return false;
+      }
+
+      const updatedAtMs = Date.parse(note.updatedAt);
+      if (Number.isFinite(updatedAtMs) && Date.now() - updatedAtMs < 10_000) {
+        return false;
+      }
+
+      const matchedAgent = findCrafterForNote(note);
+      if (!matchedAgent) {
+        return true;
+      }
+
+      return matchedAgent.status !== "running";
+    });
+
+    if (!staleTasks.length) return;
+
+    void Promise.allSettled(staleTasks.map((note) => {
+      const matchedAgent = findCrafterForNote(note);
+      const nextStatus = matchedAgent?.status === "completed"
+        ? "COMPLETED"
+        : matchedAgent?.status === "error"
+          ? "FAILED"
+          : "PENDING";
+
+      if (note.metadata.taskStatus === nextStatus) {
+        return Promise.resolve(null);
+      }
+
+      return notesHook.updateNote(note.id, {
+        metadata: {
+          ...note.metadata,
+          taskStatus: nextStatus,
+        },
+      });
+    }));
+  }, [findCrafterForNote, notesHook]);
 
   /**
    * Execute a single collaborative task note by creating it in the MCP task store
@@ -1885,6 +1946,19 @@ export function SessionPageClient() {
     await handleExecuteSelectedNoteTasks(pendingNoteIds, requestedConcurrency);
   }, [handleExecuteSelectedNoteTasks, notesHook.notes]);
 
+  const handleOpenOrExecuteNoteTask = useCallback(async (noteId: string): Promise<CrafterAgent | null> => {
+    const note = notesHook.notes.find((item) => item.id === noteId);
+    if (!note) return null;
+
+    const matchedAgent = findCrafterForNote(note);
+    if (matchedAgent || note.metadata.childSessionId) {
+      handleSelectNoteTask(noteId);
+      return matchedAgent;
+    }
+
+    return handleExecuteProviderNoteTask(noteId);
+  }, [findCrafterForNote, handleExecuteProviderNoteTask, handleSelectNoteTask, notesHook.notes]);
+
   // Keep refs up to date so the queue-advance effect always calls the latest version
   const handleExecuteProviderNoteTaskRef = useRef<((noteId: string) => Promise<CrafterAgent | null>) | null>(null);
   useEffect(() => { handleExecuteNoteTaskRef.current = handleExecuteQuickAccessNoteTask; }, [handleExecuteQuickAccessNoteTask]);
@@ -2049,7 +2123,7 @@ export function SessionPageClient() {
           onUpdateNote={notesHook.updateNote}
           onDeleteNote={notesHook.deleteNote}
           onExecuteNoteTask={handleExecuteProviderNoteTask}
-          onExecuteQuickAccessNoteTask={handleExecuteQuickAccessNoteTask}
+          onExecuteQuickAccessNoteTask={handleOpenOrExecuteNoteTask}
           onExecuteAllNoteTasks={handleExecuteAllNoteTasks}
           onExecuteSelectedNoteTasks={handleExecuteSelectedNoteTasks}
           crafterAgents={crafterAgents}

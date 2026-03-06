@@ -374,6 +374,9 @@ function MiniTaskList({
           id: n.id,
           title: n.title,
           status: (n.metadata.taskStatus as string) || "PENDING",
+          actionLabel: ["COMPLETED", "IN_PROGRESS"].includes((n.metadata.taskStatus as string) || "PENDING")
+            ? "Open"
+            : "Run",
           run: () => onExecuteNoteTask(n.id),
         }));
     }
@@ -381,6 +384,7 @@ function MiniTaskList({
       id: t.id,
       title: t.title,
       status: t.status,
+      actionLabel: ["completed", "running"].includes(t.status) ? "Open" : "Run",
       run: () => onExecuteTask(t.id),
     }));
   }, [hasCollabNotes, onExecuteNoteTask, onExecuteTask, routaTasks, sessionNotes]);
@@ -446,12 +450,12 @@ function MiniTaskList({
                 }
               }}
               className="shrink-0 inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-wait disabled:opacity-60 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/30"
-              title={`Run ${item.title}`}
+              title={`${item.actionLabel ?? "Run"} ${item.title}`}
             >
               <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-5.197-3.03A1 1 0 008 9v6a1 1 0 001.555.832l5.197-3.03a1 1 0 000-1.664z" />
               </svg>
-              {executingId === item.id ? "Running" : "Run"}
+              {executingId === item.id ? "Running" : (item.actionLabel ?? "Run")}
             </button>
           </div>
         ))}
