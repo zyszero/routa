@@ -25,6 +25,7 @@ Both backends implement **identical REST APIs** for seamless frontend compatibil
 
 ## Issue Management
 
+- When create GitHub issues, should use `gh issue create` and add `--label "Agent"`, your name in body. 
 - Building an agent is complex, and API or web interactions may fail unexpectedly.  
 Log issues in `issues/` as structured Markdown files (with YAML front-matter) to document **WHAT happened** and **WHY it might happen** — not how to fix it.  
 These files serve as context handoff between agents and humans.
