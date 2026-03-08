@@ -8,7 +8,7 @@
  * Usage:
  *   npx tsx scripts/issue-enricher.ts --issue 123
  *   npx tsx scripts/issue-enricher.ts --issue 123 --dry-run
- *   npx tsx scripts/issue-enricher.ts --issue 123 --assign-copilot
+ *   npx tsx scripts/issue-enricher.ts --issue 123 --mention-copilot
  *   npx tsx scripts/issue-enricher.ts --issue 123 --reopen
  *
  * Environment:
@@ -162,22 +162,27 @@ function reopenIssue(issueNumber: number): boolean {
   }
 }
 
-// ─── Assign Copilot ────────────────────────────────────────────────────────
+// ─── Mention Copilot via Comment ───────────────────────────────────────────
 
-function assignCopilot(issueNumber: number): boolean {
+function mentionCopilot(issueNumber: number): boolean {
   try {
-    console.log(`\n🤖 Assigning Copilot to issue #${issueNumber}...`);
-    execSync(`gh issue edit ${issueNumber} --add-assignee "@copilot"`, {
+    console.log(`\n🤖 Mentioning @copilot on issue #${issueNumber}...`);
+    const comment = `@copilot Please implement this feature based on the issue description and the analysis above.`;
+    execSync(`gh issue comment ${issueNumber} --body "${comment}"`, {
       encoding: "utf-8",
       cwd: process.cwd(),
     });
-    console.log(`   ✅ Copilot assigned to issue #${issueNumber}`);
+    console.log(`   ✅ @copilot mentioned on issue #${issueNumber}`);
     return true;
   } catch (error) {
-    console.error("❌ Failed to assign Copilot:", error instanceof Error ? error.message : error);
+    console.error("❌ Failed to mention Copilot:", error instanceof Error ? error.message : error);
     return false;
   }
 }
+
+// ─── Configuration ─────────────────────────────────────────────────────────
+
+const ALLOWED_AUTHORS = ["phodal"];
 
 // ─── Main ──────────────────────────────────────────────────────────────────
 
@@ -185,12 +190,12 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
   const shouldReopen = args.includes("--reopen");
-  const shouldAssignCopilot = args.includes("--assign-copilot");
+  const shouldMentionCopilot = args.includes("--mention-copilot");
 
   // Parse --issue argument
   const issueIndex = args.indexOf("--issue");
   if (issueIndex === -1 || !args[issueIndex + 1]) {
-    console.error("Usage: npx tsx scripts/issue-enricher.ts --issue <number> [--dry-run] [--reopen] [--assign-copilot]");
+    console.error("Usage: npx tsx scripts/issue-enricher.ts --issue <number> [--dry-run] [--reopen] [--mention-copilot]");
     process.exit(1);
   }
   const issueNumber = parseInt(args[issueIndex + 1], 10);
@@ -214,13 +219,19 @@ async function main(): Promise<void> {
   console.log(`   Author: ${issue.author}`);
   console.log(`   Labels: ${issue.labels.length > 0 ? issue.labels.join(", ") : "(none)"}`);
 
+  // Check if author is allowed for Copilot mention
+  const isAllowedAuthor = ALLOWED_AUTHORS.includes(issue.author);
+  if (shouldMentionCopilot && !isAllowedAuthor) {
+    console.log(`\n   ⚠️ Skipping @copilot mention: author "${issue.author}" is not in allowed list`);
+  }
+
   await analyzeIssue(issue, dryRun);
 
-  // Assign Copilot if requested (after analysis)
-  if (shouldAssignCopilot && !dryRun) {
-    assignCopilot(issueNumber);
-  } else if (shouldAssignCopilot && dryRun) {
-    console.log(`\n   [DRY RUN] Would assign Copilot to issue #${issueNumber}`);
+  // Mention Copilot if requested and author is allowed (after analysis)
+  if (shouldMentionCopilot && isAllowedAuthor && !dryRun) {
+    mentionCopilot(issueNumber);
+  } else if (shouldMentionCopilot && isAllowedAuthor && dryRun) {
+    console.log(`\n   [DRY RUN] Would mention @copilot on issue #${issueNumber}`);
   }
 }
 
