@@ -16,6 +16,15 @@ on:
         required: false
         default: false
         type: boolean
+      assign_copilot:
+        description: 'Assign Copilot to the issue after analysis'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  issues: write
+  contents: read
 
 jobs:
   enrich-issue:
@@ -31,7 +40,7 @@ jobs:
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
       ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
-      GH_TOKEN: ${{ secrets.ROUTA_GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout repository
@@ -54,9 +63,11 @@ jobs:
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "number=${{ github.event.inputs.issue_number }}" >> $GITHUB_OUTPUT
             echo "dry_run=${{ github.event.inputs.dry_run }}" >> $GITHUB_OUTPUT
+            echo "assign_copilot=${{ github.event.inputs.assign_copilot }}" >> $GITHUB_OUTPUT
           else
             echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
             echo "dry_run=false" >> $GITHUB_OUTPUT
+            echo "assign_copilot=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Analyze Issue
@@ -64,18 +75,24 @@ jobs:
         run: |
           ISSUE_NUMBER="${{ steps.issue.outputs.number }}"
           DRY_RUN="${{ steps.issue.outputs.dry_run }}"
+          ASSIGN_COPILOT="${{ steps.issue.outputs.assign_copilot }}"
 
           echo "## 🤖 Issue Enricher" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Analyzing issue #${ISSUE_NUMBER}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Run the issue enricher script
+          # Build command arguments
+          ARGS="--issue $ISSUE_NUMBER"
           if [ "$DRY_RUN" == "true" ]; then
-            npx tsx scripts/issue-enricher.ts --issue "$ISSUE_NUMBER" --dry-run 2>&1 | tee /tmp/enricher-output.txt
-          else
-            npx tsx scripts/issue-enricher.ts --issue "$ISSUE_NUMBER" 2>&1 | tee /tmp/enricher-output.txt
+            ARGS="$ARGS --dry-run"
           fi
+          if [ "$ASSIGN_COPILOT" == "true" ]; then
+            ARGS="$ARGS --assign-copilot"
+          fi
+
+          # Run the issue enricher script
+          npx tsx scripts/issue-enricher.ts $ARGS 2>&1 | tee /tmp/enricher-output.txt
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Analysis Output" >> $GITHUB_STEP_SUMMARY

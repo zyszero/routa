@@ -8,6 +8,8 @@
  * Usage:
  *   npx tsx scripts/issue-enricher.ts --issue 123
  *   npx tsx scripts/issue-enricher.ts --issue 123 --dry-run
+ *   npx tsx scripts/issue-enricher.ts --issue 123 --assign-copilot
+ *   npx tsx scripts/issue-enricher.ts --issue 123 --reopen
  *
  * Environment:
  *   ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN   # Required
@@ -146,16 +148,49 @@ Do NOT create a new issue - only analyze and comment on issue #${issue.number}.`
   }
 }
 
+// ─── Reopen Issue ──────────────────────────────────────────────────────────
+
+function reopenIssue(issueNumber: number): boolean {
+  try {
+    console.log(`\n🔄 Reopening issue #${issueNumber}...`);
+    execSync(`gh issue reopen ${issueNumber}`, { encoding: "utf-8", cwd: process.cwd() });
+    console.log(`   ✅ Issue #${issueNumber} reopened`);
+    return true;
+  } catch (error) {
+    console.error("❌ Failed to reopen issue:", error instanceof Error ? error.message : error);
+    return false;
+  }
+}
+
+// ─── Assign Copilot ────────────────────────────────────────────────────────
+
+function assignCopilot(issueNumber: number): boolean {
+  try {
+    console.log(`\n🤖 Assigning Copilot to issue #${issueNumber}...`);
+    execSync(`gh issue edit ${issueNumber} --add-assignee "@copilot"`, {
+      encoding: "utf-8",
+      cwd: process.cwd(),
+    });
+    console.log(`   ✅ Copilot assigned to issue #${issueNumber}`);
+    return true;
+  } catch (error) {
+    console.error("❌ Failed to assign Copilot:", error instanceof Error ? error.message : error);
+    return false;
+  }
+}
+
 // ─── Main ──────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
+  const shouldReopen = args.includes("--reopen");
+  const shouldAssignCopilot = args.includes("--assign-copilot");
 
   // Parse --issue argument
   const issueIndex = args.indexOf("--issue");
   if (issueIndex === -1 || !args[issueIndex + 1]) {
-    console.error("Usage: npx tsx scripts/issue-enricher.ts --issue <number> [--dry-run]");
+    console.error("Usage: npx tsx scripts/issue-enricher.ts --issue <number> [--dry-run] [--reopen] [--assign-copilot]");
     process.exit(1);
   }
   const issueNumber = parseInt(args[issueIndex + 1], 10);
@@ -163,6 +198,11 @@ async function main(): Promise<void> {
   console.log("═".repeat(80));
   console.log("🔍 Issue Enricher");
   console.log("═".repeat(80));
+
+  // Reopen issue if requested
+  if (shouldReopen) {
+    reopenIssue(issueNumber);
+  }
 
   const issue = fetchIssue(issueNumber);
   if (!issue) {
@@ -175,6 +215,13 @@ async function main(): Promise<void> {
   console.log(`   Labels: ${issue.labels.length > 0 ? issue.labels.join(", ") : "(none)"}`);
 
   await analyzeIssue(issue, dryRun);
+
+  // Assign Copilot if requested (after analysis)
+  if (shouldAssignCopilot && !dryRun) {
+    assignCopilot(issueNumber);
+  } else if (shouldAssignCopilot && dryRun) {
+    console.log(`\n   [DRY RUN] Would assign Copilot to issue #${issueNumber}`);
+  }
 }
 
 main().catch((error) => {
