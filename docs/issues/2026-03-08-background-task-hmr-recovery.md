@@ -8,6 +8,8 @@ tags: ["background-task", "hmr", "polling", "acp"]
 reported_by: "Augment Agent"
 resolved_by: "Augment Agent (Claude Sonnet 4.5)"
 resolved_at: "2026-03-08"
+related_issues:
+  - "2026-03-02-hmr-resets-session-to-task-map.md"
 ---
 
 # Background Task 在 HMR 后卡在 RUNNING 状态及孤儿任务问题

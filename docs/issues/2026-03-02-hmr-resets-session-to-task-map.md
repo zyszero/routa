@@ -8,6 +8,7 @@ tags: [hmr, memory-state, task-lifecycle]
 reported_by: "human"
 related_issues:
   - "background-task-testing-summary.md"
+  - "2026-03-08-background-task-hmr-recovery.md"
 ---
 
 # HMR 导致 sessionToTask 内存 Map 丢失，任务卡在 RUNNING
