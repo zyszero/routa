@@ -17,6 +17,12 @@ export interface KanbanColumnAutomation {
   specialistId?: string;
   /** Specialist name (for display) */
   specialistName?: string;
+  /** When to trigger: on entry, exit, or both (default: entry) */
+  transitionType?: "entry" | "exit" | "both";
+  /** Artifacts required before transition is allowed */
+  requiredArtifacts?: ("screenshot" | "test_results" | "code_diff")[];
+  /** Automatically advance card to next column on agent success */
+  autoAdvanceOnSuccess?: boolean;
 }
 
 export interface KanbanColumn {

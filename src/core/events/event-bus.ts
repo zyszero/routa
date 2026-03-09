@@ -20,6 +20,8 @@ export enum AgentEventType {
   MESSAGE_SENT = "MESSAGE_SENT",
   REPORT_SUBMITTED = "REPORT_SUBMITTED",
   WORKSPACE_UPDATED = "WORKSPACE_UPDATED",
+  /** Emitted when a Kanban card moves between columns */
+  COLUMN_TRANSITION = "COLUMN_TRANSITION",
 }
 
 export interface AgentEvent {
