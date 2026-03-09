@@ -9,6 +9,7 @@ use routa_core::state::AppState;
 use routa_core::workflow::specialist::SpecialistLoader;
 
 use super::print_json;
+use super::tui::TuiRenderer;
 
 pub async fn list(state: &AppState, workspace_id: &str) -> Result<(), String> {
     let router = RpcRouter::new(state.clone());
@@ -205,6 +206,7 @@ pub async fn run(
         .await
         .map_err(|e| format!("Failed to send prompt: {}", e))?;
 
+    let mut renderer = TuiRenderer::new();
     let mut idle_count = 0u32;
     let max_idle = 600;
 
@@ -212,23 +214,23 @@ pub async fn run(
         match tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv()).await {
             Ok(Ok(update)) => {
                 idle_count = 0;
-                super::prompt::handle_session_update(&update);
+                renderer.handle_update(&update);
             }
             Ok(Err(_)) => {
-                println!();
+                renderer.finish();
                 println!("═══ Specialist session ended ═══");
                 break;
             }
             Err(_) => {
                 idle_count += 1;
                 if idle_count >= max_idle {
-                    println!();
+                    renderer.finish();
                     println!("⏰ Timeout: no activity for {} seconds", max_idle);
                     break;
                 }
 
                 if !state.acp_manager.is_alive(&session_id).await {
-                    println!();
+                    renderer.finish();
                     println!("═══ Specialist process exited ═══");
                     break;
                 }
