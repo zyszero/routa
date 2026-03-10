@@ -106,6 +106,17 @@ export default function HomePage() {
         <div className="flex-1" />
 
         <nav className="flex items-center gap-0.5">
+          {/* Kanban link - quick access to current workspace board */}
+          {activeWorkspaceId && (
+            <a
+              href={`/workspace/${activeWorkspaceId}/kanban`}
+              className="px-2.5 py-1 rounded-md text-[11px] font-medium text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#151720] transition-colors"
+              title="Open Kanban Board"
+            >
+              Kanban
+            </a>
+          )}
+
           {/* Integrations dropdown — merges MCP + A2A */}
           <div className="relative" ref={integrationsRef}>
             <button
@@ -287,11 +298,16 @@ function HomeTodoPreview({
   }
 
   return (
-    <div className="mt-5 rounded-2xl border border-gray-100 bg-white/90 p-4 dark:border-[#1c1f2e] dark:bg-[#12141c]">
-      <div className="mb-3 flex items-center justify-between gap-3">
+    <div className="mt-5 rounded-2xl border border-gray-100 bg-white/90 p-5 dark:border-[#1c1f2e] dark:bg-[#12141c] shadow-sm">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">
-            Current Todos
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
+            </svg>
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">
+              Current Todos
+            </div>
           </div>
           <div className="mt-1 text-sm text-gray-600 dark:text-gray-300">
             A quick slice of the active board.
@@ -299,27 +315,35 @@ function HomeTodoPreview({
         </div>
         <a
           href={`/workspace/${workspaceId}/kanban`}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-[#191c28]"
+          className="flex items-center gap-1.5 rounded-lg bg-blue-500 hover:bg-blue-600 px-4 py-2 text-xs font-medium text-white transition-colors shadow-sm hover:shadow"
         >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
+          </svg>
           Open Kanban
         </a>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         {tasks.map((task) => (
           <a
             key={task.id}
             href={`/workspace/${workspaceId}/kanban`}
-            className="rounded-xl border border-gray-100 bg-[#fcfcfc] px-3 py-3 transition-colors hover:border-amber-200 hover:bg-amber-50/60 dark:border-[#1c1f2e] dark:bg-[#0f1118] dark:hover:border-amber-800/40 dark:hover:bg-amber-900/5"
+            className="group rounded-xl border border-gray-100 bg-[#fcfcfc] px-3.5 py-3 transition-all hover:border-blue-200 hover:bg-blue-50/60 hover:shadow-sm dark:border-[#1c1f2e] dark:bg-[#0f1118] dark:hover:border-blue-800/40 dark:hover:bg-blue-900/5"
           >
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium text-gray-800 dark:text-gray-100">{task.title}</div>
-                <div className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
-                  {(task.columnId ?? "backlog").toUpperCase()} · {task.assignedProvider ?? "unassigned"}
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-gray-800 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{task.title}</div>
+                <div className="mt-1.5 flex items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600" />
+                    {(task.columnId ?? "backlog").toUpperCase()}
+                  </span>
+                  <span>·</span>
+                  <span>{task.assignedProvider ?? "unassigned"}</span>
                 </div>
               </div>
-              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-600 dark:bg-[#1c1f2e] dark:text-gray-300">
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-600 dark:bg-[#1c1f2e] dark:text-gray-300 shrink-0">
                 {task.priority ?? "medium"}
               </span>
             </div>
@@ -546,16 +570,28 @@ function WorkspaceCards({
                     {ws.title}
                   </span>
                 </div>
-                <a
-                  href={`/workspace/${ws.id}`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                  title="Open workspace"
-                >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                  </svg>
-                </a>
+                <div className="flex items-center gap-1 shrink-0">
+                  <a
+                    href={`/workspace/${ws.id}/kanban`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-blue-400 hover:text-blue-600 dark:text-blue-500 dark:hover:text-blue-400"
+                    title="Open Kanban board"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
+                    </svg>
+                  </a>
+                  <a
+                    href={`/workspace/${ws.id}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    title="Open workspace"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                    </svg>
+                  </a>
+                </div>
               </div>
 
               {/* Recent sessions */}
