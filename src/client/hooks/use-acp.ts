@@ -102,6 +102,8 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
   const clientRef = useRef<BrowserAcpClient | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const tearingDownRef = useRef(false);
+  // Track if user manually cancelled the session (to suppress "process exited" errors)
+  const userCancelledRef = useRef(false);
 
   const [state, setState] = useState<UseAcpState>({
     connected: false,
@@ -141,6 +143,13 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
   const shouldSuppressPromptError = useCallback((err: unknown): boolean => {
     if (tearingDownRef.current) return true;
     const message = toErrorMessage(err) || "";
+
+    // Suppress "process exited" errors when user manually cancelled
+    if (userCancelledRef.current && message.includes("process exited")) {
+      userCancelledRef.current = false; // Reset for next prompt
+      return true;
+    }
+
     return message.includes("Failed to fetch") &&
       typeof document !== "undefined" &&
       document.visibilityState === "hidden";
@@ -429,6 +438,8 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
     const client = clientRef.current;
     const sessionId = sessionIdRef.current;
     if (!client || !sessionId) return;
+    // Mark as user-initiated cancellation to suppress "process exited" errors
+    userCancelledRef.current = true;
     await client.cancel(sessionId);
   }, []);
 
