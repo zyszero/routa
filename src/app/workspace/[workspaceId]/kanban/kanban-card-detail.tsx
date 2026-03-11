@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
-import type { TaskInfo, WorktreeInfo } from "../types";
+import type { TaskInfo, WorktreeInfo, SessionInfo } from "../types";
 
 interface SpecialistOption {
   id: string;
@@ -18,12 +18,15 @@ export interface KanbanCardDetailProps {
   codebases: CodebaseData[];
   allCodebaseIds: string[];
   worktreeCache: Record<string, WorktreeInfo>;
+  sessionInfo?: SessionInfo | null;
   onPatchTask: (taskId: string, payload: Record<string, unknown>) => Promise<TaskInfo>;
   onRetryTrigger: (taskId: string) => Promise<void>;
   onDelete: () => void;
   onRefresh: () => void;
   /** Called when provider is changed to sync with ACP state */
   onProviderChange?: (providerId: string | null) => void;
+  /** Called when repository is changed to notify about cwd mismatch */
+  onRepositoryChange?: (codebaseIds: string[]) => void;
 }
 
 const ROLE_OPTIONS = ["CRAFTER", "ROUTA", "GATE", "DEVELOPER"];
@@ -35,17 +38,33 @@ export function KanbanCardDetail({
   codebases,
   allCodebaseIds,
   worktreeCache,
+  sessionInfo,
   onPatchTask,
   onRetryTrigger,
   onDelete,
   onRefresh,
   onProviderChange,
+  onRepositoryChange,
 }: KanbanCardDetailProps) {
   // Inline edit state - component is keyed by task.id so state resets on task change
   const [editTitle, setEditTitle] = useState(task.title);
   const [editObjective, setEditObjective] = useState(task.objective ?? "");
   const [editPriority, setEditPriority] = useState(task.priority ?? "medium");
   const [updateError, setUpdateError] = useState<string | null>(null);
+
+  // Check if session cwd matches task's repository
+  const getTaskRepositoryPath = (): string | null => {
+    const taskCodebaseIds = task.codebaseIds && task.codebaseIds.length > 0 ? task.codebaseIds : allCodebaseIds;
+    if (taskCodebaseIds.length === 0) return null;
+    const primaryCodebase = codebases.find((c) => c.id === taskCodebaseIds[0]);
+    return primaryCodebase?.repoPath ?? null;
+  };
+
+  const sessionCwdMismatch = sessionInfo && task.triggerSessionId && (() => {
+    const taskRepoPath = getTaskRepositoryPath();
+    if (!taskRepoPath) return false;
+    return sessionInfo.cwd !== taskRepoPath;
+  })();
 
   return (
     <div className="w-1/3 border-r border-gray-200 dark:border-[#191c28] overflow-y-auto p-4">
@@ -116,9 +135,9 @@ export function KanbanCardDetail({
           task={task}
           availableProviders={availableProviders}
           specialists={specialists}
+          sessionCwdMismatch={sessionCwdMismatch}
           onPatchTask={onPatchTask}
           onRetryTrigger={onRetryTrigger}
-          onRefresh={onRefresh}
           onProviderChange={onProviderChange}
         />
 
@@ -134,6 +153,7 @@ export function KanbanCardDetail({
           setUpdateError={setUpdateError}
           onPatchTask={onPatchTask}
           onRefresh={onRefresh}
+          onRepositoryChange={onRepositoryChange}
         />
 
         {/* Worktree */}
@@ -175,17 +195,17 @@ function ProviderSection({
   task,
   availableProviders,
   specialists,
+  sessionCwdMismatch,
   onPatchTask,
   onRetryTrigger,
-  onRefresh,
   onProviderChange,
 }: {
   task: TaskInfo;
   availableProviders: AcpProviderInfo[];
   specialists: SpecialistOption[];
+  sessionCwdMismatch?: boolean;
   onPatchTask: (taskId: string, payload: Record<string, unknown>) => Promise<TaskInfo>;
   onRetryTrigger: (taskId: string) => Promise<void>;
-  onRefresh: () => void;
   onProviderChange?: (providerId: string | null) => void;
 }) {
   return (
@@ -204,7 +224,7 @@ function ProviderSection({
             // Notify parent to clear ACP provider
             onProviderChange?.(null);
           }
-          onRefresh();
+          // No need to refresh - onPatchTask already returns updated task data
         }}
         className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-700 focus:border-amber-400 focus:outline-none dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-300"
       >
@@ -219,7 +239,7 @@ function ProviderSection({
             value={task.assignedRole ?? "DEVELOPER"}
             onChange={async (e) => {
               await onPatchTask(task.id, { assignedRole: e.target.value });
-              onRefresh();
+              // No need to refresh - onPatchTask already returns updated task data
             }}
             className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-700 focus:border-amber-400 focus:outline-none dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-300"
           >
@@ -230,13 +250,18 @@ function ProviderSection({
             onChange={async (e) => {
               const sp = specialists.find((s) => s.id === e.target.value);
               await onPatchTask(task.id, { assignedSpecialistId: e.target.value || undefined, assignedSpecialistName: sp?.name, assignedRole: sp?.role ?? task.assignedRole });
-              onRefresh();
+              // No need to refresh - onPatchTask already returns updated task data
             }}
             className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-700 focus:border-amber-400 focus:outline-none dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-300"
           >
             <option value="">No specialist</option>
             {specialists.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
+        </div>
+      )}
+      {sessionCwdMismatch && (
+        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/10 dark:text-amber-400">
+          ⚠️ Repository changed. Session is running in a different directory. Please rerun to apply changes.
         </div>
       )}
       {task.assignedProvider && (
@@ -278,6 +303,7 @@ function RepositoriesSection({
   setUpdateError,
   onPatchTask,
   onRefresh,
+  onRepositoryChange,
 }: {
   task: TaskInfo;
   codebases: CodebaseData[];
@@ -286,6 +312,7 @@ function RepositoriesSection({
   setUpdateError: (error: string | null) => void;
   onPatchTask: (taskId: string, payload: Record<string, unknown>) => Promise<TaskInfo>;
   onRefresh: () => void;
+  onRepositoryChange?: (codebaseIds: string[]) => void;
 }) {
   return (
     <div>
@@ -328,6 +355,8 @@ function RepositoriesSection({
                         ? currentCodebaseIds.filter((id) => id !== cb.id)
                         : [...currentCodebaseIds, cb.id];
                       await onPatchTask(task.id, { codebaseIds: nextCodebaseIds });
+                      // Notify parent about repository change
+                      onRepositoryChange?.(nextCodebaseIds);
                       onRefresh();
                     } catch (error) {
                       setUpdateError(

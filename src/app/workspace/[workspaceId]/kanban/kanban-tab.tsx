@@ -644,6 +644,7 @@ User request: ${agentInput}`;
               {activeTaskId && (() => {
                 const task = localTasks.find((t) => t.id === activeTaskId);
                 if (!task) return null;
+                const sessionInfo = task.triggerSessionId ? sessions.find((s) => s.sessionId === task.triggerSessionId) : null;
                 return (
                   <KanbanCardDetail
                     key={task.id}
@@ -653,6 +654,7 @@ User request: ${agentInput}`;
                     codebases={codebases}
                     allCodebaseIds={allCodebaseIds}
                     worktreeCache={worktreeCache}
+                    sessionInfo={sessionInfo}
                     onPatchTask={patchTask}
                     onRetryTrigger={retryTaskTrigger}
                     onDelete={() => confirmDeleteTask(task)}
@@ -663,27 +665,49 @@ User request: ${agentInput}`;
                         acp.setProvider(providerId);
                       }
                     }}
+                    onRepositoryChange={(codebaseIds) => {
+                      // Repository changed - user should rerun to apply new working directory
+                      console.log("[KanbanTab] Repository changed for task", task.id, "new codebaseIds:", codebaseIds);
+                    }}
                   />
                 );
               })()}
               {/* Right: Session (if activeSessionId exists) */}
-              {activeSessionId && acp ? (
-                <div className={`${activeTaskId ? "w-2/3" : "w-full"} h-full overflow-hidden`}>
-                  <ChatPanel
-                    acp={acp}
-                    activeSessionId={activeSessionId}
-                    onEnsureSession={async () => activeSessionId}
-                    onSelectSession={async (sessionId) => {
-                      setActiveSessionId(sessionId);
-                      acp.selectSession(sessionId);
-                    }}
-                    repoSelection={null}
-                    onRepoChange={() => {}}
-                    codebases={codebases}
-                    activeWorkspaceId={workspaceId}
-                  />
-                </div>
-              ) : activeTaskId ? (
+              {activeSessionId && acp ? (() => {
+                // Build repoSelection from active task's codebaseIds
+                const activeTask = activeTaskId ? localTasks.find((t) => t.id === activeTaskId) : null;
+                const taskCodebaseIds = activeTask?.codebaseIds && activeTask.codebaseIds.length > 0
+                  ? activeTask.codebaseIds
+                  : allCodebaseIds;
+                const primaryCodebase = taskCodebaseIds.length > 0
+                  ? codebases.find((c) => c.id === taskCodebaseIds[0])
+                  : null;
+                const repoSelection = primaryCodebase
+                  ? {
+                      path: primaryCodebase.repoPath,
+                      branch: primaryCodebase.branch ?? "",
+                      name: primaryCodebase.label ?? primaryCodebase.repoPath.split("/").pop() ?? ""
+                    }
+                  : null;
+
+                return (
+                  <div className={`${activeTaskId ? "w-2/3" : "w-full"} h-full overflow-hidden`}>
+                    <ChatPanel
+                      acp={acp}
+                      activeSessionId={activeSessionId}
+                      onEnsureSession={async () => activeSessionId}
+                      onSelectSession={async (sessionId) => {
+                        setActiveSessionId(sessionId);
+                        acp.selectSession(sessionId);
+                      }}
+                      repoSelection={repoSelection}
+                      onRepoChange={() => {}}
+                      codebases={codebases}
+                      activeWorkspaceId={workspaceId}
+                    />
+                  </div>
+                );
+              })() : activeTaskId ? (
                 <div className="w-2/3 flex items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                   No session available for this task
                 </div>
