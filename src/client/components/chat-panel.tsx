@@ -259,7 +259,7 @@ export function ChatPanel({
         };
       });
     }
-  }, [acp, activeSessionId]);
+  }, [acp, activeSessionId, setMessagesBySession]);
 
   const handleSend = useCallback(async (text: string, context: InputContext) => {
     if (!text.trim()) return;
@@ -329,7 +329,7 @@ export function ChatPanel({
     resetStreamingRefs(sid);
 
     // Task extraction is now handled by the useEffect that watches messagesBySession
-  }, [activeSessionId, onEnsureSession, onSelectSession, prompt, repoSelection, onLoadSkill, acp, resetStreamingRefs]);
+  }, [activeSessionId, onEnsureSession, onSelectSession, prompt, repoSelection, onLoadSkill, acp, resetStreamingRefs, setMessagesBySession]);
 
   // ── Setup State ──────────────────────────────────────────────────────
 

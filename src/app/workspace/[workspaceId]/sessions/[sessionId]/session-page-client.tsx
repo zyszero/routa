@@ -221,11 +221,12 @@ export function SessionPageClient() {
   const installAgentsButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    const clients = providerChildClientsRef.current;
     return () => {
-      for (const client of providerChildClientsRef.current.values()) {
+      for (const client of clients.values()) {
         client.disconnect();
       }
-      providerChildClientsRef.current.clear();
+      clients.clear();
     };
   }, []);
 
@@ -277,8 +278,7 @@ export function SessionPageClient() {
     if (!acp.connected && !acp.loading) {
       acp.connect();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [acp]);
 
   // Select the session from URL on mount
   useEffect(() => {
@@ -287,8 +287,7 @@ export function SessionPageClient() {
     if (sessionId && acp.connected) {
       acp.selectSession(sessionId);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, isResolved]);
+  }, [sessionId, isResolved, acp]);
 
   // Restore session metadata (role, provider, model) when navigating to an existing session
   const sessionMetadataLoadedRef = useRef<Set<string>>(new Set());
@@ -321,7 +320,7 @@ export function SessionPageClient() {
       .catch((err) => {
         console.warn("[SessionPage] Failed to restore session metadata:", err);
       });
-  }, [sessionId, isResolved]);
+  }, [sessionId, isResolved, acp]);
 
   // ── Restore CRAFTER agents from child sessions on page reload ─────────
   const crafterAgentsRestoredRef = useRef<Set<string>>(new Set());
@@ -477,7 +476,7 @@ export function SessionPageClient() {
     }, 8000);
 
     return () => clearTimeout(timer);
-  }, [sessionId]);
+  }, [sessionId, acp, acp.updates]);
 
   // Detect acp_status: error in SSE updates → show docker config popup and restore input
   useEffect(() => {
@@ -1039,7 +1038,7 @@ export function SessionPageClient() {
       return result.sessionId;
     }
     return null;
-  }, [acp, sessionId, ensureConnected, selectedAgent, selectedSpecialistId, workspaceId, router, resolveAgentConfig]);
+  }, [acp, sessionId, ensureConnected, selectedAgent, selectedSpecialistId, workspaceId, router, resolveAgentConfig, repoSelection?.branch]);
 
   const handleAgentChange = useCallback((value: string) => {
     // Check if selecting a custom specialist (prefixed with "specialist:")
@@ -1674,7 +1673,7 @@ export function SessionPageClient() {
       });
       return null;
     }
-  }, [notesHook, workspaceId, sessionId, callMcpTool, activeCrafterId, concurrency]);
+  }, [notesHook, workspaceId, sessionId, callMcpTool, concurrency, bumpRefresh]);
 
   const handleExecuteProviderNoteTask = useCallback(async (noteId: string): Promise<CrafterAgent | null> => {
     const note = notesHook.notes.find((n) => n.id === noteId);
