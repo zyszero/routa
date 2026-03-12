@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { desktopAwareFetch } from "../../../utils/diagnostics";
 import type { AcpSessionNotification } from "../../../acp-client";
 import type { ChatMessage, UsageInfo } from "../types";
@@ -39,7 +39,10 @@ export function useChatMessages({
   const [sessions, setSessions] = useState<Array<{ sessionId: string; provider?: string; modeId?: string }>>([]);
   const [sessionModeById, setSessionModeById] = useState<Record<string, string>>({});
   const [messagesBySession, setMessagesBySession] = useState<Record<string, ChatMessage[]>>({});
-  const [visibleMessages, setVisibleMessages] = useState<ChatMessage[]>([]);
+  const visibleMessages = useMemo(() => {
+    if (!activeSessionId) return [];
+    return messagesBySession[activeSessionId] ?? [];
+  }, [activeSessionId, messagesBySession]);
   const [isSessionRunning, setIsSessionRunning] = useState(false);
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [fileChangesState, setFileChangesState] = useState<FileChangesState>(createFileChangesState);
@@ -136,20 +139,13 @@ export function useChatMessages({
   // When active session changes, swap visible transcript and load history
   useEffect(() => {
     if (!activeSessionId) {
-      setVisibleMessages([]);
       return;
     }
     processedMessageIdsRef.current.clear();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset running state on session change
     setIsSessionRunning(false);
-    fetchSessionHistory(activeSessionId);
+    void fetchSessionHistory(activeSessionId);
   }, [activeSessionId, fetchSessionHistory]);
-
-  // Update visible messages when messagesBySession changes
-  useEffect(() => {
-    if (activeSessionId) {
-      setVisibleMessages(messagesBySession[activeSessionId] ?? []);
-    }
-  }, [activeSessionId, messagesBySession]);
 
   // Process SSE updates
   useEffect(() => {
@@ -298,4 +294,3 @@ export function useChatMessages({
     resetStreamingRefs,
   };
 }
-

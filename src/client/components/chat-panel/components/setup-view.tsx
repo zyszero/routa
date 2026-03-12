@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { ProviderDropdown } from "./provider-dropdown";
 import { ModelDropdown } from "./model-dropdown";
 import { RepoPicker } from "../../repo-picker";
@@ -25,10 +25,10 @@ export function SetupView({
 }: SetupViewProps) {
   const [selectedModel, setSelectedModel] = useState("");
 
-  // Reset model when provider changes
-  useEffect(() => {
+  const handleProviderChange = useCallback((providerId: string) => {
     setSelectedModel("");
-  }, [selectedProvider]);
+    onProviderChange(providerId);
+  }, [onProviderChange]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -68,7 +68,7 @@ export function SetupView({
                 <ProviderDropdown
                   providers={providers}
                   selectedProvider={selectedProvider}
-                  onProviderChange={onProviderChange}
+                  onProviderChange={handleProviderChange}
                 />
               )}
             </div>
@@ -205,4 +205,3 @@ function AgentRoleSelector({ agentRole, onAgentRoleChange }: AgentRoleSelectorPr
     </div>
   );
 }
-
