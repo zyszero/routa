@@ -34,7 +34,7 @@ After generating or modifying **source code** (not docs, configs, or workflows),
 
 ### Baby-Step Commits (Enforced)
 
-- Each commit does **one thing**: one feature, one bug fix, or one refactor. Each commit should less than 10 files and less than 1000 lines of code.
+- Each commit does **one thing** with Conventional Commits format: one feature, one bug fix, or one refactor. Each commit should less than 10 files and less than 1000 lines of code.
 - No "kitchen sink" commits. If changes span multiple concerns, split into multiple commits.
 - Always include the related **GitHub issue ID** when applicable.
 
