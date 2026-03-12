@@ -176,6 +176,17 @@ export function SessionPageClient() {
   }, [workspacesHook, router]);
 
   const acp = useAcp();
+  const {
+    connected: acpConnected,
+    loading: acpLoading,
+    sessionId: acpSessionId,
+    updates: acpUpdates,
+    selectedProvider: acpSelectedProvider,
+    connect: acpConnect,
+    selectSession: acpSelectSession,
+    setProvider: acpSetProvider,
+    prompt: acpPrompt,
+  } = acp;
   const notesHook = useNotes(workspaceId, sessionId);
 
   // ── Collaborative editing panel view ──────────────────────────────────
@@ -276,26 +287,26 @@ export function SessionPageClient() {
 
   // Auto-connect on mount so providers are loaded immediately
   useEffect(() => {
-    if (!acp.connected && !acp.loading) {
-      acp.connect();
+    if (!acpConnected && !acpLoading) {
+      acpConnect();
     }
-  }, [acp]);
+  }, [acpConnected, acpLoading, acpConnect]);
 
   // Select the session from URL on mount
   useEffect(() => {
     // Wait for params to be resolved and not be placeholder
     if (!isResolved || sessionId === "__placeholder__") return;
-    if (sessionId && acp.connected) {
-      acp.selectSession(sessionId);
+    if (sessionId && acpConnected && sessionId !== acpSessionId) {
+      acpSelectSession(sessionId);
     }
-  }, [sessionId, isResolved, acp]);
+  }, [sessionId, isResolved, acpConnected, acpSessionId, acpSelectSession]);
 
   // Restore session metadata (role, provider, model) when navigating to an existing session
   const sessionMetadataLoadedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     // Wait for params to be resolved and not be placeholder
     if (!isResolved || sessionId === "__placeholder__") return;
-    if (!sessionId || !acp.connected) return;
+    if (!sessionId || !acpConnected) return;
     // Only fetch once per session
     if (sessionMetadataLoadedRef.current.has(sessionId)) return;
     sessionMetadataLoadedRef.current.add(sessionId);
@@ -314,20 +325,20 @@ export function SessionPageClient() {
         }
         // Restore provider
         if (provider) {
-          acp.setProvider(provider);
+          acpSetProvider(provider);
         }
         console.log(`[SessionPage] Restored session metadata: role=${role}, provider=${provider}`);
       })
       .catch((err) => {
         console.warn("[SessionPage] Failed to restore session metadata:", err);
       });
-  }, [sessionId, isResolved, acp]);
+  }, [sessionId, isResolved, acpConnected, acpSetProvider]);
 
   // ── Restore CRAFTER agents from child sessions on page reload ─────────
   const crafterAgentsRestoredRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!isResolved || sessionId === "__placeholder__") return;
-    if (!sessionId || !acp.connected) return;
+    if (!sessionId || !acpConnected) return;
     if (crafterAgentsRestoredRef.current.has(sessionId)) return;
     crafterAgentsRestoredRef.current.add(sessionId);
 
@@ -369,7 +380,7 @@ export function SessionPageClient() {
       .catch((err) => {
         console.warn("[SessionPage] Failed to restore CRAFTER agents:", err);
       });
-  }, [sessionId, acp.connected, isResolved]);
+  }, [sessionId, acpConnected, isResolved]);
 
   // Handler to update agent messages after lazy-loading from DB
   const handleUpdateAgentMessages = useCallback(
@@ -434,7 +445,7 @@ export function SessionPageClient() {
   //   1. Store consumed text in a ref (survives re-runs without re-consuming storage)
   //   2. Only mark as "sent" when we actually call acp.prompt()
   useEffect(() => {
-    if (!sessionId || !acp.connected || acp.loading) return;
+    if (!sessionId || !acpConnected || acpLoading) return;
 
     // Only send once per session per page load
     if (pendingPromptSentRef.current.has(sessionId)) return;
@@ -449,7 +460,7 @@ export function SessionPageClient() {
     const pendingText = pendingPromptTextRef.current;
 
     // Check if ACP is already ready (e.g. session was reused or event already fired)
-    const lastUpdate = acp.updates.findLast(
+    const lastUpdate = acpUpdates.findLast(
       (u) => (u as Record<string, unknown>).update &&
         ((u as Record<string, unknown>).update as Record<string, unknown>).sessionUpdate === "acp_status"
     );
@@ -460,7 +471,7 @@ export function SessionPageClient() {
       console.log(`[SessionPage] ACP ready, sending pending prompt for session ${sessionId}`);
       pendingPromptSentRef.current.add(sessionId);
       pendingPromptTextRef.current = null;
-      acp.prompt(pendingText);
+      acpPrompt(pendingText);
       return;
     }
 
@@ -473,22 +484,22 @@ export function SessionPageClient() {
         console.log(`[SessionPage] Timeout fallback: sending pending prompt for session ${sessionId}`);
         pendingPromptSentRef.current.add(sessionId);
         pendingPromptTextRef.current = null;
-        acp.prompt(pendingText);
+        acpPrompt(pendingText);
       }
     }, 8000);
 
     return () => clearTimeout(timer);
-  }, [sessionId, acp, acp.updates]);
+  }, [sessionId, acpConnected, acpLoading, acpUpdates, acpPrompt]);
 
   // Detect acp_status: error in SSE updates → show docker config popup and restore input
   useEffect(() => {
-    if (!acp.updates.length) return;
-    const lastUpdate = acp.updates[acp.updates.length - 1];
+    if (!acpUpdates.length) return;
+    const lastUpdate = acpUpdates[acpUpdates.length - 1];
     const update = (lastUpdate as Record<string, unknown>).update as Record<string, unknown> | undefined;
     if (
       update?.sessionUpdate === "acp_status" &&
       update?.status === "error" &&
-      acp.selectedProvider === "docker-opencode"
+      acpSelectedProvider === "docker-opencode"
     ) {
       const errMsg = (update.error as string | undefined) ?? "Docker session failed to start";
       // eslint-disable-next-line react-hooks/set-state-in-effect -- surface docker error state from session updates
@@ -499,7 +510,7 @@ export function SessionPageClient() {
         pendingPromptTextRef.current = null;
       }
     }
-  }, [acp.updates, acp.selectedProvider]);
+  }, [acpUpdates, acpSelectedProvider]);
 
   // Load global tool mode on mount
   useEffect(() => {

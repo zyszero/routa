@@ -596,6 +596,7 @@ export function TiptapInput({
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
         codeBlock: false,
+        link: false,
         code: {
           HTMLAttributes: {
             class:
@@ -1216,7 +1217,7 @@ export function TiptapInput({
           ) : (
             <button
               type="button"
-              onClick={() => handleSendRef.current()}
+              onClick={handleSend}
               disabled={disabled}
               className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               title="Send"
