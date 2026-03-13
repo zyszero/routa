@@ -28,15 +28,24 @@
 
 Before any PR, verify fitness using [docs/fitness/README.md](docs/fitness/README.md):
 
-1. Check hard gates (must all pass):
-   - `npm run test:run` — TS tests
-   - `cargo test --workspace` — Rust tests
-   - `npm run api:check` — API contract parity
-   - `npm run lint` — Lint
+```bash
+# 运行 fitness 检查
+python3 docs/fitness/scripts/fitness.py
 
-2. Update evidence files if tests changed:
-   - [docs/fitness/unit-test.md](docs/fitness/unit-test.md)
-   - [docs/fitness/rust-api-test.md](docs/fitness/rust-api-test.md)
+# 仅查看会执行什么
+python3 docs/fitness/scripts/fitness.py --dry-run
+```
+
+Hard gates (must all pass):
+- `npm run test:run` — TS tests
+- `cargo test --workspace` — Rust tests
+- `npm run api:check` — API contract parity
+- `npm run lint` — Lint
+
+Evidence files:
+- [docs/fitness/unit-test.md](docs/fitness/unit-test.md) — testability
+- [docs/fitness/rust-api-test.md](docs/fitness/rust-api-test.md) — maintainability
+- [docs/fitness/api-contract.md](docs/fitness/api-contract.md) — evolvability
 
 ## After generating or modifying code
 
