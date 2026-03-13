@@ -50,7 +50,7 @@ Fitness = Σ (Weight_i × Score_i) / 100
 |------|------|------|----------|----------|
 | testability | 14% | 测试覆盖与通过率 | 覆盖率≥80%, 通过率100% | [unit-test.md](unit-test.md) |
 | performance | 10% | API 延迟与错误率 | p95<300ms, 错误率<1% | k6/wrk |
-| security | 14% | 依赖漏洞与安全扫描 | critical=0, high≤阈值 | snyk/trivy |
+| security | 14% | 依赖漏洞与安全扫描 | critical=0, high≤阈值 | [security.md](security.md) |
 | maintainability | 14% | 架构回归与代码质量 | 新增smell=0, 契约100% | [rust-api-test.md](rust-api-test.md) |
 | deployability | 10% | 容器构建与配置 | 构建成功, 镜像回归≤5% | Dockerfile |
 | evolvability | 10% | API 兼容性与契约 | breaking changes=0, parity=100% | [api-contract.md](api-contract.md) |
