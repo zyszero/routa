@@ -53,7 +53,6 @@ export function KanbanPageClient() {
 
     (async () => {
       try {
-        setBoards([]);
         const res = await fetch(`/api/kanban/boards?workspaceId=${encodeURIComponent(workspaceId)}`, {
           cache: "no-store",
           signal: controller.signal,
@@ -62,8 +61,7 @@ export function KanbanPageClient() {
         if (controller.signal.aborted) return;
         setBoards(Array.isArray(data?.boards) ? data.boards : []);
       } catch {
-        if (controller.signal.aborted) return;
-        setBoards([]);
+        // Preserve the current board list when a refresh is aborted or fails.
       }
     })();
 
@@ -76,7 +74,6 @@ export function KanbanPageClient() {
 
     (async () => {
       try {
-        setTasks([]);
         const res = await fetch(`/api/tasks?workspaceId=${encodeURIComponent(workspaceId)}`, {
           cache: "no-store",
           signal: controller.signal,
@@ -85,8 +82,7 @@ export function KanbanPageClient() {
         if (controller.signal.aborted) return;
         setTasks(Array.isArray(data?.tasks) ? data.tasks : []);
       } catch {
-        if (controller.signal.aborted) return;
-        setTasks([]);
+        // Preserve the current task list when a refresh is aborted or fails.
       }
     })();
 

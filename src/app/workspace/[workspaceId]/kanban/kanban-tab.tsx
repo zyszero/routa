@@ -9,6 +9,7 @@ import { KanbanCreateModal, EMPTY_DRAFT, type DraftIssue } from "../kanban-creat
 import { KanbanCard } from "./kanban-card";
 import { KanbanSettingsModal, type ColumnAutomationConfig } from "./kanban-settings-modal";
 import { KanbanCardDetail } from "./kanban-card-detail";
+import { buildKanbanAgentPrompt, scheduleKanbanRefreshBurst } from "./kanban-agent-input";
 import { ChatPanel } from "@/client/components/chat-panel";
 import { RepoPicker, type RepoSelection } from "@/client/components/repo-picker";
 
@@ -111,33 +112,12 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
 
     setAgentLoading(true);
     try {
-      const systemPrompt = `You are the Kanban ACP Provider Agent for this workspace.
-
-You can directly use Kanban MCP tools and coordination tools. Prefer decompose_tasks for backlog planning, and only use create_agent when the request clearly benefits from spawning follow-up execution agents.
-
-Available Kanban tools:
-- decompose_tasks: Create multiple cards from a task breakdown (preferred for multi-task input)
-- create_card: Create a single card/task
-- move_card: Move a card to a different column
-- update_card: Update card details
-- delete_card: Delete a card
-- search_cards: Search for cards
-- list_cards_by_column: List cards in a specific column
-- create_agent: Create a follow-up agent when the workflow needs execution beyond planning
-
-Current workspace: ${workspaceId}
-Current board ID: ${selectedBoardId ?? defaultBoardId ?? "default"}
-Default repo path: ${defaultCodebase?.repoPath ?? "not configured"}
-
-Instructions:
-1. Parse the user's input to identify discrete, actionable tasks
-2. Each task should be self-contained and completable independently
-3. Use decompose_tasks to create all tasks at once on the backlog unless a single task is clearly better
-4. Assign appropriate priorities and labels
-5. If the user explicitly asks to execute work, you may create specialized agents and explain what you created
-6. Report exactly which cards or agents were created and what happens next
-
-User request: ${agentInput}`;
+      const systemPrompt = buildKanbanAgentPrompt({
+        workspaceId,
+        boardId: selectedBoardId ?? defaultBoardId ?? "default",
+        repoPath: defaultCodebase?.repoPath,
+        agentInput,
+      });
 
       const sessionId = await onAgentPrompt(systemPrompt, {
         provider: acp?.selectedProvider,
@@ -146,10 +126,7 @@ User request: ${agentInput}`;
       });
       if (sessionId) {
         openAgentPanel(sessionId);
-        // Refresh to show any new cards created
-        setTimeout(() => {
-          onRefresh();
-        }, 2000);
+        scheduleKanbanRefreshBurst(onRefresh);
       }
       setAgentInput("");
     } finally {
@@ -406,11 +383,7 @@ User request: ${agentInput}`;
   useEffect(() => {
     if (!agentSessionId || !agentPanelOpen) return;
 
-    const intervalId = window.setInterval(() => {
-      onRefresh();
-    }, 4_000);
-
-    return () => window.clearInterval(intervalId);
+    return scheduleKanbanRefreshBurst(onRefresh);
   }, [agentPanelOpen, agentSessionId, onRefresh]);
 
   // Codebase edit handlers - use RepoPicker for re-selecting/cloning

@@ -17,6 +17,38 @@ export function getInternalApiOrigin(): string {
 
 export function buildTaskPrompt(task: Task): string {
   const labels = task.labels.length > 0 ? `Labels: ${task.labels.join(", ")}` : "Labels: none";
+  const isBacklogPlanning = (task.columnId ?? "backlog") === "backlog";
+  const availableTools = isBacklogPlanning
+    ? [
+        `- **update_card**: Update this card's title, description, priority, or labels. Use cardId: "${task.id}"`,
+        "- **search_cards**: Search the board for duplicates or related work before creating more tasks",
+        "- **create_card**: Create exactly one follow-up backlog card if the current card must be refined into a single user story",
+        "- **decompose_tasks**: Create multiple backlog cards when the current card clearly contains multiple independent stories",
+        "- **create_note**: Create notes for planning or refinement context",
+      ]
+    : [
+        `- **update_card**: Update this card's title, description, priority, or labels. Use cardId: "${task.id}"`,
+        "- **move_card**: Move this card to a different column (e.g., 'in-progress', 'done')",
+        "- **report_to_parent**: Report completion status to the parent agent when done",
+        "- **create_note**: Create notes for documentation or progress tracking",
+      ];
+  const instructions = isBacklogPlanning
+    ? [
+        "1. Treat backlog as planning and refinement, not implementation",
+        "2. Clarify or decompose the work into backlog-ready stories when needed",
+        "3. Keep the original card in backlog unless the workflow explicitly requires another backlog card",
+        "4. Do not move the card out of backlog from this planning step",
+        "5. Do not start implementation work in this column",
+        "6. Report what backlog story or stories were created or refined",
+      ]
+    : [
+        "1. Start implementation work immediately",
+        "2. Use `update_card` to track progress in the card description",
+        "3. Use `move_card` to move the card to 'in-progress' when starting",
+        "4. Keep changes focused on this task",
+        "5. When complete, use `move_card` to move to 'done' and `report_to_parent` to report completion",
+      ];
+
   return [
     `You are assigned to Kanban task: ${task.title}`,
     "",
@@ -40,18 +72,11 @@ export function buildTaskPrompt(task: Task): string {
     "",
     "You have access to the following MCP tools for task management:",
     "",
-    `- **update_card**: Update this card's title, description, priority, or labels. Use cardId: "${task.id}"`,
-    "- **move_card**: Move this card to a different column (e.g., 'in-progress', 'done')",
-    "- **report_to_parent**: Report completion status to the parent agent when done",
-    "- **create_note**: Create notes for documentation or progress tracking",
+    ...availableTools,
     "",
     "## Instructions",
     "",
-    "1. Start implementation work immediately",
-    "2. Use `update_card` to track progress in the card description",
-    "3. Use `move_card` to move the card to 'in-progress' when starting",
-    "4. Keep changes focused on this task",
-    "5. When complete, use `move_card` to move to 'done' and `report_to_parent` to report completion",
+    ...instructions,
   ].join("\n");
 }
 
