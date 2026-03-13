@@ -19,11 +19,11 @@ python docs/fitness/scripts/fitness.py --dry-run
 ## Flow
 
 ```
-1. AGENTS.md           → 项目概述
-2. FITNESS.md          → 阈值 + 硬门禁（YAML header）
-3. README.md           → 规则手册（本文件）
-4. unit-test.md        → 单元测试证据
-5. rust-api-test.md    → API 契约证据
+1. AGENTS.md           → 项目概述 + Fitness 入口
+2. README.md           → 规则手册（本文件）
+3. unit-test.md        → 单元测试证据（含 frontmatter）
+4. rust-api-test.md    → API 契约证据（含 frontmatter）
+5. scripts/fitness.py  → 解析 frontmatter，执行检查
 ```
 
 ## Score Model
@@ -104,11 +104,11 @@ Fitness = Σ (Weight_i × Score_i) / 100
 
 ## 文件职责（只允许单一事实来源）
 
-- `FITNESS.md`：入口文件，包含阈值和硬门禁定义（YAML header）。
 - `README.md`：规则手册（本文件）。
-- `unit-test.md`：领域单元测试 + 集成测试责任清单（状态、阻塞、证据文件路径）。
-- `rust-api-test.md`：API 契约矩阵（正向/负向/回归）、自动化命令与失败再现命令。
-- 所有测试改动必须同步更新这两类清单之一。
+- `unit-test.md`：单元测试证据，frontmatter 定义 metrics。
+- `rust-api-test.md`：API 契约证据，frontmatter 定义 metrics。
+- `scripts/fitness.py`：解析 frontmatter，执行命令，输出结果。
+- 所有测试改动必须同步更新证据文件。
 
 ## Core principle
 
@@ -119,3 +119,73 @@ Fitness = Σ (Weight_i × Score_i) / 100
 1. 更新本次影响到的条目；
 2. 对新条目给出 `status: VERIFIED/BLOCKED/TODO`；
 3. 在 PR 描述中引用对应条目和测试文件路径。
+
+## Frontmatter 规范
+
+证据文件使用 YAML frontmatter 定义可执行的 metrics：
+
+```yaml
+---
+dimension: testability          # 维度名称
+weight: 14                      # 权重百分比
+threshold:
+  pass: 80                      # 通过阈值
+  warn: 70                      # 警告阈值
+
+metrics:
+  - name: ts_test_pass          # 指标名称
+    command: npm run test:run 2>&1   # 执行命令
+    pattern: "Tests\\s+passed"  # 成功匹配正则（可选）
+    hard_gate: true             # 是否为硬门禁
+---
+```
+
+### Metric 字段说明
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `name` | 是 | 指标名称，用于显示 |
+| `command` | 是 | Shell 命令，建议加 `2>&1` 捕获 stderr |
+| `pattern` | 否 | 成功匹配的正则，未设置则用 exit code |
+| `hard_gate` | 否 | 硬门禁失败直接阻断（默认 false）|
+
+## 添加新维度示例
+
+创建 `docs/fitness/e2e-test.md`：
+
+```yaml
+---
+dimension: e2e
+weight: 10
+threshold:
+  pass: 90
+  warn: 80
+
+metrics:
+  - name: playwright_e2e
+    command: npx playwright test --reporter=line 2>&1
+    pattern: "\\d+ passed"
+    hard_gate: false
+---
+
+# E2E 测试证据
+
+## 测试清单
+- [ ] Home → Agent Selection → Requirement Input
+- [ ] Workspace Detail → Session Click → Trace UI
+```
+
+## 验证 AI 理解
+
+添加新维度后，可用以下命令测试 AI 是否正确理解：
+
+```bash
+# 测试 AI 是否能识别新维度
+claude -p "fitness 有哪些维度？每个维度的权重是多少？"
+
+# 测试 AI 是否能解析 frontmatter
+claude -p "e2e-test.md 的 frontmatter 定义了哪些 metrics？"
+
+# 测试 AI 是否能执行检查
+claude -p "请执行 fitness 检查的 dry-run"
+```
