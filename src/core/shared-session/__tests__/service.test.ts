@@ -5,6 +5,7 @@ import {
   SharedSessionNotificationHub,
   SharedSessionService,
 } from "../service";
+import type { SharedPromptDispatcher } from "../types";
 
 class FakeSessionHub implements SharedSessionNotificationHub {
   private readonly sessions = new Map<string, { sessionId: string; workspaceId: string }>();
@@ -48,14 +49,14 @@ class FakeSessionHub implements SharedSessionNotificationHub {
 describe("SharedSessionService", () => {
   let hub: FakeSessionHub;
   let broadcaster: SharedSessionEventBroadcaster;
-  let promptDispatcher: ReturnType<typeof vi.fn>;
+  let promptDispatcher: ReturnType<typeof vi.fn<SharedPromptDispatcher>>;
   let service: SharedSessionService;
 
   beforeEach(() => {
     hub = new FakeSessionHub();
     hub.addSession("host-session-1", "workspace-1");
     broadcaster = new SharedSessionEventBroadcaster();
-    promptDispatcher = vi.fn(async () => {});
+    promptDispatcher = vi.fn<SharedPromptDispatcher>(async () => {});
     service = new SharedSessionService(hub, promptDispatcher, broadcaster);
   });
 
@@ -195,4 +196,3 @@ describe("SharedSessionService", () => {
     ).toThrowError(SharedSessionError);
   });
 });
-

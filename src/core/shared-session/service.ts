@@ -588,6 +588,9 @@ export class SharedSessionService {
     }
   }
 
+  private ensureSessionActive(sharedSessionId: string): SharedSession;
+  private ensureSessionActive(sharedSessionId: string, throwIfMissing: true): SharedSession;
+  private ensureSessionActive(sharedSessionId: string, throwIfMissing: false): SharedSession | undefined;
   private ensureSessionActive(sharedSessionId: string, throwIfMissing = true): SharedSession | undefined {
     this.expireSessions();
 

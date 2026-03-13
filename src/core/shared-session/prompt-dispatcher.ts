@@ -42,7 +42,14 @@ export const dispatchPromptToHostSession: SharedPromptDispatcher = async (
     if (!adapter || !adapter.alive) {
       throw new Error(`OpenCode SDK session unavailable: ${hostSessionId}`);
     }
-    await adapter.prompt(prompt);
+    for await (const _event of adapter.promptStream(
+      prompt,
+      hostSessionId,
+      undefined,
+      sessionRecord.workspaceId,
+    )) {
+      // Drain stream to completion so notifications are fully emitted.
+    }
     store.flushAgentBuffer(hostSessionId);
     return;
   }
@@ -93,4 +100,3 @@ export const dispatchPromptToHostSession: SharedPromptDispatcher = async (
   await proc.prompt(acpSessionId, prompt);
   store.flushAgentBuffer(hostSessionId);
 };
-
