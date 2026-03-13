@@ -504,10 +504,10 @@ User request: ${agentInput}`;
 
     // Fetch live branch info from the repo
     try {
-      const branchRes = await fetch(`/api/git/branch-info?repoPath=${encodeURIComponent(codebase.repoPath)}`, { cache: "no-store" });
+      const branchRes = await fetch(`/api/clone/branches?repoPath=${encodeURIComponent(codebase.repoPath)}`, { cache: "no-store" });
       if (branchRes.ok) {
         const branchData = await branchRes.json();
-        setLiveBranchInfo({ current: branchData.current, branches: branchData.branches || [] });
+        setLiveBranchInfo({ current: branchData.current, branches: branchData.local || [] });
       }
     } catch { /* ignore */ }
   }
