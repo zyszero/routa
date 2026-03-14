@@ -96,6 +96,11 @@ export default function HomePage() {
     }
   }, [activeWorkspaceId, router]);
 
+  const activeWorkspace = workspacesHook.workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null;
+  const workspaceCount = workspacesHook.workspaces.length;
+  const activeWorkspaceHref = activeWorkspaceId ? `/workspace/${activeWorkspaceId}` : "/workspaces";
+  const activeKanbanHref = activeWorkspaceId ? `/workspace/${activeWorkspaceId}/kanban` : "/workspaces";
+
   return (
     <NotificationProvider>
     <div className="h-screen flex flex-col bg-[#fafafa] dark:bg-[#0a0c12]">
@@ -196,37 +201,136 @@ export default function HomePage() {
             <OnboardingCard onCreateWorkspace={handleWorkspaceCreate} />
           </div>
         ) : (
-          <div className="min-h-full flex flex-col justify-center px-6 py-8">
-            {/* ── Input — centered ──────────────────────────────────── */}
-            <div className="flex justify-center mb-8">
-              <div className="w-full max-w-2xl">
-                <HomeInput
-                  workspaceId={activeWorkspaceId ?? undefined}
-                  onWorkspaceChange={(wsId) => {
-                    setActiveWorkspaceId(wsId);
-                    setRefreshKey((k) => k + 1);
-                  }}
-                  onSessionCreated={() => {
-                    setRefreshKey((k) => k + 1);
-                  }}
-                  displaySkills={skillsHook.allSkills}
+          <div className="min-h-full px-4 py-5 sm:px-6 sm:py-8">
+            <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 lg:gap-8">
+              <section className="relative overflow-hidden rounded-[28px] border border-gray-200/70 bg-white/90 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] dark:border-[#1c1f2e] dark:bg-[#10131b]/95">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.16),_transparent_34%),radial-gradient(circle_at_bottom_right,_rgba(59,130,246,0.12),_transparent_38%)]" />
+                <div className="relative grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1.25fr)_320px] lg:items-start lg:gap-8 lg:p-8">
+                  <div className="min-w-0">
+                    <div className="mb-4 flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-2 rounded-full border border-amber-200/80 bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+                        Task Console
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        Home should launch work fast, not make you browse first.
+                      </span>
+                    </div>
+
+                    <div className="max-w-3xl">
+                      <h1 className="text-3xl font-semibold tracking-tight text-gray-950 dark:text-gray-50 sm:text-[2.65rem]">
+                        Start from the task.
+                        <span className="block text-gray-500 dark:text-gray-400">Keep workspace as context.</span>
+                      </h1>
+                      <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-600 dark:text-gray-300 sm:text-[15px]">
+                        Dispatch the next job here, keep the active workspace visible, and drop into Kanban only when you need the full board. The homepage should feel like a launchpad, not a directory.
+                      </p>
+                    </div>
+
+                    <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                      <HeroStat
+                        label="Workspaces"
+                        value={workspaceCount.toString()}
+                        detail={activeWorkspace ? `Current: ${activeWorkspace.title}` : "Pick a workspace to focus the board"}
+                      />
+                      <HeroStat
+                        label="Installed Skills"
+                        value={skillsHook.allSkills.length.toString()}
+                        detail="Skills stay available directly inside the input composer"
+                      />
+                      <HeroStat
+                        label="Runtime"
+                        value={acp.connected ? "Ready" : "Offline"}
+                        detail={acp.connected ? "ACP connection is healthy" : "Reconnect before launching sessions"}
+                      />
+                    </div>
+
+                    <div className="mt-6 max-w-3xl">
+                      <HomeInput
+                        workspaceId={activeWorkspaceId ?? undefined}
+                        onWorkspaceChange={(wsId) => {
+                          setActiveWorkspaceId(wsId);
+                          setRefreshKey((k) => k + 1);
+                        }}
+                        onSessionCreated={() => {
+                          setRefreshKey((k) => k + 1);
+                        }}
+                        displaySkills={skillsHook.allSkills}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-4">
+                    <div className="rounded-[24px] border border-gray-200/80 bg-white/90 p-5 shadow-sm dark:border-[#222638] dark:bg-[#131722]">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-500 dark:text-gray-400">
+                            Current Focus
+                          </div>
+                          <div className="mt-2 text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
+                            {activeWorkspace?.title ?? "No workspace selected"}
+                          </div>
+                        </div>
+                        <span className={`inline-flex h-2.5 w-2.5 rounded-full ${activeWorkspace ? "bg-emerald-500 shadow-[0_0_0_6px_rgba(16,185,129,0.12)]" : "bg-amber-400 shadow-[0_0_0_6px_rgba(251,191,36,0.18)]"}`} />
+                      </div>
+                      <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                        Use one workspace as the active lane for sessions, then jump sideways only when you need a broader operational view.
+                      </p>
+                      <div className="mt-5 flex flex-wrap gap-2.5">
+                        <Link
+                          href={activeKanbanHref}
+                          className="inline-flex items-center gap-2 rounded-full bg-gray-950 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-950 dark:hover:bg-white"
+                        >
+                          Open Kanban
+                        </Link>
+                        <Link
+                          href={activeWorkspaceHref}
+                          className="inline-flex items-center gap-2 rounded-full border border-gray-200 px-4 py-2 text-xs font-medium text-gray-600 transition-colors hover:border-gray-300 hover:text-gray-900 dark:border-[#2a3042] dark:text-gray-300 dark:hover:border-[#39415a] dark:hover:text-gray-100"
+                        >
+                          Workspace Hub
+                        </Link>
+                      </div>
+                    </div>
+
+                    <div className="rounded-[24px] border border-dashed border-gray-200/90 bg-white/70 p-5 dark:border-[#222638] dark:bg-[#11141d]/80">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-500 dark:text-gray-400">
+                        Home Rules
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        <HomeRule
+                          title="Launch here"
+                          description="Keep the composer front and center for starting the next task immediately."
+                        />
+                        <HomeRule
+                          title="Filter, don’t browse"
+                          description="Treat workspace as a lens for the active board instead of the homepage destination."
+                        />
+                        <HomeRule
+                          title="Dive deeper only when needed"
+                          description="Use the workspace hub and full Kanban for detail work, not as the first stop."
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_360px] lg:items-start">
+                <HomeTodoPreview
+                  workspaceId={activeWorkspaceId}
+                  workspaceTitle={activeWorkspace?.title ?? null}
+                  refreshKey={refreshKey}
+                />
+                <WorkspaceCards
+                  workspaceId={activeWorkspaceId}
+                  refreshKey={refreshKey}
+                  onWorkspaceSelect={handleWorkspaceSelect}
+                  onWorkspaceCreate={handleWorkspaceCreate}
+                  onSessionClick={handleSessionClick}
+                  showWorkspacesMenu={showWorkspacesMenu}
+                  setShowWorkspacesMenu={setShowWorkspacesMenu}
+                  workspacesMenuRef={workspacesMenuRef}
                 />
               </div>
-            </div>
-
-            {/* ── Workspace Cards — below input ─────────────────────── */}
-            <div className="max-w-4xl mx-auto">
-              <WorkspaceCards
-                workspaceId={activeWorkspaceId}
-                refreshKey={refreshKey}
-                onWorkspaceSelect={handleWorkspaceSelect}
-                onWorkspaceCreate={handleWorkspaceCreate}
-                onSessionClick={handleSessionClick}
-                showWorkspacesMenu={showWorkspacesMenu}
-                setShowWorkspacesMenu={setShowWorkspacesMenu}
-                workspacesMenuRef={workspacesMenuRef}
-              />
-              <HomeTodoPreview workspaceId={activeWorkspaceId} refreshKey={refreshKey} />
             </div>
           </div>
         )}
@@ -255,11 +359,55 @@ function ConnectionDot({ connected }: { connected: boolean }) {
   );
 }
 
+function HeroStat({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-gray-200/80 bg-white/75 px-4 py-3 dark:border-[#202434] dark:bg-[#121722]/80">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
+        {label}
+      </div>
+      <div className="mt-2 text-lg font-semibold tracking-tight text-gray-900 dark:text-gray-100">
+        {value}
+      </div>
+      <div className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">
+        {detail}
+      </div>
+    </div>
+  );
+}
+
+function HomeRule({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="mt-1 inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-gray-900 dark:bg-gray-100" />
+      <div>
+        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{title}</div>
+        <div className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{description}</div>
+      </div>
+    </div>
+  );
+}
+
 function HomeTodoPreview({
   workspaceId,
+  workspaceTitle,
   refreshKey,
 }: {
   workspaceId: string | null;
+  workspaceTitle: string | null;
   refreshKey: number;
 }) {
   const [tasks, setTasks] = useState<HomeTaskInfo[]>([]);
@@ -299,29 +447,32 @@ function HomeTodoPreview({
     return () => controller.abort();
   }, [workspaceId, refreshKey]);
 
-  if (!workspaceId || tasks.length === 0) {
+  if (!workspaceId) {
     return null;
   }
 
   return (
-    <div className="mt-5 rounded-2xl border border-gray-100 bg-white/90 p-5 dark:border-[#1c1f2e] dark:bg-[#12141c] shadow-sm">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <section className="rounded-[28px] border border-gray-200/70 bg-white/95 p-5 shadow-[0_18px_60px_-46px_rgba(15,23,42,0.42)] dark:border-[#1c1f2e] dark:bg-[#10131b]/95 sm:p-6">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <svg className="w-4 h-4 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
             </svg>
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">
-              Current Todos
+              Active Board Slice
             </div>
           </div>
+          <div className="mt-2 text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
+            {workspaceTitle ?? "Current workspace"}
+          </div>
           <div className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-            A quick slice of the active board.
+            A fast read on the work already moving in your selected workspace.
           </div>
         </div>
         <Link
           href={`/workspace/${workspaceId}/kanban`}
-          className="flex items-center gap-1.5 rounded-lg bg-blue-500 hover:bg-blue-600 px-4 py-2 text-xs font-medium text-white transition-colors shadow-sm hover:shadow"
+          className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-700"
         >
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
@@ -330,33 +481,46 @@ function HomeTodoPreview({
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-        {tasks.map((task) => (
-          <Link
-            key={task.id}
-            href={`/workspace/${workspaceId}/kanban`}
-            className="group rounded-xl border border-gray-100 bg-[#fcfcfc] px-3.5 py-3 transition-all hover:border-blue-200 hover:bg-blue-50/60 hover:shadow-sm dark:border-[#1c1f2e] dark:bg-[#0f1118] dark:hover:border-blue-800/40 dark:hover:bg-blue-900/5"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-gray-800 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{task.title}</div>
-                <div className="mt-1.5 flex items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
-                  <span className="inline-flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600" />
-                    {(task.columnId ?? "backlog").toUpperCase()}
-                  </span>
-                  <span>·</span>
-                  <span>{task.assignedProvider ?? "unassigned"}</span>
-                </div>
-              </div>
-              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-600 dark:bg-[#1c1f2e] dark:text-gray-300 shrink-0">
-                {task.priority ?? "medium"}
-              </span>
+      {tasks.length === 0 ? (
+        <div className="rounded-[24px] border border-dashed border-gray-200 bg-gray-50/70 p-6 dark:border-[#24283a] dark:bg-[#0f1219]">
+          <div className="max-w-md">
+            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              No active tasks yet
             </div>
-          </Link>
-        ))}
-      </div>
-    </div>
+            <div className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">
+              The selected workspace does not have open cards right now. Start a new task from the composer above, or open the full board to inspect completed work.
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {tasks.map((task) => (
+            <Link
+              key={task.id}
+              href={`/workspace/${workspaceId}/kanban`}
+              className="group rounded-[22px] border border-gray-200/80 bg-[#fcfcfc] px-4 py-4 transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50/60 hover:shadow-sm dark:border-[#1f2434] dark:bg-[#0f1219] dark:hover:border-blue-800/40 dark:hover:bg-blue-900/5"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium text-gray-800 transition-colors group-hover:text-blue-600 dark:text-gray-100 dark:group-hover:text-blue-400">{task.title}</div>
+                  <div className="mt-2 flex items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+                      {(task.columnId ?? "backlog").toUpperCase()}
+                    </span>
+                    <span>·</span>
+                    <span>{task.assignedProvider ?? "unassigned"}</span>
+                  </div>
+                </div>
+                <span className="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-[10px] uppercase tracking-wide text-gray-600 dark:bg-[#1c2233] dark:text-gray-300">
+                  {task.priority ?? "medium"}
+                </span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -507,36 +671,47 @@ function WorkspaceCards({
 
   if (workspacesHook.loading) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="flex min-h-[320px] items-center justify-center rounded-[28px] border border-gray-200/70 bg-white/95 dark:border-[#1c1f2e] dark:bg-[#10131b]/95">
         <span className="text-sm text-gray-400 dark:text-gray-500">Loading…</span>
       </div>
     );
   }
 
+  const sortedCards = [...cardData].sort((left, right) => {
+    if (left.id === workspaceId) return -1;
+    if (right.id === workspaceId) return 1;
+    return 0;
+  }).slice(0, 5);
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between mb-1">
-        <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-          Recent Workspaces
-        </h2>
+    <section className="rounded-[28px] border border-gray-200/70 bg-white/95 p-5 shadow-[0_18px_60px_-46px_rgba(15,23,42,0.42)] dark:border-[#1c1f2e] dark:bg-[#10131b]/95 sm:p-6">
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">
+            Workspace Pulse
+          </h2>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+            Keep the workspace list short and scannable. The homepage should hint at where work lives without turning into a management index.
+          </p>
+        </div>
         <div className="relative" ref={workspacesMenuRef}>
           <button
             onClick={() => setShowWorkspacesMenu(!showWorkspacesMenu)}
-            className="text-[11px] text-amber-600 dark:text-amber-500 hover:text-amber-700 dark:hover:text-amber-400 transition-colors flex items-center gap-1"
+            className="inline-flex items-center gap-1 rounded-full border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-800 dark:border-[#2a3042] dark:text-gray-400 dark:hover:border-[#39415a] dark:hover:text-gray-200"
           >
             View all
-            <svg className={`w-2.5 h-2.5 transition-transform ${showWorkspacesMenu ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className={`h-2.5 w-2.5 transition-transform ${showWorkspacesMenu ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
             </svg>
           </button>
           {showWorkspacesMenu && (
-            <div className="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-[#12141c] border border-gray-100 dark:border-[#1c1f2e] rounded-lg shadow-lg z-50 py-1 overflow-hidden">
+            <div className="absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-2xl border border-gray-100 bg-white py-1 shadow-lg dark:border-[#1c1f2e] dark:bg-[#12141c]">
               <Link
                 href="/workspaces"
                 onClick={() => setShowWorkspacesMenu(false)}
-                className="flex items-center gap-2 px-3 py-2 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1a1d2c] transition-colors"
+                className="flex items-center gap-2 px-3 py-2 text-xs text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-[#1a1d2c]"
               >
-                <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <svg className="h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776" />
                 </svg>
                 All Workspaces
@@ -544,9 +719,9 @@ function WorkspaceCards({
               <Link
                 href="/sessions"
                 onClick={() => setShowWorkspacesMenu(false)}
-                className="flex items-center gap-2 px-3 py-2 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1a1d2c] transition-colors"
+                className="flex items-center gap-2 px-3 py-2 text-xs text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-[#1a1d2c]"
               >
-                <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <svg className="h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-3 3v-3z" />
                 </svg>
                 All Sessions
@@ -556,96 +731,108 @@ function WorkspaceCards({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {cardData.map((ws) => {
+      <div className="flex flex-col gap-3">
+        {sortedCards.map((ws) => {
           const isActive = ws.id === workspaceId;
           return (
             <button
               key={ws.id}
               onClick={() => onWorkspaceSelect(ws.id)}
-              className={`group text-left rounded-xl border p-4 transition-all hover:shadow-sm ${
+              className={`group text-left rounded-[22px] border px-4 py-4 transition-all hover:-translate-y-0.5 hover:shadow-sm ${
                 isActive
-                  ? "bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-700/50"
-                  : "bg-white dark:bg-[#12141c] border-gray-100 dark:border-[#1c1f2e] hover:border-amber-200 dark:hover:border-amber-700/40"
+                  ? "border-amber-200 bg-amber-50/80 dark:border-amber-700/50 dark:bg-amber-900/10"
+                  : "border-gray-200/80 bg-[#fcfcfc] dark:border-[#1c1f2e] dark:bg-[#0f1219] hover:border-amber-200 dark:hover:border-amber-700/40"
               }`}
             >
-              {/* Workspace header */}
-              <div className="flex items-start justify-between gap-2 mb-2.5">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className={`w-2 h-2 rounded-full shrink-0 transition-colors ${isActive ? "bg-amber-500" : "bg-emerald-500 group-hover:bg-amber-400"}`} />
-                  <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate leading-tight">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2 w-2 shrink-0 rounded-full transition-colors ${isActive ? "bg-amber-500" : "bg-emerald-500 group-hover:bg-amber-400"}`} />
+                    {isActive && (
+                      <span className="inline-flex rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-amber-700 dark:bg-amber-950/70 dark:text-amber-200">
+                        Current
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-2 truncate text-sm font-medium leading-tight text-gray-800 dark:text-gray-200">
                     {ws.title}
-                  </span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                    {ws.recentSessions.length > 0 ? "Recent session activity" : "No recent sessions yet"}
+                  </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <Link
                     href={`/workspace/${ws.id}/kanban`}
                     onClick={(e) => e.stopPropagation()}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-blue-400 hover:text-blue-600 dark:text-blue-500 dark:hover:text-blue-400"
+                    className="rounded-full border border-transparent p-1 text-blue-400 opacity-0 transition-opacity hover:border-blue-100 hover:text-blue-600 group-hover:opacity-100 dark:text-blue-500 dark:hover:border-blue-900/30 dark:hover:text-blue-400"
                     title="Open Kanban board"
                   >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
                     </svg>
                   </Link>
                   <Link
                     href={`/workspace/${ws.id}`}
                     onClick={(e) => e.stopPropagation()}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    className="rounded-full border border-transparent p-1 text-gray-400 opacity-0 transition-opacity hover:border-gray-200 hover:text-gray-600 group-hover:opacity-100 dark:hover:border-[#2a3042] dark:hover:text-gray-300"
                     title="Open workspace"
                   >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
                     </svg>
                   </Link>
                 </div>
               </div>
 
-              {/* Recent sessions */}
               {ws.recentSessions.length > 0 ? (
-                <div className="space-y-1">
-                  {ws.recentSessions.map((session) => (
+                <div className="space-y-2">
+                  {ws.recentSessions.slice(0, 2).map((session) => (
                     <div
                       key={session.sessionId}
-                      className="flex items-center gap-1.5 cursor-pointer group/session"
+                      className="flex cursor-pointer items-center gap-2 rounded-xl bg-white/70 px-3 py-2 dark:bg-[#131722]"
                       onClick={(e) => { e.stopPropagation(); onSessionClick(session.sessionId); }}
                     >
-                      <svg className="w-3 h-3 shrink-0 text-blue-400 dark:text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <svg className="h-3.5 w-3.5 shrink-0 text-blue-400 dark:text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-3 3v-3z" />
                       </svg>
-                      <span className="text-[10px] text-gray-500 dark:text-gray-400 truncate flex-1 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+                      <span className="flex-1 truncate text-[11px] text-gray-600 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200">
                         {session.displayName}
                       </span>
-                      <span className="text-[9px] text-gray-300 dark:text-gray-600 font-mono shrink-0">
+                      <span className="shrink-0 text-[9px] font-mono text-gray-300 dark:text-gray-600">
                         {formatTime(session.createdAt)}
                       </span>
                     </div>
                   ))}
                 </div>
               ) : (
-                <span className="text-[10px] text-gray-300 dark:text-gray-600 italic">No sessions yet</span>
+                <span className="text-[11px] italic text-gray-300 dark:text-gray-600">No sessions yet</span>
               )}
             </button>
           );
         })}
 
-        {/* New workspace card */}
         <button
           onClick={() => onWorkspaceCreate("New Workspace")}
-          className="text-left rounded-xl border border-dashed border-gray-200 dark:border-[#1c1f2e] p-4 transition-all hover:border-amber-300 dark:hover:border-amber-700/50 hover:bg-amber-50/50 dark:hover:bg-amber-900/5 group"
+          className="group text-left rounded-[22px] border border-dashed border-gray-200 p-4 transition-all hover:border-amber-300 hover:bg-amber-50/50 dark:border-[#1c1f2e] dark:hover:border-amber-700/50 dark:hover:bg-amber-900/5"
         >
           <div className="flex items-center gap-2">
-            <span className="w-5 h-5 rounded-md bg-gray-100 dark:bg-[#1a1d2c] flex items-center justify-center group-hover:bg-amber-100 dark:group-hover:bg-amber-900/30 transition-colors">
-              <svg className="w-3 h-3 text-gray-400 dark:text-gray-500 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gray-100 transition-colors group-hover:bg-amber-100 dark:bg-[#1a1d2c] dark:group-hover:bg-amber-900/30">
+              <svg className="h-4 w-4 text-gray-400 transition-colors group-hover:text-amber-600 dark:text-gray-500 dark:group-hover:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
             </span>
-            <span className="text-xs text-gray-400 dark:text-gray-500 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
-              New workspace
-            </span>
+            <div>
+              <div className="text-sm font-medium text-gray-700 transition-colors group-hover:text-amber-700 dark:text-gray-300 dark:group-hover:text-amber-300">
+                New workspace
+              </div>
+              <div className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                Add another lane without leaving the homepage.
+              </div>
+            </div>
           </div>
         </button>
       </div>
-    </div>
+    </section>
   );
 }
