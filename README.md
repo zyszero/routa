@@ -31,6 +31,20 @@
 
 Instead of a single AI handling everything, Routa enables multiple agents to work together—one plans, another implements, and a third verifies—creating a more robust and scalable development workflow.
 
+## 📋 Kanban Task Management
+
+![Routa Kanban Overview](https://github.com/user-attachments/assets/8fdf7934-f8ba-469f-a8b8-70e215637a45)
+
+Routa's **Kanban board** is the central hub for multi-agent coordination:
+
+- **📊 Visual Workflow**: Drag-and-drop task cards across columns (Backlog → Todo → Dev → Review → Done)
+- **🤖 Agent Automation**: Assign specialized agents to each column for automatic task processing
+- **🔄 Real-time Sync**: Live updates as agents move tasks, add comments, and complete work
+- **💬 Natural Language Planning**: Describe your goals in plain text, let Routa create and organize tasks
+- **🎯 Session Management**: Track agent interactions, view execution history, and monitor progress
+
+The Kanban interface provides full visibility into what each agent is working on, task dependencies, and overall project status—making multi-agent collaboration transparent and manageable.
+
 ### What It Does
 
 - **Breaks down complex work** into manageable tasks across specialized agents
