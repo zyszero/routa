@@ -30,6 +30,7 @@ import type {ParsedTask} from "@/client/utils/task-block-parser";
 import {consumePendingPrompt, storePendingPrompt} from "@/client/utils/pending-prompt";
 import {SettingsPanel, DockerConfigModal, loadDefaultProviders, loadProviderConnectionConfig, getModelDefinitionByAlias} from "@/client/components/settings-panel";
 import {getDesktopApiBaseUrl, shouldSuppressTeardownError} from "@/client/utils/diagnostics";
+import { getToolEventLabel } from "@/client/components/chat-panel/tool-call-name";
 
 type AgentRole = "CRAFTER" | "ROUTA" | "GATE" | "DEVELOPER";
 
@@ -719,14 +720,14 @@ export function SessionPageClient() {
 
           case "tool_call": {
             const toolCallId = update.toolCallId as string | undefined;
-            const title = (update.title as string) ?? "tool";
+            const toolName = getToolEventLabel(update);
             const status = (update.status as string) ?? "running";
             messages.push({
               id: toolCallId ?? crypto.randomUUID(),
               role: "tool",
-              content: title,
+              content: toolName,
               timestamp: new Date(),
-              toolName: title,
+              toolName,
               toolStatus: status,
             });
             break;
@@ -736,10 +737,12 @@ export function SessionPageClient() {
             const toolCallId = update.toolCallId as string | undefined;
             const status = update.status as string | undefined;
             if (toolCallId) {
-              const idx = messages.findIndex((m) => m.id === toolCallId || (m.role === "tool" && m.toolName === (update.title as string)));
+              const toolName = getToolEventLabel(update);
+              const idx = messages.findIndex((m) => m.id === toolCallId || (m.role === "tool" && m.toolName === toolName));
               if (idx >= 0) {
                 messages[idx] = {
                   ...messages[idx],
+                  toolName: toolName ?? messages[idx].toolName,
                   toolStatus: status ?? messages[idx].toolStatus,
                 };
               }
@@ -1772,13 +1775,13 @@ export function SessionPageClient() {
             }
             case "tool_call": {
               const toolCallId = (update.toolCallId as string | undefined) ?? crypto.randomUUID();
-              const title = (update.title as string | undefined) ?? "tool";
+              const toolName = getToolEventLabel(update);
               messages.push({
                 id: toolCallId,
                 role: "tool",
-                content: title,
+                content: toolName,
                 timestamp: new Date(),
-                toolName: title,
+                toolName,
                 toolStatus: (update.status as string | undefined) ?? "running",
               });
               break;
@@ -1790,6 +1793,7 @@ export function SessionPageClient() {
               if (messageIndex >= 0) {
                 messages[messageIndex] = {
                   ...messages[messageIndex],
+                  toolName: getToolEventLabel(update) ?? messages[messageIndex].toolName,
                   toolStatus: (update.status as string | undefined) ?? messages[messageIndex].toolStatus,
                 };
               }

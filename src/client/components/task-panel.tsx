@@ -18,6 +18,7 @@ import type { ParsedTask } from "../utils/task-block-parser";
 import { MarkdownViewer } from "./markdown/markdown-viewer";
 import { MermaidRenderer } from "./markdown/mermaid-renderer";
 import { normalizeThoughtContent } from "./chat-panel/thought-content";
+import { getToolEventLabel } from "./chat-panel/tool-call-name";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -314,16 +315,18 @@ export function CraftersView({
                 }
               }
               break;
-            case "tool_call":
+            case "tool_call": {
+              const toolName = getToolEventLabel(update as Record<string, unknown>);
               messages.push({
                 id: `tool-${crypto.randomUUID()}`,
                 role: "tool",
-                content: update.title ?? "tool",
+                content: toolName,
                 timestamp: new Date(),
-                toolName: update.title ?? "tool",
+                toolName,
                 toolStatus: update.status ?? "completed",
               });
               break;
+            }
           }
         }
 

@@ -12,6 +12,7 @@ import {
   extractFileChangeFromToolResult,
   extractFilesModified,
 } from "../../../utils/file-changes-tracker";
+import { getToolEventLabel, getToolEventName } from "../tool-call-name";
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>;
 
@@ -91,7 +92,7 @@ export function processUpdate(
 
     case "tool_call": {
       const toolCallId = update.toolCallId as string | undefined;
-      const title = (update.title as string) ?? "tool";
+      const toolName = getToolEventLabel(update);
       const status = (update.status as string) ?? "running";
       const toolKind = update.kind as string | undefined;
       const rawInput = (typeof update.rawInput === "object" && update.rawInput !== null)
@@ -114,9 +115,9 @@ export function processUpdate(
         arr.push({
           id: toolCallId ?? uuidv4(),
           role: "tool",
-          content: contentParts.join("\n\n") || title,
+          content: contentParts.join("\n\n") || toolName,
           timestamp: new Date(),
-          toolName: title,
+          toolName,
           toolStatus: status,
           toolCallId,
           toolKind,
@@ -261,7 +262,7 @@ export function processUpdate(
 
     case "tool_call_start": {
       const toolCallId = update.toolCallId as string | undefined;
-      const toolName = update.toolName as string | undefined;
+      const toolName = getToolEventName(update);
       const toolKind = update.kind as string | undefined;
       if (toolCallId) {
         arr.push({
@@ -281,7 +282,7 @@ export function processUpdate(
     case "tool_call_params_delta": {
       const toolCallId = update.toolCallId as string | undefined;
       const parsedInput = update.parsedInput as Record<string, unknown> | null;
-      const title = update.title as string | undefined;
+      const toolName = getToolEventName(update);
       if (toolCallId) {
         const idx = arr.findIndex((m) => m.toolCallId === toolCallId);
         if (idx >= 0) {
@@ -291,7 +292,8 @@ export function processUpdate(
             : "(streaming parameters...)";
           arr[idx] = {
             ...existing,
-            content: `${title ?? existing.toolName ?? "tool"}\n\n${inputPreview}`,
+            content: `${toolName ?? existing.toolName ?? "tool"}\n\n${inputPreview}`,
+            toolName: toolName ?? existing.toolName,
             toolRawInput: parsedInput ?? existing.toolRawInput,
           };
         }
@@ -368,7 +370,7 @@ function processToolCallUpdate(
   const status = update.status as string | undefined;
   const delegatedTaskId = update.delegatedTaskId as string | undefined;
   const toolKind = update.kind as string | undefined;
-  const toolName = (update.title as string) ?? toolKind;
+  const toolName = getToolEventName(update) ?? toolKind;
   const rawOutput = typeof update.rawOutput === "string" ? update.rawOutput : undefined;
   const rawInput = (typeof update.rawInput === "object" && update.rawInput !== null)
     ? update.rawInput as Record<string, unknown>
@@ -407,7 +409,7 @@ function processToolCallUpdate(
         toolRawInput: rawInput ?? existing.toolRawInput,
         toolRawOutput: update.rawOutput ?? existing.toolRawOutput,
         content: outputParts.length
-          ? `${existing.toolName ?? toolName ?? "tool"}\n\nOutput:\n${outputParts.join("\n")}`
+          ? `${toolName ?? existing.toolName ?? "tool"}\n\nOutput:\n${outputParts.join("\n")}`
           : existing.content,
       };
     } else {
@@ -544,7 +546,7 @@ export function processHistoryToMessages(
 
       case "tool_call": {
         const toolCallId = update.toolCallId as string | undefined;
-        const title = (update.title as string) ?? "tool";
+        const toolName = getToolEventLabel(update);
         const status = (update.status as string) ?? "running";
         const toolKind = update.kind as string | undefined;
         const rawInput = (typeof update.rawInput === "object" && update.rawInput !== null)
@@ -567,9 +569,9 @@ export function processHistoryToMessages(
           messages.push({
             id: toolCallId ?? uuidv4(),
             role: "tool",
-            content: contentParts.join("\n\n") || title,
+            content: contentParts.join("\n\n") || toolName,
             timestamp: new Date(),
-            toolName: title,
+            toolName,
             toolStatus: status,
             toolCallId,
             toolKind,
@@ -583,7 +585,7 @@ export function processHistoryToMessages(
         const toolCallId = update.toolCallId as string | undefined;
         const status = update.status as string | undefined;
         const toolKind = update.kind as string | undefined;
-        const toolName = (update.title as string) ?? toolKind;
+        const toolName = getToolEventName(update) ?? toolKind;
         const rawInput = (typeof update.rawInput === "object" && update.rawInput !== null)
           ? update.rawInput as Record<string, unknown>
           : undefined;
@@ -615,7 +617,7 @@ export function processHistoryToMessages(
               toolRawInput: rawInput ?? existing.toolRawInput,
               toolRawOutput: update.rawOutput ?? existing.toolRawOutput,
               content: outputParts.length
-                ? `${existing.toolName ?? toolName ?? "tool"}\n\nOutput:\n${outputParts.join("\n")}`
+                ? `${toolName ?? existing.toolName ?? "tool"}\n\nOutput:\n${outputParts.join("\n")}`
                 : existing.content,
             };
           } else {

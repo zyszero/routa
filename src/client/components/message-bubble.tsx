@@ -5,6 +5,7 @@ import {MarkdownViewer} from "@/client/components/markdown/markdown-viewer";
 import {TaskProgressBar, TaskInfo} from "@/client/components/task-progress-bar";
 import {summarizeToolOutput, ToolInputTable, ToolOutputView} from "@/client/components/tool-call-content";
 import {normalizeThoughtContent} from "@/client/components/chat-panel/thought-content";
+import { inferToolDisplayName } from "@/client/components/tool-display-name";
 
 interface AskUserQuestionOption {
     label: string;
@@ -189,88 +190,6 @@ function formatToolInputInline(rawInput?: Record<string, unknown>, maxLen = 60):
 }
 
 /**
- * Check if a string looks like a file path (contains path separators or file extension).
- */
-function looksLikeFilePath(str: string): boolean {
-    if (!str) return false;
-    // Check for path separators or file extensions
-    return str.includes("/") || str.includes("\\") || /\.[a-z]{1,5}$/i.test(str);
-}
-
-/**
- * Check if a string is a generic/placeholder tool name that should trigger inference.
- */
-function isGenericToolName(name: string | undefined): boolean {
-    if (!name) return true;
-    const genericNames = ["other", "tool", "unknown", "function", "action"];
-    return genericNames.includes(name.toLowerCase());
-}
-
-/**
- * Try to infer tool name from input parameters.
- */
-function inferFromInput(rawInput?: Record<string, unknown>): string | null {
-    if (!rawInput) return null;
-
-    const hasFilePath = "file_path" in rawInput || "path" in rawInput || "filePath" in rawInput;
-    const hasContent = "content" in rawInput || "file_content" in rawInput;
-    const hasCommand = "command" in rawInput;
-    const hasInfoRequest = "information_request" in rawInput;
-    const hasQuery = "query" in rawInput;
-    const hasPattern = "pattern" in rawInput || "glob_pattern" in rawInput;
-    const hasUrl = "url" in rawInput;
-    const hasOldStr = "old_str" in rawInput || "old_str_1" in rawInput;
-    const hasTerminalId = "terminal_id" in rawInput;
-    const hasInsertLine = "insert_line" in rawInput || "insert_line_1" in rawInput;
-    const hasViewRange = "view_range" in rawInput;
-
-    if (hasInfoRequest) return "codebase-retrieval";
-    if (hasOldStr && hasFilePath) return "str-replace-editor";
-    if (hasInsertLine && hasFilePath) return "str-replace-editor";
-    if (hasViewRange && hasFilePath) return "view";
-    if (hasFilePath && hasContent) return "write-file";
-    if (hasFilePath && !hasContent) return "read-file";
-    if (hasTerminalId && hasCommand) return "launch-process";
-    if (hasTerminalId) return "terminal";
-    if (hasCommand) return "shell";
-    if (hasUrl && hasQuery) return "web-search";
-    if (hasUrl) return "web-fetch";
-    if (hasPattern) return "glob";
-    if (hasQuery) return "search";
-
-    return null;
-}
-
-/**
- * Infer the actual tool name from the title, kind, and input parameters.
- * Handles cases where providers send file paths or generic names as the title.
- */
-function inferToolName(
-    title: string | undefined,
-    kind: string | undefined,
-    rawInput?: Record<string, unknown>
-): string {
-    // First, try to infer from input parameters (most reliable)
-    const inferredFromInput = inferFromInput(rawInput);
-
-    // If title looks like a file path, prefer inferred name
-    if (title && looksLikeFilePath(title)) {
-        return inferredFromInput ?? kind ?? "read-file";
-    }
-
-    // If title is a generic name, prefer inferred name
-    if (isGenericToolName(title)) {
-        if (inferredFromInput) return inferredFromInput;
-        // If kind is also generic, still return inferred or fallback
-        if (!isGenericToolName(kind)) return kind!;
-        return inferredFromInput ?? "tool";
-    }
-
-    // Title looks like a valid specific tool name
-    return title ?? inferredFromInput ?? kind ?? "tool";
-}
-
-/**
  * Normalize tool kind from any provider (Claude Code, OpenCode, etc.)
  * to a canonical kind used for icon/styling.
  */
@@ -443,7 +362,7 @@ function ToolBubble({
                     : "bg-gray-400";
 
     // Infer the actual tool name - handles cases where providers send file paths as title
-    const displayName = inferToolName(toolName, toolKind, rawInput);
+    const displayName = inferToolDisplayName(toolName, toolKind, rawInput);
     // Use inferred name for kind normalization if toolKind is not set
     const effectiveKind = toolKind ?? displayName;
 
