@@ -128,6 +128,80 @@ describe("KanbanTab lane automation labels", () => {
   });
 });
 
+describe("KanbanTab card detail manual runs", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("allows running a card from detail while inheriting the lane default automation", async () => {
+    const automatedBoard: KanbanBoardInfo = {
+      ...board,
+      columns: [
+        {
+          id: "backlog",
+          name: "Backlog",
+          position: 0,
+          stage: "backlog",
+          automation: {
+            enabled: true,
+            providerId: "claude",
+            role: "ROUTA",
+            specialistId: "backlog-refiner",
+            specialistName: "Backlog Refiner",
+            transitionType: "exit",
+          },
+        },
+      ],
+    };
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "PATCH" && url === "/api/tasks/task-1") {
+        return {
+          ok: true,
+          json: async () => ({
+            task: {
+              ...createTask("task-1", "Story One"),
+              triggerSessionId: "session-123",
+            },
+          }),
+        } as Response;
+      }
+      throw new Error(`Unexpected fetch: ${init?.method ?? "GET"} ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <KanbanTab
+        workspaceId="workspace-1"
+        boards={[automatedBoard]}
+        tasks={[createTask("task-1", "Story One")]}
+        sessions={[]}
+        providers={[{ id: "claude", name: "Claude Code" }]}
+        specialists={[{ id: "backlog-refiner", name: "Backlog Refiner", role: "ROUTA" }]}
+        codebases={[]}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Story One" }));
+
+    const runButton = await screen.findByTestId("kanban-detail-run");
+    expect(runButton.textContent).toBe("Run");
+    expect(screen.getByText(/Manual runs use the current lane default/i)).toBeTruthy();
+
+    fireEvent.click(runButton);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/tasks/task-1", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ retryTrigger: true }),
+      });
+    });
+  });
+});
+
 describe("KanbanTab session terminal hint", () => {
   afterEach(() => {
     vi.unstubAllGlobals();

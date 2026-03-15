@@ -14,6 +14,7 @@ import {
   getDefaultWorkspaceWorktreeRoot,
   getEffectiveWorkspaceMetadata,
 } from "../models/workspace";
+import { resolveEffectiveTaskAutomation } from "./effective-task-automation";
 import { getInternalApiOrigin, triggerAssignedTaskAgent } from "./agent-trigger";
 import { KanbanSessionQueue } from "./kanban-session-queue";
 import { getKanbanSessionConcurrencyLimit as getBoardSessionConcurrencyLimit } from "./board-session-limits";
@@ -102,6 +103,7 @@ async function startKanbanTaskSession(
     updatedAt: new Date(),
   };
   params.mutateTask?.(nextTask);
+  const board = await system.kanbanBoardStore.get(nextTask.boardId!);
 
   let preferredCodebase = (nextTask.codebaseIds?.length ?? 0) > 0
     ? await system.codebaseStore.get(nextTask.codebaseIds[0])
@@ -154,12 +156,21 @@ async function startKanbanTaskSession(
     }
   }
 
+  const effectiveAutomation = resolveEffectiveTaskAutomation(nextTask, board?.columns ?? []);
+  const taskForSession = {
+    ...nextTask,
+    assignedProvider: effectiveAutomation.providerId,
+    assignedRole: effectiveAutomation.role,
+    assignedSpecialistId: effectiveAutomation.specialistId,
+    assignedSpecialistName: effectiveAutomation.specialistName,
+  };
+
   const triggerResult = await triggerAssignedTaskAgent({
     origin: getInternalApiOrigin(),
     workspaceId: nextTask.workspaceId,
     cwd: worktreeCwd,
     branch: worktreeBranch,
-    task: nextTask,
+    task: taskForSession,
     eventBus: system.eventBus,
   });
 

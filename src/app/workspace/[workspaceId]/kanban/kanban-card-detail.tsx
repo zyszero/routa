@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
+import { resolveEffectiveTaskAutomation } from "@/core/kanban/effective-task-automation";
 import type { KanbanColumnInfo, SessionInfo, TaskInfo, WorktreeInfo } from "../types";
 
 interface SpecialistOption {
@@ -176,6 +177,7 @@ export function KanbanCardDetail({
 
         <ProviderSection
           task={task}
+          boardColumns={boardColumns ?? []}
           availableProviders={availableProviders}
           specialists={specialists}
           sessionCwdMismatch={sessionCwdMismatch}
@@ -390,6 +392,7 @@ function SessionHistorySection({
 
 function ProviderSection({
   task,
+  boardColumns,
   availableProviders,
   specialists,
   sessionCwdMismatch,
@@ -398,6 +401,7 @@ function ProviderSection({
   onProviderChange,
 }: {
   task: TaskInfo;
+  boardColumns: KanbanColumnInfo[];
   availableProviders: AcpProviderInfo[];
   specialists: SpecialistOption[];
   sessionCwdMismatch?: boolean;
@@ -405,6 +409,15 @@ function ProviderSection({
   onRetryTrigger: (taskId: string) => Promise<void>;
   onProviderChange?: (providerId: string | null) => void;
 }) {
+  const effectiveAutomation = resolveEffectiveTaskAutomation(task, boardColumns);
+  const canRunTask = effectiveAutomation.canRun && task.columnId !== "done";
+  const effectiveProvider = getProviderName(effectiveAutomation.providerId, availableProviders);
+  const effectiveSpecialist = getSpecialistName(
+    effectiveAutomation.specialistId,
+    effectiveAutomation.specialistName,
+    specialists,
+  );
+
   return (
     <div>
       <div className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Card Session Override</div>
@@ -438,6 +451,13 @@ function ProviderSection({
       <div className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
         Leave this empty to inherit the current lane&apos;s default provider, role, and specialist.
       </div>
+      {canRunTask && (
+        <div className="mt-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-900/40 dark:bg-sky-900/10 dark:text-sky-200">
+          Manual {task.triggerSessionId ? "reruns" : "runs"} use {effectiveAutomation.source === "card" ? "this card override" : "the current lane default"}:
+          {" "}
+          {effectiveProvider} · {effectiveAutomation.role ?? "DEVELOPER"} · {effectiveSpecialist}
+        </div>
+      )}
       {task.assignedProvider && (
         <div className="mt-2 grid grid-cols-2 gap-2">
           <select
@@ -471,11 +491,12 @@ function ProviderSection({
           Repository changed. The active session is still running in an older directory. Rerun to apply the new repo selection.
         </div>
       )}
-      {task.assignedProvider && (
+      {canRunTask && (
         <button
           onClick={async () => {
             await onRetryTrigger(task.id);
           }}
+          data-testid="kanban-detail-run"
           className="mt-2 w-full rounded-lg bg-emerald-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-600"
         >
           {task.triggerSessionId ? "Rerun" : "Run"}
