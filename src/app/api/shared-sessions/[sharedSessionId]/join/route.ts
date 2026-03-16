@@ -1,35 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSharedSessionService } from "@/core/shared-session";
-import { serializeParticipant, serializeSession, toErrorResponse } from "../../_helpers";
+import {
+  requireInviteJoinInput,
+  resolveSharedSessionContext,
+  serializeParticipant,
+  serializeSession,
+  type SharedSessionRouteParams,
+  toErrorResponse,
+} from "../../_helpers";
 
 export const dynamic = "force-dynamic";
 
-type Params = { params: Promise<{ sharedSessionId: string }> };
-
-export async function POST(request: NextRequest, { params }: Params) {
+export async function POST(request: NextRequest, { params }: SharedSessionRouteParams) {
   try {
-    const { sharedSessionId } = await params;
+    const { sharedSessionId, service } = await resolveSharedSessionContext(params);
     const body = await request.json() as {
       inviteToken?: string;
       userId?: string;
       displayName?: string;
       role?: "collaborator" | "viewer";
     };
-
-    if (!body.inviteToken) {
-      return NextResponse.json({ error: "inviteToken is required" }, { status: 400 });
+    const joinInput = requireInviteJoinInput(body);
+    if (joinInput instanceof NextResponse) {
+      return joinInput;
     }
-    if (!body.userId?.trim()) {
-      return NextResponse.json({ error: "userId is required" }, { status: 400 });
-    }
-
-    const service = getSharedSessionService();
     const { session, participant } = service.joinSession({
       sharedSessionId,
-      inviteToken: body.inviteToken,
-      userId: body.userId,
-      displayName: body.displayName,
-      role: body.role,
+      inviteToken: joinInput.inviteToken,
+      userId: joinInput.userId,
+      displayName: joinInput.displayName,
+      role: joinInput.role,
     });
 
     return NextResponse.json({
@@ -40,4 +39,3 @@ export async function POST(request: NextRequest, { params }: Params) {
     return toErrorResponse(error);
   }
 }
-

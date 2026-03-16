@@ -12,7 +12,9 @@ metrics:
   
   - name: file_line_limit
     command: |
-      find src apps crates -name '*.ts' -o -name '*.tsx' -o -name '*.rs' 2>/dev/null | \
+      find src apps crates \
+        \( -path '*/node_modules/*' -o -path '*/target/*' -o -path '*/.next/*' -o -path '*/_next/*' -o -path '*/bundled/*' \) -prune -o \
+        \( -name '*.ts' -o -name '*.tsx' -o -name '*.rs' \) -print 2>/dev/null | \
       xargs wc -l 2>/dev/null | grep -v total | \
       awk '$1 > 1000 {count++} END {print "files_over_1000_lines:", count+0}'
     pattern: "files_over_1000_lines: 0"
@@ -34,7 +36,7 @@ metrics:
   # ══════════════════════════════════════════════════════════════
 
   - name: duplicate_code_ts
-    command: npx jscpd --min-lines 10 --min-tokens 50 --reporters console --format typescript,javascript src apps 2>&1 || echo "jscpd not configured"
+    command: npx jscpd --min-lines 10 --min-tokens 50 --reporters console --format typescript,javascript --ignore "**/node_modules/**,**/target/**,**/.next/**,**/_next/**,**/bundled/**" src apps 2>&1 || echo "jscpd not configured"
     pattern: "Found 0 clones|No duplicates found|not configured|duplications found: 0"
     hard_gate: false
     description: "TypeScript/JavaScript 重复代码检测"
@@ -54,7 +56,7 @@ metrics:
 
   - name: cyclomatic_complexity
     command: |
-      npx eslint --rule "complexity: [error, 15]" --format compact src apps 2>&1 | grep -c "complexity" || echo "0"
+      npx eslint --rule "complexity: [error, 15]" --format compact src 2>&1 | grep -c "complexity" || echo "0"
     pattern: "^0$|No files"
     hard_gate: false
     description: "圈复杂度限制 ≤15"

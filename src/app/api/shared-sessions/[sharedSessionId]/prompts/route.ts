@@ -1,35 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSharedSessionService } from "@/core/shared-session";
-import { serializeApproval, toErrorResponse } from "../../_helpers";
+import {
+  badRequest,
+  requireParticipantAuth,
+  resolveSharedSessionContext,
+  serializeApproval,
+  type SharedSessionRouteParams,
+  toErrorResponse,
+} from "../../_helpers";
 
 export const dynamic = "force-dynamic";
 
-type Params = { params: Promise<{ sharedSessionId: string }> };
-
-export async function POST(request: NextRequest, { params }: Params) {
+export async function POST(request: NextRequest, { params }: SharedSessionRouteParams) {
   try {
-    const { sharedSessionId } = await params;
+    const { sharedSessionId, service } = await resolveSharedSessionContext(params);
     const body = await request.json() as {
       participantId?: string;
       participantToken?: string;
       prompt?: string;
     };
-
-    if (!body.participantId || !body.participantToken) {
-      return NextResponse.json(
-        { error: "participantId and participantToken are required" },
-        { status: 400 },
-      );
+    const auth = requireParticipantAuth(body);
+    if (auth instanceof NextResponse) {
+      return auth;
     }
     if (typeof body.prompt !== "string") {
-      return NextResponse.json({ error: "prompt is required" }, { status: 400 });
+      return badRequest("prompt is required");
     }
-
-    const service = getSharedSessionService();
     const result = service.sendPrompt({
       sharedSessionId,
-      participantId: body.participantId,
-      participantToken: body.participantToken,
+      participantId: auth.participantId,
+      participantToken: auth.participantToken,
       prompt: body.prompt,
     });
 
@@ -41,4 +40,3 @@ export async function POST(request: NextRequest, { params }: Params) {
     return toErrorResponse(error);
   }
 }
-

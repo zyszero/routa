@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSharedSessionService } from "@/core/shared-session";
-import { serializeMessage, toErrorResponse } from "../../_helpers";
+import {
+  badRequest,
+  requireParticipantAuth,
+  resolveSharedSessionContext,
+  serializeMessage,
+  type SharedSessionRouteParams,
+  toErrorResponse,
+} from "../../_helpers";
 
 export const dynamic = "force-dynamic";
 
-type Params = { params: Promise<{ sharedSessionId: string }> };
-
-export async function GET(_request: NextRequest, { params }: Params) {
+export async function GET(_request: NextRequest, { params }: SharedSessionRouteParams) {
   try {
-    const { sharedSessionId } = await params;
-    const service = getSharedSessionService();
+    const { sharedSessionId, service } = await resolveSharedSessionContext(params);
     const messages = service.listMessages(sharedSessionId).map(serializeMessage);
     return NextResponse.json({ messages });
   } catch (error) {
@@ -17,30 +20,25 @@ export async function GET(_request: NextRequest, { params }: Params) {
   }
 }
 
-export async function POST(request: NextRequest, { params }: Params) {
+export async function POST(request: NextRequest, { params }: SharedSessionRouteParams) {
   try {
-    const { sharedSessionId } = await params;
+    const { sharedSessionId, service } = await resolveSharedSessionContext(params);
     const body = await request.json() as {
       participantId?: string;
       participantToken?: string;
       text?: string;
     };
-
-    if (!body.participantId || !body.participantToken) {
-      return NextResponse.json(
-        { error: "participantId and participantToken are required" },
-        { status: 400 },
-      );
+    const auth = requireParticipantAuth(body);
+    if (auth instanceof NextResponse) {
+      return auth;
     }
     if (typeof body.text !== "string") {
-      return NextResponse.json({ error: "text is required" }, { status: 400 });
+      return badRequest("text is required");
     }
-
-    const service = getSharedSessionService();
     const message = service.sendMessage({
       sharedSessionId,
-      participantId: body.participantId,
-      participantToken: body.participantToken,
+      participantId: auth.participantId,
+      participantToken: auth.participantToken,
       text: body.text,
     });
 
@@ -51,4 +49,3 @@ export async function POST(request: NextRequest, { params }: Params) {
     return toErrorResponse(error);
   }
 }
-
