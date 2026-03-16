@@ -65,7 +65,7 @@ struct ToolSpec {
 }
 
 pub fn run_scans(config: &ScanConfig) -> ScanReport {
-    let specs = vec![
+    let specs = [
         ToolSpec {
             id: "typescript-eslint",
             category: ScanCategory::Typescript,
