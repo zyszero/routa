@@ -1,24 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   requireInviteJoinInput,
-  resolveSharedSessionContext,
   serializeParticipant,
   serializeSession,
   type SharedSessionRouteParams,
-  toErrorResponse,
+  withSharedSessionJson,
 } from "../../_helpers";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest, { params }: SharedSessionRouteParams) {
-  try {
-    const { sharedSessionId, service } = await resolveSharedSessionContext(params);
-    const body = await request.json() as {
-      inviteToken?: string;
-      userId?: string;
-      displayName?: string;
-      role?: "collaborator" | "viewer";
-    };
+  return withSharedSessionJson<{
+    inviteToken?: string;
+    userId?: string;
+    displayName?: string;
+    role?: "collaborator" | "viewer";
+  }>(request, params, ({ sharedSessionId, service }, body) => {
     const joinInput = requireInviteJoinInput(body);
     if (joinInput instanceof NextResponse) {
       return joinInput;
@@ -35,7 +32,5 @@ export async function POST(request: NextRequest, { params }: SharedSessionRouteP
       session: serializeSession(session),
       participant: serializeParticipant(participant, true),
     });
-  } catch (error) {
-    return toErrorResponse(error);
-  }
+  });
 }

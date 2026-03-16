@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import type {
   SharedPromptApproval,
   SharedSessionService,
@@ -20,6 +20,11 @@ export interface SharedSessionContext {
 export interface ParticipantAuthInput {
   participantId?: string;
   participantToken?: string;
+}
+
+export interface ParticipantAuth {
+  participantId: string;
+  participantToken: string;
 }
 
 export function serializeSession(session: SharedSession) {
@@ -84,6 +89,39 @@ export function requireParticipantAuth(input: ParticipantAuthInput): NextRespons
     participantId: input.participantId,
     participantToken: input.participantToken,
   };
+}
+
+export async function withSharedSessionJson<TBody>(
+  request: NextRequest,
+  params: SharedSessionRouteParams["params"],
+  handler: (context: SharedSessionContext, body: TBody) => Promise<NextResponse> | NextResponse,
+): Promise<NextResponse> {
+  try {
+    const context = await resolveSharedSessionContext(params);
+    const body = (await request.json()) as TBody;
+    return await handler(context, body);
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+}
+
+export async function withParticipantAuthJson<TBody extends ParticipantAuthInput>(
+  request: NextRequest,
+  params: SharedSessionRouteParams["params"],
+  handler: (
+    context: SharedSessionContext,
+    auth: ParticipantAuth,
+    body: TBody,
+  ) => Promise<NextResponse> | NextResponse,
+): Promise<NextResponse> {
+  return withSharedSessionJson<TBody>(request, params, (context, body) => {
+    const auth = requireParticipantAuth(body);
+    if (auth instanceof NextResponse) {
+      return auth;
+    }
+
+    return handler(context, auth, body);
+  });
 }
 
 export function requireInviteJoinInput(input: {

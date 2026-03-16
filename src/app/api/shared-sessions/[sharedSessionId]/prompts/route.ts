@@ -1,27 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   badRequest,
-  requireParticipantAuth,
-  resolveSharedSessionContext,
   serializeApproval,
   type SharedSessionRouteParams,
-  toErrorResponse,
+  withParticipantAuthJson,
 } from "../../_helpers";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest, { params }: SharedSessionRouteParams) {
-  try {
-    const { sharedSessionId, service } = await resolveSharedSessionContext(params);
-    const body = await request.json() as {
-      participantId?: string;
-      participantToken?: string;
-      prompt?: string;
-    };
-    const auth = requireParticipantAuth(body);
-    if (auth instanceof NextResponse) {
-      return auth;
-    }
+  return withParticipantAuthJson<{
+    participantId?: string;
+    participantToken?: string;
+    prompt?: string;
+  }>(request, params, ({ sharedSessionId, service }, auth, body) => {
     if (typeof body.prompt !== "string") {
       return badRequest("prompt is required");
     }
@@ -36,7 +28,5 @@ export async function POST(request: NextRequest, { params }: SharedSessionRouteP
       status: result.status,
       approval: result.approval ? serializeApproval(result.approval) : null,
     });
-  } catch (error) {
-    return toErrorResponse(error);
-  }
+  });
 }
