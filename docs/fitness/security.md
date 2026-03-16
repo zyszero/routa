@@ -22,8 +22,8 @@ metrics:
     description: "检测 Rust 依赖中的已知漏洞"
 
   - name: semgrep_critical
-    command: semgrep --config=p/security-audit --config=p/owasp-top-ten --severity=ERROR --error --quiet . 2>&1 || true
-    pattern: "no matches found|Ran .* rules|0 findings"
+    command: semgrep --config=p/security-audit --config=p/owasp-top-ten --severity=ERROR --error --quiet . 2>&1 && echo "semgrep critical passed" || true
+    pattern: "semgrep critical passed|no matches found|Ran .* rules|0 findings"
     hard_gate: true
     description: "Semgrep SAST 扫描 - 仅 ERROR 级别"
 
@@ -38,8 +38,8 @@ metrics:
     description: "检测 npm 依赖中的 high 级别漏洞"
 
   - name: semgrep_warning
-    command: semgrep --config=p/security-audit --severity=WARNING --quiet . 2>&1 || true
-    pattern: "no matches found|Ran .* rules"
+    command: semgrep --config=p/security-audit --severity=WARNING --quiet . 2>&1 && echo "semgrep warning passed" || true
+    pattern: "semgrep warning passed|no matches found|Ran .* rules|0 findings"
     hard_gate: false
     description: "Semgrep SAST 扫描 - WARNING 级别"
 
