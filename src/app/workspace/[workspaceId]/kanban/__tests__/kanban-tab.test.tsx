@@ -202,6 +202,76 @@ describe("KanbanTab card detail manual runs", () => {
   });
 });
 
+describe("KanbanTab quick ACP assignment", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("shows a visible ACP selector on each card and patches the task inline", async () => {
+    const onRefresh = vi.fn();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (!init?.method && url === "/api/clone") {
+        return {
+          ok: true,
+          json: async () => ({ repositories: [] }),
+        } as Response;
+      }
+      if (init?.method === "PATCH" && url === "/api/tasks/task-1") {
+        return {
+          ok: true,
+          json: async () => ({
+            task: {
+              ...createTask("task-1", "Story One"),
+              assignedProvider: "claude",
+              assignedRole: "DEVELOPER",
+            },
+          }),
+        } as Response;
+      }
+      throw new Error(`Unexpected fetch: ${init?.method ?? "GET"} ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <KanbanTab
+        workspaceId="workspace-1"
+        boards={[board]}
+        tasks={[createTask("task-1", "Story One")]}
+        sessions={[]}
+        providers={[{
+          id: "claude",
+          name: "Claude Code",
+          description: "Claude Code provider",
+          command: "claude",
+          status: "available",
+        }]}
+        specialists={[]}
+        codebases={[]}
+        onRefresh={onRefresh}
+      />,
+    );
+
+    const acpSelect = screen.getByTestId("kanban-card-acp-select");
+    expect(acpSelect).toBeTruthy();
+    expect((acpSelect as HTMLSelectElement).value).toBe("");
+
+    fireEvent.change(acpSelect, { target: { value: "claude" } });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/tasks/task-1", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assignedProvider: "claude",
+          assignedRole: "DEVELOPER",
+        }),
+      });
+    });
+    expect(onRefresh).toHaveBeenCalled();
+  });
+});
+
 describe("KanbanTab session terminal hint", () => {
   afterEach(() => {
     vi.unstubAllGlobals();

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRoutaSystem } from "@/core/routa-system";
 import { TaskPriority, TaskStatus, type Task } from "@/core/models/task";
 import { columnIdToTaskStatus, taskStatusToColumnId } from "@/core/models/kanban";
+import { ensureTaskBoardContext } from "@/core/kanban/task-board-context";
 import { updateGitHubIssue } from "@/core/kanban/github-issues";
 import { GitWorktreeService } from "@/core/git/git-worktree-service";
 import { getDefaultWorkspaceWorktreeRoot, getEffectiveWorkspaceMetadata } from "@/core/models/workspace";
@@ -210,6 +211,8 @@ export async function PATCH(
   if (body.status && !body.columnId) {
     nextTask.columnId = taskStatusToColumnId(body.status);
   }
+
+  Object.assign(nextTask, await ensureTaskBoardContext(system, nextTask));
 
   const columnChanged = prepareTaskForColumnChange(existing.columnId, nextTask);
   if (columnChanged) {

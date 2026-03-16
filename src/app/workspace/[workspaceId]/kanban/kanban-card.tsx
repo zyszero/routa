@@ -64,6 +64,23 @@ export function KanbanCard({
     event.stopPropagation();
   };
 
+  const handleProviderChange = async (providerId: string) => {
+    if (providerId) {
+      await onPatchTask(task.id, {
+        assignedProvider: providerId,
+        assignedRole: task.assignedRole ?? "DEVELOPER",
+      });
+    } else {
+      await onPatchTask(task.id, {
+        assignedProvider: undefined,
+        assignedRole: undefined,
+        assignedSpecialistId: undefined,
+        assignedSpecialistName: undefined,
+      });
+    }
+    onRefresh();
+  };
+
   const handleDragStart = (event: DragEvent<HTMLDivElement>) => {
     event.dataTransfer.setData("text/plain", task.id);
     event.dataTransfer.effectAllowed = "move";
@@ -172,9 +189,9 @@ export function KanbanCard({
       {/* Worktree status badge */}
       <WorktreeBadge task={task} worktreeCache={worktreeCache} onOpenDetail={onOpenDetail} stopCardInteraction={stopCardInteraction} />
 
-      {/* Assignment Section (collapsed by default for denser list) */}
+      {/* Quick ACP assignment stays visible; advanced overrides are tucked under More. */}
       <div className="mt-3 border-t border-gray-200/50 pt-3 dark:border-[#262938]">
-        <div className="flex items-start justify-between gap-2 text-[11px]">
+        <div className="flex items-start justify-between gap-3 text-[11px]">
           <div className="flex min-w-0 flex-col gap-1.5">
             {assignedProvider ? (
               <div className="flex items-center gap-1.5 flex-wrap">
@@ -196,22 +213,47 @@ export function KanbanCard({
               <span className="text-gray-400 dark:text-gray-500">Unassigned</span>
             )}
           </div>
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              setShowAssignment((current) => !current);
-            }}
-            className="shrink-0 rounded-md border border-gray-200 px-2 py-0.5 text-[10px] text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-[#1b1e2b]"
-          >
-            {showAssignment ? "Hide" : "Assign"}
-          </button>
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <label className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-2 py-1 shadow-sm dark:border-gray-700 dark:bg-[#12141c]">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                ACP
+              </span>
+              <select
+                value={task.assignedProvider ?? ""}
+                disabled={availableProviders.length === 0}
+                onMouseDown={stopCardInteraction}
+                onClick={stopCardInteraction}
+                onChange={(event) => {
+                  void handleProviderChange(event.target.value);
+                }}
+                className="max-w-28 truncate bg-transparent text-[11px] font-medium text-gray-700 outline-none disabled:opacity-50 dark:text-gray-200"
+                aria-label={`ACP provider for ${task.title}`}
+                data-testid="kanban-card-acp-select"
+              >
+                <option value="">ACP</option>
+                {availableProviders.map((provider) => (
+                  <option key={provider.id} value={provider.id}>
+                    {provider.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setShowAssignment((current) => !current);
+              }}
+              className="rounded-md border border-gray-200 px-2 py-0.5 text-[10px] text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-[#1b1e2b]"
+            >
+              {showAssignment ? "Less" : "More"}
+            </button>
+          </div>
         </div>
 
         {showAssignment && (
           <AssignmentSection
             task={task}
-            availableProviders={availableProviders}
             specialists={specialists}
             stopCardInteraction={stopCardInteraction}
             onPatchTask={onPatchTask}
@@ -276,7 +318,6 @@ function WorktreeBadge({ task, worktreeCache, onOpenDetail, stopCardInteraction 
 
 interface AssignmentSectionProps {
   task: TaskInfo;
-  availableProviders: AcpProviderInfo[];
   specialists: SpecialistOption[];
   stopCardInteraction: (event: { stopPropagation: () => void }) => void;
   onPatchTask: (taskId: string, payload: Record<string, unknown>) => Promise<TaskInfo>;
@@ -285,7 +326,6 @@ interface AssignmentSectionProps {
 
 function AssignmentSection({
   task,
-  availableProviders,
   specialists,
   stopCardInteraction,
   onPatchTask,
@@ -293,41 +333,13 @@ function AssignmentSection({
 }: AssignmentSectionProps) {
   return (
     <div className="mt-2 space-y-2">
-      {/* Row 1: Provider */}
-      <div className="flex items-center gap-2">
-        <span className="w-16 shrink-0 text-[10px] font-medium text-gray-500 dark:text-gray-400">Provider</span>
-        <select
-          value={task.assignedProvider ?? ""}
-          onClick={stopCardInteraction}
-          onChange={async (event) => {
-            const providerId = event.target.value;
-            if (providerId) {
-              await onPatchTask(task.id, {
-                assignedProvider: providerId,
-                assignedRole: task.assignedRole ?? "DEVELOPER",
-              });
-            } else {
-              await onPatchTask(task.id, {
-                assignedProvider: undefined,
-                assignedRole: undefined,
-                assignedSpecialistId: undefined,
-                assignedSpecialistName: undefined,
-              });
-            }
-            onRefresh();
-          }}
-          className="flex-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] dark:border-gray-700 dark:bg-[#12141c]"
-        >
-          <option value="">Select...</option>
-          {availableProviders.map((provider) => (
-            <option key={provider.id} value={provider.id}>
-              {provider.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      {!task.assignedProvider && (
+        <div className="rounded-lg border border-dashed border-gray-200 bg-gray-100/70 px-3 py-2 text-[11px] text-gray-500 dark:border-gray-700 dark:bg-[#10131a] dark:text-gray-400">
+          Pick an ACP provider above to override the lane default for this card.
+        </div>
+      )}
 
-      {/* Row 2: Role (only show if provider is assigned) */}
+      {/* Role (only show if provider is assigned) */}
       {task.assignedProvider && (
         <div className="flex items-center gap-2">
           <span className="w-16 shrink-0 text-[10px] font-medium text-gray-500 dark:text-gray-400">Role</span>
@@ -347,7 +359,7 @@ function AssignmentSection({
         </div>
       )}
 
-      {/* Row 3: Specialist (only show if provider is assigned) */}
+      {/* Specialist (only show if provider is assigned) */}
       {task.assignedProvider && (
         <div className="flex items-center gap-2">
           <span className="w-16 shrink-0 text-[10px] font-medium text-gray-500 dark:text-gray-400">Specialist</span>
