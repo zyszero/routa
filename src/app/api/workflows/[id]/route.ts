@@ -7,16 +7,21 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import * as fs from "fs";
-import * as path from "path";
-import * as yaml from "js-yaml";
+import {
+  deleteWorkflowYaml,
+  getWorkflowFilePath,
+  parseWorkflowYamlInput,
+  readExistingWorkflow,
+  toWorkflowResponse,
+  workflowErrorResponse,
+  writeWorkflowYaml,
+} from "../_helpers";
 
 export const dynamic = "force-dynamic";
 
-const FLOWS_DIR = path.join(process.cwd(), "resources", "flows");
-
-function getFilePath(id: string): string {
-  return path.join(FLOWS_DIR, `${id}.yaml`);
+async function loadExistingWorkflow(id: string) {
+  const existing = await readExistingWorkflow(id);
+  return existing instanceof NextResponse ? existing : null;
 }
 
 // ─── GET ─────────────────────────────────────────────────────────────────────
@@ -27,37 +32,16 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const filePath = getFilePath(id);
-
-    if (!fs.existsSync(filePath)) {
-      return NextResponse.json({ error: "Workflow not found" }, { status: 404 });
-    }
-
-    const content = await fs.promises.readFile(filePath, "utf-8");
-    let parsed: Record<string, unknown> = {};
-    try {
-      parsed = yaml.load(content) as Record<string, unknown>;
-    } catch {
-      // Return raw content even if YAML is invalid
+    const existing = await readExistingWorkflow(id, true);
+    if (existing instanceof NextResponse) {
+      return existing;
     }
 
     return NextResponse.json({
-      workflow: {
-        id,
-        name: (parsed?.name as string) ?? id,
-        description: (parsed?.description as string) ?? "",
-        version: (parsed?.version as string) ?? "1.0",
-        trigger: parsed?.trigger,
-        steps: Array.isArray(parsed?.steps) ? parsed.steps : [],
-        yamlContent: content,
-      },
+      workflow: toWorkflowResponse(id, existing.yamlContent, existing.parsed),
     });
   } catch (err) {
-    console.error("[Workflows] GET [id] error:", err);
-    return NextResponse.json(
-      { error: "Failed to get workflow", details: String(err) },
-      { status: 500 }
-    );
+    return workflowErrorResponse("get", err);
   }
 }
 
@@ -69,51 +53,24 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const filePath = getFilePath(id);
-
-    if (!fs.existsSync(filePath)) {
-      return NextResponse.json({ error: "Workflow not found" }, { status: 404 });
+    const notFound = await loadExistingWorkflow(id);
+    if (notFound) {
+      return notFound;
     }
 
     const body = await request.json().catch(() => null);
-    if (!body?.yamlContent) {
-      return NextResponse.json({ error: "Required: yamlContent" }, { status: 400 });
+    const workflowInput = parseWorkflowYamlInput(body?.yamlContent);
+    if (workflowInput instanceof NextResponse) {
+      return workflowInput;
     }
 
-    // Validate YAML content
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = yaml.load(body.yamlContent) as Record<string, unknown>;
-    } catch (err) {
-      return NextResponse.json({ error: `Invalid YAML: ${err}` }, { status: 400 });
-    }
-
-    if (!parsed?.name || !Array.isArray(parsed?.steps) || parsed.steps.length === 0) {
-      return NextResponse.json(
-        { error: "Workflow YAML must have name and at least one step" },
-        { status: 400 }
-      );
-    }
-
-    await fs.promises.writeFile(filePath, body.yamlContent, "utf-8");
+    await writeWorkflowYaml(getWorkflowFilePath(id), workflowInput.yamlContent);
 
     return NextResponse.json({
-      workflow: {
-        id,
-        name: parsed.name as string,
-        description: (parsed.description as string) ?? "",
-        version: (parsed.version as string) ?? "1.0",
-        trigger: parsed.trigger,
-        steps: parsed.steps,
-        yamlContent: body.yamlContent,
-      },
+      workflow: toWorkflowResponse(id, workflowInput.yamlContent, workflowInput.parsed),
     });
   } catch (err) {
-    console.error("[Workflows] PUT [id] error:", err);
-    return NextResponse.json(
-      { error: "Failed to update workflow", details: String(err) },
-      { status: 500 }
-    );
+    return workflowErrorResponse("update", err);
   }
 }
 
@@ -125,19 +82,14 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const filePath = getFilePath(id);
-
-    if (!fs.existsSync(filePath)) {
-      return NextResponse.json({ error: "Workflow not found" }, { status: 404 });
+    const notFound = await loadExistingWorkflow(id);
+    if (notFound) {
+      return notFound;
     }
 
-    await fs.promises.unlink(filePath);
+    await deleteWorkflowYaml(getWorkflowFilePath(id));
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("[Workflows] DELETE [id] error:", err);
-    return NextResponse.json(
-      { error: "Failed to delete workflow", details: String(err) },
-      { status: 500 }
-    );
+    return workflowErrorResponse("delete", err);
   }
 }

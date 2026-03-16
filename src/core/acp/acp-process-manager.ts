@@ -15,6 +15,14 @@ import {PgAcpSessionStore} from "@/core/db/pg-acp-session-store";
 import type { LifecycleNotifier } from "@/core/acp/lifecycle-notifier";
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 
+const ACP_DEBUG = process.env.ROUTA_DEBUG_ACP === "1";
+
+function logAcpDebug(message: string): void {
+    if (ACP_DEBUG) {
+        console.info(message);
+    }
+}
+
 /**
  * A managed Claude Code process (separate from standard ACP).
  */
@@ -117,7 +125,7 @@ export class AcpProcessManager {
                 getDefaultRoutaMcpConfig(workspaceId, sessionId, toolMode),
             );
             mcpConfigs = mcpResult.mcpConfigs.length > 0 ? mcpResult.mcpConfigs : undefined;
-            console.log(`[AcpProcessManager] MCP setup for ${presetId}: ${mcpResult.summary}`);
+            logAcpDebug(`[AcpProcessManager] MCP setup for ${presetId}: ${mcpResult.summary}`);
         }
 
         const config = await buildConfigFromPreset(presetId, cwd, extraArgs, extraEnv, mcpConfigs);
@@ -197,8 +205,8 @@ export class AcpProcessManager {
 
         if (serverUrl) {
             // Mode 1: Remote Server
-            console.log(`[AcpProcessManager] Using OpenCode SDK adapter (remote server)`);
-            console.log(`[AcpProcessManager] Connecting to: ${serverUrl}`);
+            logAcpDebug(`[AcpProcessManager] Using OpenCode SDK adapter (remote server)`);
+            logAcpDebug(`[AcpProcessManager] Connecting to: ${serverUrl}`);
 
             const adapter = new OpencodeSdkAdapter(serverUrl, onNotification);
             await adapter.connect();
@@ -211,13 +219,13 @@ export class AcpProcessManager {
                 createdAt: new Date(),
             });
 
-            console.log(`[AcpProcessManager] OpenCode SDK session created: ${acpSessionId}`);
+            logAcpDebug(`[AcpProcessManager] OpenCode SDK session created: ${acpSessionId}`);
             return acpSessionId;
         }
 
         if (isOpencodeDirectApiConfigured()) {
             // Mode 2: Direct API (BigModel Coding API, etc.)
-            console.log(`[AcpProcessManager] Using OpenCode SDK adapter (direct API mode)`);
+            logAcpDebug(`[AcpProcessManager] Using OpenCode SDK adapter (direct API mode)`);
 
             const adapter = new OpencodeSdkDirectAdapter(onNotification);
             await adapter.connect();
@@ -230,7 +238,7 @@ export class AcpProcessManager {
                 createdAt: new Date(),
             });
 
-            console.log(`[AcpProcessManager] OpenCode SDK direct session created: ${acpSessionId}`);
+            logAcpDebug(`[AcpProcessManager] OpenCode SDK direct session created: ${acpSessionId}`);
             return acpSessionId;
         }
 
@@ -386,7 +394,7 @@ export class AcpProcessManager {
         instanceConfig?: AgentInstanceConfig,
         lifecycleNotifier?: LifecycleNotifier,
     ): Promise<string> {
-        console.log(`[AcpProcessManager] Using Claude Code SDK adapter for serverless environment`);
+        logAcpDebug(`[AcpProcessManager] Using Claude Code SDK adapter for serverless environment`);
 
         const { adapter, resolved } = AgentInstanceFactory.createClaudeCodeSdkAdapter(
             cwd,
@@ -407,7 +415,7 @@ export class AcpProcessManager {
         // Track instance config for observability
         getAgentInstanceManager().register(sessionId, resolved);
 
-        console.log(`[AcpProcessManager] Claude Code SDK session created: ${acpSessionId} (model: ${resolved.resolvedModel ?? 'default'})`);
+        logAcpDebug(`[AcpProcessManager] Claude Code SDK session created: ${acpSessionId} (model: ${resolved.resolvedModel ?? 'default'})`);
         return acpSessionId;
     }
 
@@ -426,7 +434,7 @@ export class AcpProcessManager {
         onNotification: NotificationHandler,
         options?: Omit<WorkspaceAgentAdapterOptions, never>,
     ): Promise<string> {
-        console.log(`[AcpProcessManager] Creating Workspace Agent session`);
+        logAcpDebug(`[AcpProcessManager] Creating Workspace Agent session`);
 
         const adapter = new WorkspaceAgentAdapter(cwd, onNotification, options);
         await adapter.connect();
@@ -439,7 +447,7 @@ export class AcpProcessManager {
             createdAt: new Date(),
         });
 
-        console.log(`[AcpProcessManager] Workspace Agent session created: ${acpSessionId}`);
+        logAcpDebug(`[AcpProcessManager] Workspace Agent session created: ${acpSessionId}`);
         return acpSessionId;
     }
 
@@ -543,7 +551,7 @@ export class AcpProcessManager {
 
         // If not in HTTP store (serverless cold start), try to recover from database
         if (!sessionRecord && isServerlessEnvironment() && getDatabaseDriver() === "postgres") {
-            console.log(`[AcpProcessManager] Session not in HTTP store, checking database: ${sessionId}`);
+            logAcpDebug(`[AcpProcessManager] Session not in HTTP store, checking database: ${sessionId}`);
             try {
                 const db = getPostgresDatabase();
                 const pgStore = new PgAcpSessionStore(db);
@@ -551,7 +559,7 @@ export class AcpProcessManager {
                 if (dbSession) {
                     cwd = dbSession.cwd;
                     provider = dbSession.provider;
-                    console.log(`[AcpProcessManager] Found session in database: provider=${provider}, cwd=${cwd}`);
+                    logAcpDebug(`[AcpProcessManager] Found session in database: provider=${provider}, cwd=${cwd}`);
 
                     // Restore to HTTP session store for future requests in this instance
                     store.upsertSession({
@@ -576,7 +584,7 @@ export class AcpProcessManager {
         }
 
         // Session exists but adapter not in memory - recreate it
-        console.log(`[AcpProcessManager] Recreating Claude Code SDK adapter for session: ${sessionId}`);
+        logAcpDebug(`[AcpProcessManager] Recreating Claude Code SDK adapter for session: ${sessionId}`);
 
         let mcpServers: Record<string, McpServerConfig> | undefined;
         try {
@@ -604,7 +612,7 @@ export class AcpProcessManager {
             createdAt: new Date(),
         });
 
-        console.log(`[AcpProcessManager] Claude Code SDK adapter recreated: ${acpSessionId}`);
+        logAcpDebug(`[AcpProcessManager] Claude Code SDK adapter recreated: ${acpSessionId}`);
         return adapter;
     }
 
@@ -755,14 +763,14 @@ export class AcpProcessManager {
 
         // If not in HTTP store (serverless cold start), try to recover from database
         if (!sessionRecord && isServerlessEnvironment() && getDatabaseDriver() === "postgres") {
-            console.log(`[AcpProcessManager] OpenCode session not in HTTP store, checking database: ${sessionId}`);
+            logAcpDebug(`[AcpProcessManager] OpenCode session not in HTTP store, checking database: ${sessionId}`);
             try {
                 const db = getPostgresDatabase();
                 const pgStore = new PgAcpSessionStore(db);
                 const dbSession = await pgStore.get(sessionId);
                 if (dbSession) {
                     provider = dbSession.provider;
-                    console.log(`[AcpProcessManager] Found OpenCode session in database: provider=${provider}`);
+                    logAcpDebug(`[AcpProcessManager] Found OpenCode session in database: provider=${provider}`);
 
                     // Restore to HTTP session store
                     store.upsertSession({
@@ -787,7 +795,7 @@ export class AcpProcessManager {
         }
 
         // Session exists but adapter not in memory - recreate it
-        console.log(`[AcpProcessManager] Recreating OpenCode SDK adapter for session: ${sessionId}`);
+        logAcpDebug(`[AcpProcessManager] Recreating OpenCode SDK adapter for session: ${sessionId}`);
 
         const serverUrl = getOpencodeServerUrl();
         let adapter: OpencodeSdkAdapter | OpencodeSdkDirectAdapter;
@@ -808,7 +816,7 @@ export class AcpProcessManager {
             createdAt: new Date(),
         });
 
-        console.log(`[AcpProcessManager] OpenCode SDK adapter recreated: ${acpSessionId}`);
+        logAcpDebug(`[AcpProcessManager] OpenCode SDK adapter recreated: ${acpSessionId}`);
         return adapter;
     }
 
