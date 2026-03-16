@@ -7,8 +7,8 @@ threshold:
 
 metrics:
   - name: api_contract_parity
-    command: npm run api:check 2>&1
-    pattern: "parity check passed|All endpoints match"
+    command: npm run api:check 2>&1 && echo "api parity passed"
+    pattern: "api parity passed"
     hard_gate: true
 
   - name: rust_api_test

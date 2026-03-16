@@ -39,6 +39,106 @@ components:
       type: string
       enum: [APPROVED, NOT_APPROVED, BLOCKED]
 
+    ReviewConfigSnippet:
+      type: object
+      required: [path, content]
+      properties:
+        path:
+          type: string
+        content:
+          type: string
+
+    ReviewAnalysisPayload:
+      type: object
+      required: [repoPath, repoRoot, base, head, changedFiles, diffStat, diff, configSnippets]
+      properties:
+        repoPath:
+          type: string
+        repoRoot:
+          type: string
+        base:
+          type: string
+        head:
+          type: string
+        changedFiles:
+          type: array
+          items:
+            type: string
+        diffStat:
+          type: string
+        diff:
+          type: string
+        configSnippets:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReviewConfigSnippet"
+        reviewRules:
+          type: string
+
+    ReviewRawPhaseOutput:
+      type: object
+      required: [context, candidates, validated]
+      properties:
+        context:
+          type: string
+        candidates:
+          type: string
+        validated:
+          type: string
+
+    ReviewAnalyzeRequest:
+      type: object
+      properties:
+        repoPath:
+          type: string
+        base:
+          type: string
+        head:
+          type: string
+        rulesFile:
+          type: string
+        model:
+          type: string
+
+    ReviewAnalyzeResponse:
+      type: object
+      required: [payload, context, candidates, validated, raw]
+      properties:
+        payload:
+          $ref: "#/components/schemas/ReviewAnalysisPayload"
+        context:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: array
+              items: {}
+            - type: string
+            - type: number
+            - type: boolean
+            - type: "null"
+        candidates:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: array
+              items: {}
+            - type: string
+            - type: number
+            - type: boolean
+            - type: "null"
+        validated:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: array
+              items: {}
+            - type: string
+            - type: number
+            - type: boolean
+            - type: "null"
+        raw:
+          $ref: "#/components/schemas/ReviewRawPhaseOutput"
+
     TaskPriority:
       type: string
       enum: [low, medium, high, urgent]
@@ -3700,6 +3800,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /api/review/analyze:
+    post:
+      operationId: analyzeReview
+      summary: Analyze a git diff with the single public PR Reviewer specialist
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewAnalyzeRequest"
+      responses:
+        "200":
+          description: Review analysis result with internal worker phase outputs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewAnalyzeResponse"
+        "500":
+          description: Review analysis failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/kanban/events:
+    get:
+      operationId: streamKanbanEvents
+      summary: Stream kanban workspace events over SSE
+      parameters:
+        - name: workspaceId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: SSE stream of kanban workspace events
+          content:
+            text/event-stream:
+              schema:
+                type: string
         "404":
           description: Sandbox not found
           content:

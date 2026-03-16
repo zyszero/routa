@@ -279,10 +279,12 @@ function normalizeEndpoint(e: RouteEndpoint): string {
   // between backends don't cause false mismatches:
   //   - Next.js [param], [taskId], [workspaceId] → {p}
   //   - Contract / Rust {id}, {task_id}, {workspaceId} → {p}
+  //   - Axum-style :id segments → {p}
   // Multi-segment params like /notes/{workspaceId}/{noteId} → /notes/{p}/{p}
   const normalizedPath = e.path
     .replace(/\[([^\]]+)\]/g, "{p}")      // Next.js [param] → {p}
     .replace(/\{[^}]+\}/g, "{p}")         // Any {param} → {p}
+    .replace(/\/:[^/]+/g, "/{p}")         // Axum :param → {p}
     .replace(/\/+$/, "");                  // Remove trailing slashes
   return `${e.method} ${normalizedPath}`;
 }

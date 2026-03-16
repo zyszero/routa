@@ -9,9 +9,9 @@
 //! |--------|-------------------------------|------------------------------|
 //! | GET    | `/sandboxes`                  | List all sandboxes           |
 //! | POST   | `/sandboxes`                  | Create a new sandbox         |
-//! | GET    | `/sandboxes/:id`              | Get sandbox info             |
-//! | POST   | `/sandboxes/:id/execute`      | Execute code (NDJSON stream) |
-//! | DELETE | `/sandboxes/:id`              | Delete a sandbox             |
+//! | GET    | `/sandboxes/{id}`             | Get sandbox info             |
+//! | POST   | `/sandboxes/{id}/execute`     | Execute code (NDJSON stream) |
+//! | DELETE | `/sandboxes/{id}`             | Delete a sandbox             |
 
 use axum::{
     body::Body,
@@ -31,15 +31,17 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_sandboxes))
         .route("/", post(create_sandbox))
-        .route("/:id", get(get_sandbox))
-        .route("/:id/execute", post(execute_code))
-        .route("/:id", delete(delete_sandbox))
+        .route("/{id}", get(get_sandbox))
+        .route("/{id}/execute", post(execute_code))
+        .route("/{id}", delete(delete_sandbox))
 }
 
 // ── GET /sandboxes ────────────────────────────────────────────────────────────
 
 /// List all active sandbox containers.
-async fn list_sandboxes(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ServerError> {
+async fn list_sandboxes(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, ServerError> {
     let sandboxes = state.sandbox_manager.list_sandboxes().await;
     Ok(Json(json!({ "sandboxes": sandboxes })))
 }
@@ -60,7 +62,7 @@ async fn create_sandbox(
     Ok((StatusCode::CREATED, Json(json!(info))))
 }
 
-// ── GET /sandboxes/:id ────────────────────────────────────────────────────────
+// ── GET /sandboxes/{id} ───────────────────────────────────────────────────────
 
 /// Get information about a specific sandbox.
 async fn get_sandbox(
@@ -76,7 +78,7 @@ async fn get_sandbox(
     Ok(Json(json!(info)))
 }
 
-// ── POST /sandboxes/:id/execute ───────────────────────────────────────────────
+// ── POST /sandboxes/{id}/execute ──────────────────────────────────────────────
 
 /// Execute code inside a sandbox and stream back the results as NDJSON.
 ///
@@ -111,7 +113,7 @@ async fn execute_code(
         .map_err(|e| ServerError::Internal(e.to_string()))
 }
 
-// ── DELETE /sandboxes/:id ─────────────────────────────────────────────────────
+// ── DELETE /sandboxes/{id} ────────────────────────────────────────────────────
 
 /// Stop and remove a sandbox container.
 async fn delete_sandbox(

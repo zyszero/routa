@@ -74,8 +74,8 @@ metrics:
   # ══════════════════════════════════════════════════════════════
 
   - name: eslint_pass
-    command: npm run lint 2>&1
-    pattern: "no problems|0 errors|Done"
+    command: npm run lint 2>&1 && echo "eslint passed"
+    pattern: "eslint passed"
     hard_gate: true
     description: "ESLint 必须通过"
 
@@ -178,4 +178,3 @@ python3 docs/fitness/scripts/fitness.py
 | `eslint.config.mjs` | ESLint 配置 |
 | `.clippy.toml` | Clippy 配置（如有） |
 | `docs/fitness/README.md` | Fitness 规则手册 |
-

@@ -23,9 +23,10 @@ pub mod notes;
 pub mod polling;
 pub mod provider_models;
 pub mod providers;
+pub mod review;
 pub mod rpc;
-pub mod schedules;
 pub mod sandbox;
+pub mod schedules;
 pub mod sessions;
 pub mod shared_sessions;
 pub mod skills;
@@ -62,6 +63,7 @@ pub fn api_router() -> Router<AppState> {
         .nest("/api/shared-sessions", shared_sessions::router())
         .nest("/api/providers", providers::router())
         .nest("/api/providers", provider_models::router())
+        .nest("/api/review", review::router())
         .nest("/api/acp", acp_routes::router())
         .nest("/api/acp", acp_registry::router())
         .nest("/api/acp/docker", acp_docker::router())

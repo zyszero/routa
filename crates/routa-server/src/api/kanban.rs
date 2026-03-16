@@ -1,10 +1,13 @@
 use axum::{
     extract::{Path, Query, State},
+    response::sse::{Event, KeepAlive, Sse},
     routing::{get, post},
     Json, Router,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use std::convert::Infallible;
+use tokio_stream::StreamExt;
 
 use crate::error::ServerError;
 use crate::models::kanban::{default_kanban_board, KanbanColumn};
@@ -15,6 +18,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/boards", get(list_boards).post(create_board))
         .route("/boards/{boardId}", get(get_board).patch(update_board))
+        .route("/events", get(kanban_events))
         .route("/decompose", post(decompose_tasks))
 }
 
@@ -24,7 +28,10 @@ struct BoardsQuery {
     workspace_id: Option<String>,
 }
 
-fn get_session_concurrency_limit(metadata: &std::collections::HashMap<String, String>, board_id: &str) -> u32 {
+fn get_session_concurrency_limit(
+    metadata: &std::collections::HashMap<String, String>,
+    board_id: &str,
+) -> u32 {
     let key = format!("kanbanSessionConcurrencyLimit:{}", board_id);
     metadata
         .get(&key)
@@ -43,7 +50,12 @@ async fn list_boards(
         .ensure_default_board(&workspace_id)
         .await?;
     let boards = state.kanban_store.list_by_workspace(&workspace_id).await?;
-    let workspace = state.workspace_store.get(&workspace_id).await.ok().flatten();
+    let workspace = state
+        .workspace_store
+        .get(&workspace_id)
+        .await
+        .ok()
+        .flatten();
     let metadata = workspace.map(|w| w.metadata).unwrap_or_default();
     let boards_with_meta: Vec<serde_json::Value> = boards
         .iter()
@@ -63,6 +75,24 @@ async fn list_boards(
         })
         .collect();
     Ok(Json(serde_json::json!({ "boards": boards_with_meta })))
+}
+
+async fn kanban_events(
+    Query(query): Query<BoardsQuery>,
+) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
+    let workspace_id = query.workspace_id.unwrap_or_else(|| "*".to_string());
+    let connected = serde_json::json!({
+        "type": "connected",
+        "workspaceId": workspace_id,
+    });
+
+    let initial = tokio_stream::once(Ok(Event::default().data(connected.to_string())));
+    let heartbeat = tokio_stream::wrappers::IntervalStream::new(tokio::time::interval(
+        std::time::Duration::from_secs(15),
+    ))
+    .map(|_| Ok(Event::default().comment("heartbeat")));
+
+    Sse::new(initial.merge(heartbeat)).keep_alive(KeepAlive::default())
 }
 
 #[derive(Debug, Deserialize)]
@@ -112,7 +142,12 @@ async fn get_board(
     let board = state.kanban_store.get(&board_id).await?;
     match board {
         Some(b) => {
-            let workspace = state.workspace_store.get(&b.workspace_id).await.ok().flatten();
+            let workspace = state
+                .workspace_store
+                .get(&b.workspace_id)
+                .await
+                .ok()
+                .flatten();
             let metadata = workspace.map(|w| w.metadata).unwrap_or_default();
             let mut v = serde_json::to_value(&b).unwrap_or_default();
             if let Some(obj) = v.as_object_mut() {
@@ -187,7 +222,12 @@ async fn update_board(
     // Persist sessionConcurrencyLimit in workspace metadata if provided
     if let Some(limit) = body.session_concurrency_limit {
         let limit = limit.max(1);
-        let workspace = state.workspace_store.get(&board.workspace_id).await.ok().flatten();
+        let workspace = state
+            .workspace_store
+            .get(&board.workspace_id)
+            .await
+            .ok()
+            .flatten();
         if let Some(mut ws) = workspace {
             let key = format!("kanbanSessionConcurrencyLimit:{}", board_id);
             ws.metadata.insert(key, limit.to_string());
@@ -195,7 +235,12 @@ async fn update_board(
         }
     }
 
-    let workspace = state.workspace_store.get(&board.workspace_id).await.ok().flatten();
+    let workspace = state
+        .workspace_store
+        .get(&board.workspace_id)
+        .await
+        .ok()
+        .flatten();
     let metadata = workspace.map(|w| w.metadata).unwrap_or_default();
     let mut v = serde_json::to_value(&board).unwrap_or_default();
     if let Some(obj) = v.as_object_mut() {

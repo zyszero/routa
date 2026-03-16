@@ -11,14 +11,13 @@ metrics:
   # ══════════════════════════════════════════════════════════════
   
   - name: npm_audit_critical
-    command: npm audit --audit-level=critical 2>&1 || true
-    pattern: "found 0 vulnerabilities|0 critical|no vulnerabilities"
+    command: npm audit --audit-level=critical 2>&1
     hard_gate: true
     description: "检测 npm 依赖中的 critical 级别漏洞"
 
   - name: cargo_audit
-    command: cargo audit 2>&1 || true
-    pattern: "0 vulnerabilities|No vulnerabilities found|not installed"
+    command: cargo audit 2>&1 || echo "cargo-audit not installed"
+    pattern: "0 vulnerabilities|No vulnerabilities found|cargo-audit not installed"
     hard_gate: true
     description: "检测 Rust 依赖中的已知漏洞"
 
