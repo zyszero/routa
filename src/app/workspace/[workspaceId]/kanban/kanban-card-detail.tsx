@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
 import { resolveEffectiveTaskAutomation } from "@/core/kanban/effective-task-automation";
+import { formatArtifactSummary, resolveKanbanTransitionArtifacts } from "@/core/kanban/transition-artifacts";
 import type { KanbanColumnInfo, SessionInfo, TaskInfo, WorktreeInfo } from "../types";
 import { KanbanDescriptionEditor } from "./kanban-description-editor";
 
@@ -179,6 +180,7 @@ export function KanbanCardDetail({
         <LaneAutomationSection
           task={task}
           lane={currentLane}
+          boardColumns={boardColumns ?? []}
           availableProviders={availableProviders}
           specialists={specialists}
           compact={compactMode}
@@ -310,12 +312,14 @@ function CompactInfo({ label, value, compact = false }: { label: string; value: 
 function LaneAutomationSection({
   task,
   lane,
+  boardColumns,
   availableProviders,
   specialists,
   compact = false,
 }: {
   task: TaskInfo;
   lane?: KanbanColumnInfo;
+  boardColumns: KanbanColumnInfo[];
   availableProviders: AcpProviderInfo[];
   specialists: SpecialistOption[];
   compact?: boolean;
@@ -326,6 +330,7 @@ function LaneAutomationSection({
   const laneSpecialist = getSpecialistName(lane.automation?.specialistId, lane.automation?.specialistName, specialists);
   const cardSpecialist = getSpecialistName(task.assignedSpecialistId, task.assignedSpecialistName, specialists);
   const hasCardOverride = Boolean(task.assignedProvider || task.assignedRole || task.assignedSpecialistId || task.assignedSpecialistName);
+  const transitionArtifacts = resolveKanbanTransitionArtifacts(boardColumns, task.columnId);
 
   return (
     <DetailSection
@@ -344,6 +349,20 @@ function LaneAutomationSection({
         <CompactInfo label="Specialist" value={laneSpecialist} compact={compact} />
         <CompactInfo label="Card override" value={hasCardOverride ? "Applied" : "None"} compact={compact} />
       </div>
+      {(transitionArtifacts.currentRequiredArtifacts.length > 0 || transitionArtifacts.nextRequiredArtifacts.length > 0) && (
+        <div className={`grid gap-2 ${compact ? "mt-2 grid-cols-1" : "mt-3 sm:grid-cols-2"}`}>
+          <CompactInfo
+            label={`Enter ${lane.name}`}
+            value={formatArtifactSummary(transitionArtifacts.currentRequiredArtifacts)}
+            compact={compact}
+          />
+          <CompactInfo
+            label={transitionArtifacts.nextColumn?.name ? `Move to ${transitionArtifacts.nextColumn.name}` : "Next move"}
+            value={formatArtifactSummary(transitionArtifacts.nextRequiredArtifacts)}
+            compact={compact}
+          />
+        </div>
+      )}
       {hasCardOverride && (
         <div className={`rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300 ${compact ? "mt-2 leading-[1.125rem]" : "mt-3 leading-5"}`}>
           This card currently carries an explicit override: {getProviderName(task.assignedProvider, availableProviders)} · {task.assignedRole ?? "DEVELOPER"} · {cardSpecialist}
@@ -488,6 +507,7 @@ function ProviderSection({
     effectiveAutomation.specialistName,
     specialists,
   );
+  const transitionArtifacts = resolveKanbanTransitionArtifacts(boardColumns, task.columnId);
 
   return (
     <DetailSection
@@ -530,6 +550,12 @@ function ProviderSection({
           Manual {task.triggerSessionId ? "reruns" : "runs"} use {effectiveAutomation.source === "card" ? "this card override" : "the current lane default"}:
           {" "}
           {effectiveProvider} · {effectiveAutomation.role ?? "DEVELOPER"} · {effectiveSpecialist}
+        </div>
+      )}
+      {transitionArtifacts.nextRequiredArtifacts.length > 0 && (
+        <div className={`mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300 ${compact ? "leading-[1.125rem]" : "leading-5"}`}>
+          Moving this card to {transitionArtifacts.nextColumn?.name ?? "the next stage"} requires {formatArtifactSummary(transitionArtifacts.nextRequiredArtifacts)}.
+          {" "}This gate is injected into the ACP prompt, but the agent still needs to create those artifacts before calling <code>move_card</code>.
         </div>
       )}
       {task.assignedProvider && (

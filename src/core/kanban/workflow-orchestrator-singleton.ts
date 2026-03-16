@@ -171,6 +171,7 @@ async function startKanbanTaskSession(
     cwd: worktreeCwd,
     branch: worktreeBranch,
     task: taskForSession,
+    boardColumns: board?.columns ?? [],
     eventBus: system.eventBus,
   });
 

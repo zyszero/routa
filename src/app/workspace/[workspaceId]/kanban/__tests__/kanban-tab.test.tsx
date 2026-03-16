@@ -200,6 +200,68 @@ describe("KanbanTab card detail manual runs", () => {
       });
     });
   });
+
+  it("shows the next transition artifact gate in card detail", async () => {
+    const gatedBoard: KanbanBoardInfo = {
+      ...board,
+      columns: [
+        {
+          id: "dev",
+          name: "Dev",
+          position: 0,
+          stage: "dev",
+          automation: {
+            enabled: true,
+            providerId: "claude",
+            role: "CRAFTER",
+            specialistId: "dev-crafter",
+            specialistName: "Dev Crafter",
+            transitionType: "entry",
+          },
+        },
+        {
+          id: "review",
+          name: "Review",
+          position: 1,
+          stage: "review",
+          automation: {
+            enabled: true,
+            providerId: "claude",
+            role: "GATE",
+            specialistId: "review-guard",
+            specialistName: "Review Guard",
+            transitionType: "entry",
+            requiredArtifacts: ["screenshot", "test_results"],
+          },
+        },
+      ],
+    };
+
+    render(
+      <KanbanTab
+        workspaceId="workspace-1"
+        boards={[gatedBoard]}
+        tasks={[{
+          ...createTask("task-1", "Story One"),
+          columnId: "dev",
+          status: "IN_PROGRESS",
+        }]}
+        sessions={[]}
+        providers={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
+        specialists={[
+          { id: "dev-crafter", name: "Dev Crafter", role: "CRAFTER" },
+          { id: "review-guard", name: "Review Guard", role: "GATE" },
+        ]}
+        codebases={[]}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Story One" }));
+
+    expect(await screen.findByText(/Moving this card to Review requires Screenshot, Test Results\./i)).toBeTruthy();
+    expect(screen.getByText(/This gate is injected into the ACP prompt/i)).toBeTruthy();
+  });
 });
 
 describe("KanbanTab quick ACP assignment", () => {

@@ -47,6 +47,38 @@ describe("buildTaskPrompt", () => {
     expect(prompt).toContain("Do not call `report_to_parent`");
     expect(prompt).not.toContain("Tool: report_to_parent");
   });
+
+  it("injects required artifact gates from the next transition into the prompt", () => {
+    const task = createTask({
+      id: "task-3",
+      title: "Ship review-ready change",
+      objective: "Implement and verify the change",
+      workspaceId: "default",
+      boardId: "board-1",
+      columnId: "dev",
+    });
+
+    const prompt = buildTaskPrompt(task, [
+      { id: "dev", name: "Dev", position: 0 },
+      {
+        id: "review",
+        name: "Review",
+        position: 1,
+        automation: {
+          enabled: true,
+          requiredArtifacts: ["screenshot", "test_results"],
+        },
+      },
+      { id: "done", name: "Done", position: 2 },
+    ]);
+
+    expect(prompt).toContain("## Artifact Gates");
+    expect(prompt).toContain("Moving this card to Review requires Screenshot, Test Results.");
+    expect(prompt).toContain("Before you call `move_card`, make sure Screenshot, Test Results exist as artifacts");
+    expect(prompt).toContain("Use `list_artifacts`");
+    expect(prompt).toContain("provide_artifact");
+    expect(prompt).toContain("capture_screenshot");
+  });
 });
 
 describe("resolveKanbanAutomationProvider", () => {

@@ -2,6 +2,7 @@
 
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { AcpProviderInfo } from "@/client/acp-client";
+import { formatArtifactSummary } from "@/core/kanban/transition-artifacts";
 import type { KanbanBoardInfo } from "../types";
 
 interface SpecialistOption {
@@ -419,7 +420,7 @@ function ColumnAutomationWorkspace({
             <SectionCard
               eyebrow="Guards"
               title="Required artifacts"
-              description="Gate movement with evidence. If selected, the workflow expects these artifacts to exist before progressing."
+              description="Gate movement with evidence. These requirements are enforced on transition and injected into the Kanban ACP prompt so the specialist knows what evidence to produce."
             >
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 {ARTIFACT_OPTIONS.map((artifact) => {
@@ -595,13 +596,6 @@ function formatTriggerLabel(trigger: ColumnAutomationConfig["transitionType"]): 
   if (trigger === "exit") return "On exit";
   if (trigger === "both") return "Entry and exit";
   return "On entry";
-}
-
-function formatArtifactSummary(artifacts: ColumnAutomationConfig["requiredArtifacts"]): string {
-  if (!artifacts || artifacts.length === 0) return "None";
-  return artifacts
-    .map((artifact) => ARTIFACT_OPTIONS.find((option) => option.id === artifact)?.label ?? artifact)
-    .join(", ");
 }
 
 function resolveProviderName(providerId: string | undefined, providers: AcpProviderInfo[]): string | undefined {
