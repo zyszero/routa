@@ -35,6 +35,7 @@ export interface KanbanCardDetailProps {
 }
 
 const ROLE_OPTIONS = ["CRAFTER", "ROUTA", "GATE", "DEVELOPER"];
+type ActivityTabId = "runs" | "handoffs" | "github";
 
 function getProviderName(providerId: string | undefined, availableProviders: AcpProviderInfo[]): string {
   if (!providerId) return "Workspace default";
@@ -55,6 +56,16 @@ function formatSessionTimestamp(value: string | undefined): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Time unavailable";
   return date.toLocaleString();
+}
+
+function getOrderedSessionIds(task: TaskInfo): string[] {
+  const laneSessions = task.laneSessions ?? [];
+  return laneSessions.length > 0
+    ? laneSessions.map((entry) => entry.sessionId)
+    : Array.from(new Set([
+        ...(task.sessionIds ?? []),
+        ...(task.triggerSessionId ? [task.triggerSessionId] : []),
+      ]));
 }
 
 export function KanbanCardDetail({
@@ -98,11 +109,12 @@ export function KanbanCardDetail({
     () => boardColumns?.find((column) => column.id === (task.columnId ?? "backlog")),
     [boardColumns, task.columnId],
   );
+  const orderedSessionIds = useMemo(() => getOrderedSessionIds(task), [task]);
   const compactMode = !fullWidth;
 
   return (
-    <div className={`${fullWidth ? "w-full" : "w-full"} h-full overflow-y-auto bg-gray-50/80 dark:bg-[#10131a]`}>
-      <div className={`mx-auto flex min-h-full max-w-5xl flex-col ${compactMode ? "gap-3 p-3" : "gap-4 p-5"}`}>
+    <div className="h-full w-full overflow-y-auto bg-gray-50/80 dark:bg-[#10131a]">
+      <div className={`mx-auto flex min-h-full max-w-6xl flex-col ${compactMode ? "gap-3 p-3" : "gap-4 p-5"}`}>
         <section className={`border border-gray-200/80 bg-white shadow-sm dark:border-[#232736] dark:bg-[#121620] ${compactMode ? "rounded-2xl p-3" : "rounded-3xl p-4"}`}>
           <div className={`${compactMode ? "mb-1.5" : "mb-2"} text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500`}>
             Card Detail
@@ -137,6 +149,12 @@ export function KanbanCardDetail({
               }}
             />
             <MetaBadge label="Column" value={task.columnId ?? "backlog"} compact={compactMode} />
+            {orderedSessionIds.length > 0 && (
+              <MetaBadge label="Runs" value={String(orderedSessionIds.length)} compact={compactMode} />
+            )}
+            {task.githubNumber && (
+              <MetaBadge label="GitHub" value={`#${task.githubNumber}`} compact={compactMode} />
+            )}
             {(task.labels ?? []).map((label) => (
               <span
                 key={label}
@@ -148,73 +166,64 @@ export function KanbanCardDetail({
           </div>
         </section>
 
-        <DetailSection
-          title="Description"
-          description={compactMode ? undefined : "Capture the context, constraints, and acceptance notes for this card."}
-          compact={compactMode}
-        >
-          <KanbanDescriptionEditor
-            value={editObjective}
-            compact={compactMode}
-            onSave={async (nextObjective) => {
-              if (nextObjective !== (task.objective ?? "")) {
-                setEditObjective(nextObjective);
-                await onPatchTask(task.id, { objective: nextObjective });
-                onRefresh();
-              }
-            }}
-          />
-        </DetailSection>
+        <div className={compactMode ? "space-y-3" : "grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(21rem,0.95fr)]"}>
+          <div className={compactMode ? "space-y-3" : "space-y-4"}>
+            <DetailSection
+              title="Description"
+              description={compactMode ? undefined : "Capture the context, constraints, and acceptance notes for this card."}
+              compact={compactMode}
+            >
+              <KanbanDescriptionEditor
+                value={editObjective}
+                compact={compactMode}
+                onSave={async (nextObjective) => {
+                  if (nextObjective !== (task.objective ?? "")) {
+                    setEditObjective(nextObjective);
+                    await onPatchTask(task.id, { objective: nextObjective });
+                    onRefresh();
+                  }
+                }}
+              />
+            </DetailSection>
 
-        <LaneAutomationSection
-          task={task}
-          lane={currentLane}
-          boardColumns={boardColumns ?? []}
-          availableProviders={availableProviders}
-          specialists={specialists}
-          compact={compactMode}
-        />
+            <ExecutionSection
+              task={task}
+              lane={currentLane}
+              boardColumns={boardColumns ?? []}
+              availableProviders={availableProviders}
+              specialists={specialists}
+              sessionCwdMismatch={sessionCwdMismatch}
+              onPatchTask={onPatchTask}
+              onRetryTrigger={onRetryTrigger}
+              onProviderChange={onProviderChange}
+              compact={compactMode}
+            />
 
-        <ProviderSection
-          task={task}
-          boardColumns={boardColumns ?? []}
-          availableProviders={availableProviders}
-          specialists={specialists}
-          sessionCwdMismatch={sessionCwdMismatch}
-          onPatchTask={onPatchTask}
-          onRetryTrigger={onRetryTrigger}
-          onProviderChange={onProviderChange}
-          compact={compactMode}
-        />
+            <RepositoriesWorktreeRow
+              task={task}
+              codebases={codebases}
+              allCodebaseIds={allCodebaseIds}
+              worktreeCache={worktreeCache}
+              updateError={updateError}
+              setUpdateError={setUpdateError}
+              onPatchTask={onPatchTask}
+              onRefresh={onRefresh}
+              onRepositoryChange={onRepositoryChange}
+              compact={compactMode}
+            />
+          </div>
 
-        <SessionHistorySection
-          task={task}
-          specialists={specialists}
-          sessions={sessions ?? []}
-          currentSessionId={task.triggerSessionId}
-          onSelectSession={onSelectSession}
-          compact={compactMode}
-        />
-
-        <HandoffSection
-          task={task}
-          compact={compactMode}
-        />
-
-        <GitHubSection task={task} compact={compactMode} />
-
-        <RepositoriesWorktreeRow
-          task={task}
-          codebases={codebases}
-          allCodebaseIds={allCodebaseIds}
-          worktreeCache={worktreeCache}
-          updateError={updateError}
-          setUpdateError={setUpdateError}
-          onPatchTask={onPatchTask}
-          onRefresh={onRefresh}
-          onRepositoryChange={onRepositoryChange}
-          compact={compactMode}
-        />
+          <div className={compactMode ? "space-y-3" : "space-y-4"}>
+            <ActivitySection
+              task={task}
+              sessions={sessions ?? []}
+              specialists={specialists}
+              currentSessionId={task.triggerSessionId}
+              onSelectSession={onSelectSession}
+              compact={compactMode}
+            />
+          </div>
+        </div>
 
         <div className={`mt-auto border-t border-gray-200 dark:border-gray-700 ${compactMode ? "pt-3" : "pt-4"}`}>
           <button
@@ -302,12 +311,16 @@ function CompactInfo({ label, value, compact = false }: { label: string; value: 
   );
 }
 
-function LaneAutomationSection({
+function ExecutionSection({
   task,
   lane,
   boardColumns,
   availableProviders,
   specialists,
+  sessionCwdMismatch,
+  onPatchTask,
+  onRetryTrigger,
+  onProviderChange,
   compact = false,
 }: {
   task: TaskInfo;
@@ -315,37 +328,61 @@ function LaneAutomationSection({
   boardColumns: KanbanColumnInfo[];
   availableProviders: AcpProviderInfo[];
   specialists: SpecialistOption[];
+  sessionCwdMismatch?: boolean;
+  onPatchTask: (taskId: string, payload: Record<string, unknown>) => Promise<TaskInfo>;
+  onRetryTrigger: (taskId: string) => Promise<void>;
+  onProviderChange?: (providerId: string | null) => void;
   compact?: boolean;
 }) {
-  if (!lane) return null;
-
-  const laneProvider = getProviderName(lane.automation?.providerId, availableProviders);
-  const laneSpecialist = getSpecialistName(lane.automation?.specialistId, lane.automation?.specialistName, specialists);
-  const cardSpecialist = getSpecialistName(task.assignedSpecialistId, task.assignedSpecialistName, specialists);
+  const effectiveAutomation = resolveEffectiveTaskAutomation(task, boardColumns);
+  const canRunTask = effectiveAutomation.canRun && task.columnId !== "done";
   const hasCardOverride = Boolean(task.assignedProvider || task.assignedRole || task.assignedSpecialistId || task.assignedSpecialistName);
+  const laneName = lane?.name ?? task.columnId ?? "backlog";
+  const laneProvider = getProviderName(lane?.automation?.providerId, availableProviders);
+  const laneSpecialist = getSpecialistName(lane?.automation?.specialistId, lane?.automation?.specialistName, specialists);
+  const cardSpecialist = getSpecialistName(task.assignedSpecialistId, task.assignedSpecialistName, specialists);
+  const effectiveProvider = getProviderName(effectiveAutomation.providerId, availableProviders);
+  const effectiveSpecialist = getSpecialistName(
+    effectiveAutomation.specialistId,
+    effectiveAutomation.specialistName,
+    specialists,
+  );
   const transitionArtifacts = resolveKanbanTransitionArtifacts(boardColumns, task.columnId);
+  const overrideKey = `${task.id}:${task.assignedProvider ?? ""}:${task.assignedRole ?? ""}:${task.assignedSpecialistId ?? ""}:${task.assignedSpecialistName ?? ""}`;
 
   return (
     <DetailSection
-      title="Lane Automation"
-      description={compact ? undefined : "Inherited defaults from the current lane."}
+      title="Execution"
+      description={compact ? undefined : "Lane defaults, the effective run target, and optional per-card overrides."}
       compact={compact}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{lane.name}</div>
-        <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${lane.automation?.enabled ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" : "bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}`}>
-          {lane.automation?.enabled ? "Automation on" : "Manual"}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{laneName}</div>
+          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {lane ? "Inherited from the current lane." : "Lane metadata unavailable, using task-level defaults."}
+          </div>
+        </div>
+        <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${lane?.automation?.enabled ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" : "bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}`}>
+          {lane?.automation?.enabled ? "Automation on" : "Manual"}
         </span>
       </div>
-      <div className={`grid gap-2 ${compact ? "mt-2 grid-cols-1" : "mt-3 sm:grid-cols-3"}`}>
-        <CompactInfo label="Provider" value={laneProvider} compact={compact} />
-        <CompactInfo label="Specialist" value={laneSpecialist} compact={compact} />
-        <CompactInfo label="Card override" value={hasCardOverride ? "Applied" : "None"} compact={compact} />
+      <div className={`grid gap-2 ${compact ? "mt-2 grid-cols-1" : "mt-3 sm:grid-cols-2"}`}>
+        <CompactInfo
+          label="Lane default"
+          value={`${laneProvider} · ${lane?.automation?.role ?? "DEVELOPER"} · ${laneSpecialist}`}
+          compact={compact}
+        />
+        <CompactInfo
+          label="Manual run"
+          value={`${effectiveProvider} · ${effectiveAutomation.role ?? "DEVELOPER"} · ${effectiveSpecialist}`}
+          compact={compact}
+        />
       </div>
       {(transitionArtifacts.currentRequiredArtifacts.length > 0 || transitionArtifacts.nextRequiredArtifacts.length > 0) && (
         <div className={`grid gap-2 ${compact ? "mt-2 grid-cols-1" : "mt-3 sm:grid-cols-2"}`}>
           <CompactInfo
-            label={`Enter ${lane.name}`}
+            label={`Enter ${laneName}`}
             value={formatArtifactSummary(transitionArtifacts.currentRequiredArtifacts)}
             compact={compact}
           />
@@ -356,16 +393,218 @@ function LaneAutomationSection({
           />
         </div>
       )}
-      {hasCardOverride && (
-        <div className={`rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300 ${compact ? "mt-2 leading-[1.125rem]" : "mt-3 leading-5"}`}>
-          This card currently carries an explicit override: {getProviderName(task.assignedProvider, availableProviders)} · {task.assignedRole ?? "DEVELOPER"} · {cardSpecialist}
+      <details
+        key={overrideKey}
+        open={hasCardOverride || undefined}
+        className={`mt-3 rounded-2xl border border-gray-200/80 bg-gray-50/80 dark:border-gray-700 dark:bg-[#0d1018] ${compact ? "px-2.5 py-2.5" : "px-3 py-3"}`}
+      >
+        <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">
+              Card Session Override
+            </div>
+            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Keep this collapsed to inherit the lane default provider, role, and specialist.
+            </div>
+          </div>
+          <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:border-amber-300 hover:text-amber-700 dark:border-gray-700 dark:bg-[#121620] dark:text-gray-300 dark:hover:border-amber-600 dark:hover:text-amber-200">
+            {hasCardOverride ? "Edit override" : "Override this card"}
+          </span>
+        </summary>
+        {hasCardOverride && (
+          <div className={`rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300 ${compact ? "mt-2 leading-[1.125rem]" : "mt-3 leading-5"}`}>
+            This card currently carries an explicit override: {getProviderName(task.assignedProvider, availableProviders)} · {task.assignedRole ?? "DEVELOPER"} · {cardSpecialist}
+          </div>
+        )}
+        <div className="mt-3 space-y-2.5">
+          <select
+            value={task.assignedProvider ?? ""}
+            onChange={async (event) => {
+              const newProvider = event.target.value || null;
+              if (newProvider) {
+                await onPatchTask(task.id, {
+                  assignedProvider: newProvider,
+                  assignedRole: task.assignedRole ?? "DEVELOPER",
+                });
+                onProviderChange?.(newProvider);
+              } else {
+                await onPatchTask(task.id, {
+                  assignedProvider: undefined,
+                  assignedRole: undefined,
+                  assignedSpecialistId: undefined,
+                  assignedSpecialistName: undefined,
+                });
+                onProviderChange?.(null);
+              }
+            }}
+            className={`w-full rounded-2xl border border-gray-200 bg-white text-sm text-gray-700 outline-none focus:border-amber-400 dark:border-gray-700 dark:bg-[#121620] dark:text-gray-300 ${compact ? "px-2.5 py-2" : "px-3 py-2"}`}
+          >
+            <option value="">Use lane default</option>
+            {availableProviders.map((provider) => (
+              <option key={`${provider.id}-${provider.name}`} value={provider.id}>{provider.name}</option>
+            ))}
+          </select>
+          {task.assignedProvider && (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <select
+                value={task.assignedRole ?? "DEVELOPER"}
+                onChange={async (event) => {
+                  await onPatchTask(task.id, { assignedRole: event.target.value });
+                }}
+                className={`rounded-2xl border border-gray-200 bg-white text-sm text-gray-700 outline-none focus:border-amber-400 dark:border-gray-700 dark:bg-[#121620] dark:text-gray-300 ${compact ? "px-2.5 py-2" : "px-3 py-2"}`}
+              >
+                {ROLE_OPTIONS.map((role) => <option key={role} value={role}>{role}</option>)}
+              </select>
+              <select
+                value={task.assignedSpecialistId ?? ""}
+                onChange={async (event) => {
+                  const specialist = specialists.find((item) => item.id === event.target.value);
+                  await onPatchTask(task.id, {
+                    assignedSpecialistId: event.target.value || undefined,
+                    assignedSpecialistName: specialist?.name,
+                    assignedRole: specialist?.role ?? task.assignedRole,
+                  });
+                }}
+                className={`rounded-2xl border border-gray-200 bg-white text-sm text-gray-700 outline-none focus:border-amber-400 dark:border-gray-700 dark:bg-[#121620] dark:text-gray-300 ${compact ? "px-2.5 py-2" : "px-3 py-2"}`}
+              >
+                <option value="">No specialist</option>
+                {specialists.map((specialist) => <option key={specialist.id} value={specialist.id}>{specialist.name}</option>)}
+              </select>
+            </div>
+          )}
+        </div>
+      </details>
+      {canRunTask && (
+        <div className={`mt-2 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-900/40 dark:bg-sky-900/10 dark:text-sky-200 ${compact ? "leading-[1.125rem]" : "leading-5"}`}>
+          Manual {task.triggerSessionId ? "reruns" : "runs"} use {effectiveAutomation.source === "card" ? "this card override" : "the current lane default"}:
+          {" "}
+          {effectiveProvider} · {effectiveAutomation.role ?? "DEVELOPER"} · {effectiveSpecialist}
         </div>
       )}
+      {transitionArtifacts.nextRequiredArtifacts.length > 0 && (
+        <div className={`mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300 ${compact ? "leading-[1.125rem]" : "leading-5"}`}>
+          Moving this card to {transitionArtifacts.nextColumn?.name ?? "the next stage"} requires {formatArtifactSummary(transitionArtifacts.nextRequiredArtifacts)}.
+          {" "}This gate is injected into the ACP prompt, but the agent still needs to create those artifacts before calling <code>move_card</code>.
+        </div>
+      )}
+      {sessionCwdMismatch && (
+        <div className={`mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/10 dark:text-amber-400 ${compact ? "leading-[1.125rem]" : "leading-5"}`}>
+          Repository changed. The active session is still running in an older directory. Rerun to apply the new repo selection.
+        </div>
+      )}
+      <div className={`flex flex-wrap items-center gap-2 ${compact ? "mt-2.5" : "mt-3"}`}>
+        {hasCardOverride && (
+          <button
+            type="button"
+            onClick={async () => {
+              await onPatchTask(task.id, {
+                assignedProvider: undefined,
+                assignedRole: undefined,
+                assignedSpecialistId: undefined,
+                assignedSpecialistName: undefined,
+              });
+              onProviderChange?.(null);
+            }}
+            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:border-amber-300 hover:text-amber-700 dark:border-gray-700 dark:bg-[#121620] dark:text-gray-300 dark:hover:border-amber-600 dark:hover:text-amber-200"
+          >
+            Reset override
+          </button>
+        )}
+        {canRunTask && (
+          <button
+            onClick={async () => {
+              await onRetryTrigger(task.id);
+            }}
+            data-testid="kanban-detail-run"
+            className={`rounded-xl bg-emerald-500 px-4 text-sm font-medium text-white transition-colors hover:bg-emerald-600 ${hasCardOverride ? "ml-auto" : ""} ${compact ? "py-2" : "py-2.5"}`}
+          >
+            {task.triggerSessionId ? "Rerun" : "Run"}
+          </button>
+        )}
+      </div>
     </DetailSection>
   );
 }
 
-function SessionHistorySection({
+function ActivitySection({
+  task,
+  sessions,
+  specialists,
+  currentSessionId,
+  onSelectSession,
+  compact = false,
+}: {
+  task: TaskInfo;
+  sessions: SessionInfo[];
+  specialists: SpecialistOption[];
+  currentSessionId?: string;
+  onSelectSession?: (sessionId: string) => void;
+  compact?: boolean;
+}) {
+  const tabs: Array<{ id: ActivityTabId; label: string; count?: number }> = [
+    { id: "runs", label: "Runs", count: getOrderedSessionIds(task).length },
+    ...((task.laneHandoffs?.length ?? 0) > 0 ? [{ id: "handoffs" as const, label: "Handoffs", count: task.laneHandoffs?.length }] : []),
+    ...(task.githubNumber ? [{ id: "github" as const, label: "GitHub" }] : []),
+  ];
+  const [activeTab, setActiveTab] = useState<ActivityTabId>(tabs[0]?.id ?? "runs");
+  const visibleTab = tabs.some((tab) => tab.id === activeTab) ? activeTab : (tabs[0]?.id ?? "runs");
+
+  return (
+    <DetailSection
+      title="Activity"
+      description={compact ? undefined : "Run history, lane handoffs, and issue linkage collected on the right for faster switching."}
+      compact={compact}
+    >
+      <div className="flex flex-wrap gap-1.5">
+        {tabs.map((tab) => {
+          const active = tab.id === activeTab;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                active
+                  ? "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-200"
+                  : "border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-400 dark:hover:text-gray-200"
+              }`}
+            >
+              <span>{tab.label}</span>
+              {typeof tab.count === "number" && (
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active ? "bg-amber-200/70 text-amber-900 dark:bg-amber-800/50 dark:text-amber-100" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"}`}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <div className={compact ? "mt-3" : "mt-4"}>
+        {visibleTab === "runs" && (
+          <SessionHistoryPanel
+            task={task}
+            specialists={specialists}
+            sessions={sessions}
+            currentSessionId={currentSessionId}
+            onSelectSession={onSelectSession}
+            compact={compact}
+          />
+        )}
+        {visibleTab === "handoffs" && (
+          <HandoffPanel
+            task={task}
+            compact={compact}
+          />
+        )}
+        {visibleTab === "github" && (
+          <GitHubPanel task={task} compact={compact} />
+        )}
+      </div>
+    </DetailSection>
+  );
+}
+
+function SessionHistoryPanel({
   task,
   specialists,
   sessions,
@@ -381,17 +620,13 @@ function SessionHistorySection({
   compact?: boolean;
 }) {
   const laneSessions = task.laneSessions ?? [];
-  const orderedSessionIds = laneSessions.length > 0
-    ? laneSessions.map((entry) => entry.sessionId)
-    : Array.from(new Set([
-        ...(task.sessionIds ?? []),
-        ...(currentSessionId ? [currentSessionId] : []),
-      ]));
+  const orderedSessionIds = getOrderedSessionIds(task);
 
   if (orderedSessionIds.length === 0) {
     return (
-      <div className={`border border-dashed border-gray-300 bg-white text-sm text-gray-500 shadow-sm dark:border-gray-700 dark:bg-[#121620] dark:text-gray-400 ${compact ? "rounded-2xl px-3 py-4" : "rounded-3xl px-4 py-5"}`}>
-        No ACP runs yet. Once this card enters an automated lane, each run will show up here.
+      <div className={`rounded-2xl border border-dashed border-gray-300 bg-white text-sm text-gray-500 dark:border-gray-700 dark:bg-[#121620] dark:text-gray-400 ${compact ? "px-3 py-4" : "px-4 py-5"}`}>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Run History</div>
+        <div className="mt-2">No ACP runs yet. Once this card enters an automated lane, each run will show up here.</div>
       </div>
     );
   }
@@ -400,17 +635,19 @@ function SessionHistorySection({
   const laneSessionMap = new Map(laneSessions.map((entry) => [entry.sessionId, entry]));
 
   return (
-    <DetailSection
-      title="Run History"
-      description={compact ? undefined : `${orderedSessionIds.length} recorded automation runs for this card.`}
-      compact={compact}
-    >
-      <div className="flex items-start justify-between gap-3">
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Run History</div>
+          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {orderedSessionIds.length} recorded automation runs for this card.
+          </div>
+        </div>
         <div className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-600 shadow-sm dark:bg-[#0d1018] dark:text-gray-300">
           Current lane: {task.columnId ?? "backlog"}
         </div>
       </div>
-      <div className={`overflow-y-auto pr-1 ${compact ? "mt-2 max-h-72 space-y-1.5" : "mt-3 max-h-80 space-y-2"}`}>
+      <div className={`overflow-y-auto pr-1 ${compact ? "mt-3 max-h-80 space-y-1.5" : "mt-4 max-h-[34rem] space-y-2"}`}>
         {orderedSessionIds.map((sessionId, index) => {
           const session = sessionMap.get(sessionId);
           const isCurrent = sessionId === currentSessionId;
@@ -425,7 +662,7 @@ function SessionHistorySection({
             <button
               key={sessionId}
               onClick={() => onSelectSession?.(sessionId)}
-              className={`w-full rounded-xl border text-left transition-colors ${compact ? "px-2.5 py-2" : "px-3 py-2"} ${
+              className={`w-full rounded-xl border text-left transition-colors ${compact ? "px-2.5 py-2" : "px-3 py-2.5"} ${
                 isCurrent
                   ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-200"
                   : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-300 dark:hover:bg-[#191c28]"
@@ -475,11 +712,11 @@ function SessionHistorySection({
           );
         })}
       </div>
-    </DetailSection>
+    </>
   );
 }
 
-function HandoffSection({
+function HandoffPanel({
   task,
   compact = false,
 }: {
@@ -488,7 +725,12 @@ function HandoffSection({
 }) {
   const handoffs = task.laneHandoffs ?? [];
   if (handoffs.length === 0) {
-    return null;
+    return (
+      <div className={`rounded-2xl border border-dashed border-gray-300 bg-white text-sm text-gray-500 dark:border-gray-700 dark:bg-[#121620] dark:text-gray-400 ${compact ? "px-3 py-4" : "px-4 py-5"}`}>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Lane Handoffs</div>
+        <div className="mt-2">No lane handoffs were captured for this card yet.</div>
+      </div>
+    );
   }
 
   const orderedHandoffs = handoffs.slice().sort((left, right) => (
@@ -496,12 +738,14 @@ function HandoffSection({
   ));
 
   return (
-    <DetailSection
-      title="Lane Handoffs"
-      description={compact ? undefined : "Requests and responses exchanged between adjacent Kanban lanes."}
-      compact={compact}
-    >
-      <div className="space-y-2">
+    <>
+      <div>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Lane Handoffs</div>
+        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Requests and responses exchanged between adjacent Kanban lanes.
+        </div>
+      </div>
+      <div className={`space-y-2 ${compact ? "mt-3" : "mt-4"}`}>
         {orderedHandoffs.map((handoff) => (
           <div
             key={handoff.id}
@@ -527,151 +771,40 @@ function HandoffSection({
           </div>
         ))}
       </div>
-    </DetailSection>
+    </>
   );
 }
 
-function ProviderSection({
-  task,
-  boardColumns,
-  availableProviders,
-  specialists,
-  sessionCwdMismatch,
-  onPatchTask,
-  onRetryTrigger,
-  onProviderChange,
-  compact = false,
-}: {
-  task: TaskInfo;
-  boardColumns: KanbanColumnInfo[];
-  availableProviders: AcpProviderInfo[];
-  specialists: SpecialistOption[];
-  sessionCwdMismatch?: boolean;
-  onPatchTask: (taskId: string, payload: Record<string, unknown>) => Promise<TaskInfo>;
-  onRetryTrigger: (taskId: string) => Promise<void>;
-  onProviderChange?: (providerId: string | null) => void;
-  compact?: boolean;
-}) {
-  const effectiveAutomation = resolveEffectiveTaskAutomation(task, boardColumns);
-  const canRunTask = effectiveAutomation.canRun && task.columnId !== "done";
-  const effectiveProvider = getProviderName(effectiveAutomation.providerId, availableProviders);
-  const effectiveSpecialist = getSpecialistName(
-    effectiveAutomation.specialistId,
-    effectiveAutomation.specialistName,
-    specialists,
-  );
-  const transitionArtifacts = resolveKanbanTransitionArtifacts(boardColumns, task.columnId);
+function GitHubPanel({ task, compact = false }: { task: TaskInfo; compact?: boolean }) {
+  if (!task.githubNumber) {
+    return null;
+  }
 
   return (
-    <DetailSection
-      title="Card Session Override"
-      description={compact ? undefined : "Override the lane default provider, role, or specialist for this card only."}
-      compact={compact}
-    >
-      <select
-        value={task.assignedProvider ?? ""}
-        onChange={async (event) => {
-          const newProvider = event.target.value || null;
-          if (newProvider) {
-            await onPatchTask(task.id, {
-              assignedProvider: newProvider,
-              assignedRole: task.assignedRole ?? "DEVELOPER",
-            });
-            onProviderChange?.(newProvider);
-          } else {
-            await onPatchTask(task.id, {
-              assignedProvider: undefined,
-              assignedRole: undefined,
-              assignedSpecialistId: undefined,
-              assignedSpecialistName: undefined,
-            });
-            onProviderChange?.(null);
-          }
-        }}
-        className={`w-full rounded-2xl border border-gray-200 bg-gray-50/80 text-sm text-gray-700 outline-none focus:border-amber-400 dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-300 ${compact ? "px-2.5 py-2" : "px-3 py-2"}`}
-      >
-        <option value="">Use lane default</option>
-        {availableProviders.map((provider) => (
-          <option key={`${provider.id}-${provider.name}`} value={provider.id}>{provider.name}</option>
-        ))}
-      </select>
-      <div className={`text-[11px] text-gray-500 dark:text-gray-400 ${compact ? "mt-1" : "mt-1"}`}>
-        Leave this empty to inherit the current lane&apos;s default provider, role, and specialist.
+    <div className={`rounded-2xl border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-[#0d1018] ${compact ? "px-3 py-3" : "px-4 py-4"}`}>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">GitHub</div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
+          {task.githubState ?? "linked"}
+        </span>
+        {task.githubRepo && (
+          <span className="text-xs text-gray-500 dark:text-gray-400">{task.githubRepo}</span>
+        )}
       </div>
-      {canRunTask && (
-        <div className={`mt-2 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-900/40 dark:bg-sky-900/10 dark:text-sky-200 ${compact ? "leading-[1.125rem]" : "leading-5"}`}>
-          Manual {task.triggerSessionId ? "reruns" : "runs"} use {effectiveAutomation.source === "card" ? "this card override" : "the current lane default"}:
-          {" "}
-          {effectiveProvider} · {effectiveAutomation.role ?? "DEVELOPER"} · {effectiveSpecialist}
-        </div>
-      )}
-      {transitionArtifacts.nextRequiredArtifacts.length > 0 && (
-        <div className={`mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300 ${compact ? "leading-[1.125rem]" : "leading-5"}`}>
-          Moving this card to {transitionArtifacts.nextColumn?.name ?? "the next stage"} requires {formatArtifactSummary(transitionArtifacts.nextRequiredArtifacts)}.
-          {" "}This gate is injected into the ACP prompt, but the agent still needs to create those artifacts before calling <code>move_card</code>.
-        </div>
-      )}
-      {task.assignedProvider && (
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <select
-            value={task.assignedRole ?? "DEVELOPER"}
-            onChange={async (event) => {
-              await onPatchTask(task.id, { assignedRole: event.target.value });
-            }}
-            className={`rounded-2xl border border-gray-200 bg-gray-50/80 text-sm text-gray-700 outline-none focus:border-amber-400 dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-300 ${compact ? "px-2.5 py-2" : "px-3 py-2"}`}
-          >
-            {ROLE_OPTIONS.map((role) => <option key={role} value={role}>{role}</option>)}
-          </select>
-          <select
-            value={task.assignedSpecialistId ?? ""}
-            onChange={async (event) => {
-              const specialist = specialists.find((item) => item.id === event.target.value);
-              await onPatchTask(task.id, {
-                assignedSpecialistId: event.target.value || undefined,
-                assignedSpecialistName: specialist?.name,
-                assignedRole: specialist?.role ?? task.assignedRole,
-              });
-            }}
-            className={`rounded-2xl border border-gray-200 bg-gray-50/80 text-sm text-gray-700 outline-none focus:border-amber-400 dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-300 ${compact ? "px-2.5 py-2" : "px-3 py-2"}`}
-          >
-            <option value="">No specialist</option>
-            {specialists.map((specialist) => <option key={specialist.id} value={specialist.id}>{specialist.name}</option>)}
-          </select>
-        </div>
-      )}
-      {sessionCwdMismatch && (
-        <div className={`mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/10 dark:text-amber-400 ${compact ? "leading-[1.125rem]" : "leading-5"}`}>
-          Repository changed. The active session is still running in an older directory. Rerun to apply the new repo selection.
-        </div>
-      )}
-      {canRunTask && (
-        <button
-          onClick={async () => {
-            await onRetryTrigger(task.id);
-          }}
-          data-testid="kanban-detail-run"
-          className={`w-full rounded-xl bg-emerald-500 px-3 text-sm font-medium text-white transition-colors hover:bg-emerald-600 ${compact ? "mt-2.5 py-2" : "mt-3 py-2"}`}
-        >
-          {task.triggerSessionId ? "Rerun" : "Run"}
-        </button>
-      )}
-    </DetailSection>
-  );
-}
-
-function GitHubSection({ task, compact = false }: { task: TaskInfo; compact?: boolean }) {
-  if (!task.githubNumber) return null;
-  return (
-    <DetailSection title="GitHub" compact={compact}>
       <a
         href={task.githubUrl}
         target="_blank"
         rel="noreferrer"
-        className={`text-amber-600 hover:underline dark:text-amber-400 ${compact ? "text-[13px]" : "text-sm"}`}
+        className={`mt-3 inline-flex text-amber-600 hover:underline dark:text-amber-400 ${compact ? "text-[13px]" : "text-sm"}`}
       >
         #{task.githubNumber}
       </a>
-    </DetailSection>
+      {task.githubSyncedAt && (
+        <div className="mt-2 text-[11px] text-gray-400 dark:text-gray-500">
+          Synced {formatSessionTimestamp(task.githubSyncedAt)}
+        </div>
+      )}
+    </div>
   );
 }
 

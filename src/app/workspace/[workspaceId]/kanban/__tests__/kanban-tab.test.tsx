@@ -266,6 +266,59 @@ describe("KanbanTab card detail manual runs", () => {
     expect(await screen.findByText(/Moving this card to Review requires Screenshot, Test Results\./i)).toBeTruthy();
     expect(screen.getByText(/This gate is injected into the ACP prompt/i)).toBeTruthy();
   });
+
+  it("switches the right-side activity tabs inside card detail", async () => {
+    render(
+      <KanbanTab
+        workspaceId="workspace-1"
+        boards={[board]}
+        tasks={[{
+          ...createTask("task-1", "Story One"),
+          sessionIds: ["session-123"],
+          laneHandoffs: [{
+            id: "handoff-1",
+            fromSessionId: "session-123",
+            toSessionId: "session-456",
+            fromColumnId: "backlog",
+            toColumnId: "backlog",
+            requestType: "runtime_context",
+            request: "Share the latest verification context",
+            status: "completed",
+            requestedAt: "2025-01-01T00:00:00.000Z",
+            respondedAt: "2025-01-01T00:01:00.000Z",
+            responseSummary: "Context delivered",
+          }],
+          githubNumber: 42,
+          githubUrl: "https://github.com/example/repo/issues/42",
+          githubRepo: "example/repo",
+          githubState: "open",
+        }]}
+        sessions={[{
+          sessionId: "session-123",
+          workspaceId: "workspace-1",
+          cwd: "/tmp/repo",
+          provider: "claude",
+          role: "DEVELOPER",
+          createdAt: "2025-01-01T00:00:00.000Z",
+        }]}
+        providers={[]}
+        specialists={[]}
+        codebases={[]}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Story One" }));
+
+    expect(await screen.findByText("Run History")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Handoffs/i }));
+    expect(await screen.findByText("Share the latest verification context")).toBeTruthy();
+    expect(screen.getByText("Context delivered")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /GitHub/i }));
+    expect((await screen.findByRole("link", { name: "#42" })).getAttribute("href")).toBe("https://github.com/example/repo/issues/42");
+  });
 });
 
 describe("KanbanTab quick ACP assignment", () => {
