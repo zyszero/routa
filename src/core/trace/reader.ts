@@ -260,7 +260,7 @@ export class TraceReader {
    * This ensures traces from all storage locations are discovered.
    */
   async #getAllTraceBaseDirs(): Promise<string[]> {
-    const dirs: string[] = [];
+    const dirs = new Set<string>();
 
     // 1. New storage path: ~/.routa/projects/{folder-slug}/traces/
     // Strip trailing slash to avoid slug mismatch (e.g. "foo-" vs "foo")
@@ -268,7 +268,7 @@ export class TraceReader {
     const newTraceDir = getTracesDir(workspaceRoot);
     try {
       await fs.access(newTraceDir);
-      dirs.push(newTraceDir);
+      dirs.add(newTraceDir);
     } catch {
       // New trace dir doesn't exist yet — that's OK
     }
@@ -278,31 +278,41 @@ export class TraceReader {
       await fs.access(this.#baseDir);
       // Only add if different from the new path (avoid duplicates)
       if (this.#baseDir !== newTraceDir) {
-        dirs.push(this.#baseDir);
+        dirs.add(this.#baseDir);
       }
     } catch {
       // Primary trace dir doesn't exist — that's OK
     }
 
-    // 3. Scan .routa/repos/*/.routa/traces/ for repo-specific trace directories
+    // 3. Scan .routa/repos/* for repo-specific trace directories in both
+    // the new ~/.routa/projects/{slug}/traces layout and the legacy
+    // {repo}/.routa/traces layout.
     const reposDir = path.join(workspaceRoot, ".routa", "repos");
     try {
       const repoEntries = await fs.readdir(reposDir, { withFileTypes: true });
       for (const entry of repoEntries) {
         if (!entry.isDirectory()) continue;
-        const repoTraceDir = path.join(reposDir, entry.name, ".routa", "traces");
-        try {
-          await fs.access(repoTraceDir);
-          dirs.push(repoTraceDir);
-        } catch {
-          // No trace dir in this repo — skip
+
+        const repoRoot = path.join(reposDir, entry.name);
+        const repoTraceDirs = [
+          getTracesDir(repoRoot),
+          path.join(repoRoot, ".routa", "traces"),
+        ];
+
+        for (const repoTraceDir of repoTraceDirs) {
+          try {
+            await fs.access(repoTraceDir);
+            dirs.add(repoTraceDir);
+          } catch {
+            // No trace dir at this path — skip
+          }
         }
       }
     } catch {
       // No repos directory — that's OK
     }
 
-    return dirs;
+    return Array.from(dirs);
   }
 
   /**

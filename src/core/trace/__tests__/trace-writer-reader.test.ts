@@ -97,3 +97,38 @@ describe("TraceReader — trailing slash resilience", () => {
     expect(tracesWithSlash[0].sessionId).toBe("test-session-123");
   });
 });
+
+describe("TraceReader — repo clone trace discovery", () => {
+  let tmpDir: string;
+  let originalHome: string | undefined;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "trace-reader-repo-test-"));
+    originalHome = process.env.HOME;
+    process.env.HOME = tmpDir;
+  });
+
+  afterEach(async () => {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("finds traces written with a repo clone cwd in the new ~/.routa/projects layout", async () => {
+    const workspaceRoot = path.join(tmpDir, "workspace");
+    const repoRoot = path.join(workspaceRoot, ".routa", "repos", "example-repo");
+    await fs.mkdir(repoRoot, { recursive: true });
+
+    const writer = new TraceWriter(repoRoot);
+    await writer.append(makeRecord("repo-session-001"));
+
+    const reader = new TraceReader(workspaceRoot);
+    const traces = await reader.query({ sessionId: "repo-session-001" });
+
+    expect(traces).toHaveLength(1);
+    expect(traces[0].sessionId).toBe("repo-session-001");
+  });
+});
