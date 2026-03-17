@@ -176,8 +176,8 @@ export function WorkspacePageClient({
 
   if (workspacesHook.loading && !isDefaultWorkspace) {
     return (
-      <div className="h-screen flex items-center justify-center bg-[#1e1e1e]">
-        <div className="flex items-center gap-3 text-[#858585]">
+      <div className="h-screen flex items-center justify-center bg-[#f2f2f7] dark:bg-[#1e1e1e]">
+        <div className="flex items-center gap-3 text-[#6e6e73] dark:text-[#858585]">
           <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -240,7 +240,7 @@ export function WorkspacePageClient({
       taskCount={tasks.length}
       activeTaskCount={pendingTasks.length}
     >
-      <div className="h-full flex flex-col bg-[#252526] overflow-hidden">
+      <div className="h-full flex flex-col bg-[#f2f2f7] dark:bg-[#1e1e1e] overflow-hidden">
         {/* Content Area */}
         <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="max-w-6xl mx-auto px-4 py-4">
@@ -273,7 +273,7 @@ export function WorkspacePageClient({
             </div>
 
             {/* Tab Bar - VS Code style */}
-            <div className="flex items-center gap-0 mb-4 border-b border-[#3c3c3c]">
+            <div className="flex items-center gap-0 mb-4 border-b border-[#c4c7cc] dark:border-[#3c3c3c]">
               <DesktopTabButton active={activeTab === "kanban"} onClick={() => setActiveTab("kanban")}>
                 Kanban {tasks.length > 0 && <span className="ml-1 text-[10px] opacity-60">({tasks.length})</span>}
               </DesktopTabButton>
@@ -301,13 +301,13 @@ export function WorkspacePageClient({
 
             {activeTab === "notes" && (
               <div>
-                <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-3">
                   <button
                     onClick={() => setNotesSubFilter("general")}
                     className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
                       notesSubFilter === "general"
-                        ? "bg-[#37373d] text-white"
-                        : "text-[#858585] hover:text-white hover:bg-[#2a2a2a]"
+                        ? "text-[#0a84ff] bg-[#dce8ff] dark:text-white dark:bg-[#37373d]"
+                        : "text-[#6e6e73] hover:text-[#1d1d1f] hover:bg-[#d7d7dc] dark:text-[#858585] dark:hover:text-white dark:hover:bg-[#2a2a2a]"
                     }`}
                   >
                     Workspace Notes
@@ -319,8 +319,8 @@ export function WorkspacePageClient({
                     onClick={() => setNotesSubFilter("tasks")}
                     className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
                       notesSubFilter === "tasks"
-                        ? "bg-[#37373d] text-white"
-                        : "text-[#858585] hover:text-white hover:bg-[#2a2a2a]"
+                        ? "text-[#0a84ff] bg-[#dce8ff] dark:text-white dark:bg-[#37373d]"
+                        : "text-[#6e6e73] hover:text-[#1d1d1f] hover:bg-[#d7d7dc] dark:text-[#858585] dark:hover:text-white dark:hover:bg-[#2a2a2a]"
                     }`}
                   >
                     Task Notes
@@ -395,8 +395,8 @@ function DesktopTabButton({ active, onClick, children }: { active: boolean; onCl
       onClick={onClick}
       className={`px-3 py-1.5 text-[12px] font-medium transition-colors ${
         active
-          ? "text-white bg-[#1e1e1e] border-t-2 border-t-[#007acc]"
-          : "text-[#858585] hover:text-white bg-[#2d2d2d] border-t-2 border-t-transparent"
+          ? "text-[#0a84ff] bg-[#dce8ff] border-b-2 border-b-[#0a84ff] dark:text-white dark:bg-[#37373d] dark:border-b-[#007acc]"
+          : "text-[#6e6e73] hover:text-[#1d1d1f] hover:bg-[#d7d7dc] dark:text-[#858585] dark:hover:text-white dark:hover:bg-[#2a2a2a]"
       }`}
     >
       {children}

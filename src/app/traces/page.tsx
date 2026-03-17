@@ -219,32 +219,32 @@ function TracePageContent() {
       titleBarRight={(
         <Link
           href="/"
-          className="px-2.5 py-1 rounded text-[11px] text-[#858585] hover:text-[#b5b5b5] hover:bg-[#2a2a2a] transition-colors"
+          className="px-2.5 py-1 rounded text-[11px] text-[#6e6e73] hover:text-[#1d1d1f] hover:bg-[#d7d7dc] dark:text-[#b5b5b5] dark:hover:text-[#b5b5b5] dark:hover:bg-[#2a2a2a] transition-colors"
           title="Back to Home"
         >
           Home
         </Link>
       )}
     >
-      <div className="h-full flex flex-col bg-[#252526] overflow-hidden dark">
+      <div className="h-full flex flex-col bg-[#f2f2f7] dark:bg-[#1e1e1e] overflow-hidden">
         {/* Header */}
-        <div className="shrink-0 px-4 py-3 border-b border-[#3c3c3c] flex items-center justify-between">
+        <div className="shrink-0 px-4 py-3 border-b border-[#c4c7cc] dark:border-[#3c3c3c] flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
-            <svg className="w-4 h-4 text-[#858585] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <svg className="w-4 h-4 text-[#6e6e73] dark:text-[#858585] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
             </svg>
             <div className="min-w-0">
-              <h1 className="text-[13px] font-semibold text-[#cccccc]">
+              <h1 className="text-[13px] font-semibold text-[#3c3c43] dark:text-[#cccccc]">
                 Agent Trace Viewer
               </h1>
-              <p className="text-[11px] text-[#858585]">
+              <p className="text-[11px] text-[#6e6e73] dark:text-[#858585]">
                 Browse and analyze agent execution traces
               </p>
             </div>
             {selectedSessionId && (
-              <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[10px] text-[#858585] border border-[#3c3c3c]">
+              <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[10px] text-[#6e6e73] border border-[#c4c7cc] dark:text-[#858585] dark:border-[#3c3c3c]">
                 <span>Session:</span>
-                <code className="font-mono text-[#b5b5b5]">{selectedSessionId.slice(0, 8)}…</code>
+                <code className="font-mono text-[#3c3c43] dark:text-[#b5b5b5]">{selectedSessionId.slice(0, 8)}…</code>
               </div>
             )}
           </div>
@@ -252,25 +252,25 @@ function TracePageContent() {
             {selectedSessionId && (
               <button
                 onClick={copyCurrentUrl}
-                className="group flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] text-[#858585] bg-[#2a2a2a] hover:bg-[#3c3c3c] hover:text-[#b5b5b5] transition-colors"
+                className="group flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] text-[#6e6e73] bg-[#e7e7ea] hover:bg-[#d7d7dc] hover:text-[#1d1d1f] dark:bg-[#2a2a2a] dark:hover:bg-[#3c3c3c] dark:text-[#b5b5b5] transition-colors"
                 title="Copy shareable URL"
               >
                 <span>Copy link</span>
-                <svg className="w-3.5 h-3.5 text-[#858585] group-hover:text-[#b5b5b5]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-3.5 h-3.5 text-[#6e6e73] dark:text-[#858585] group-hover:text-[#1d1d1f] dark:group-hover:text-[#b5b5b5]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
               </button>
             )}
             <button
               onClick={() => setShowSidebar(!showSidebar)}
-              className="px-2.5 py-1.5 text-[11px] font-medium rounded-md text-[#858585] bg-[#2a2a2a] hover:bg-[#3c3c3c] hover:text-[#b5b5b5] transition-colors"
+              className="px-2.5 py-1.5 text-[11px] font-medium rounded-md text-[#6e6e73] bg-[#e7e7ea] hover:bg-[#d7d7dc] hover:text-[#1d1d1f] dark:bg-[#2a2a2a] dark:hover:bg-[#3c3c3c] dark:text-[#b5b5b5] transition-colors"
             >
               {showSidebar ? "Hide Sessions" : "Show Sessions"}
             </button>
             <button
               onClick={fetchSessions}
               disabled={loading}
-              className="px-2.5 py-1.5 text-[11px] font-medium rounded-md text-[#858585] bg-[#2a2a2a] hover:bg-[#3c3c3c] hover:text-[#b5b5b5] disabled:opacity-50 transition-colors"
+              className="px-2.5 py-1.5 text-[11px] font-medium rounded-md text-[#6e6e73] bg-[#e7e7ea] hover:bg-[#d7d7dc] hover:text-[#1d1d1f] dark:bg-[#2a2a2a] dark:hover:bg-[#3c3c3c] dark:text-[#b5b5b5] disabled:opacity-50 transition-colors"
             >
               {loading ? "Loading..." : "Refresh"}
             </button>
@@ -279,7 +279,7 @@ function TracePageContent() {
 
         {/* View tab switcher */}
         <div className="shrink-0 px-4 pt-2">
-          <div className="inline-flex items-center rounded-md border border-[#3c3c3c] bg-[#2a2a2a] p-0.5">
+          <div className="inline-flex items-center rounded-md border border-[#c4c7cc] bg-[#e6e6eb] dark:border-[#3c3c3c] dark:bg-[#2a2a2a] p-0.5">
             {([
               { key: "chat" as ViewTab, label: "Chat", color: "bg-[#0e639c]" },
               { key: "event-bridge" as ViewTab, label: "Trace", color: "bg-[#5a5a5a]" },
@@ -291,7 +291,7 @@ function TracePageContent() {
                 className={`px-3 py-1.5 rounded-sm text-[11px] font-semibold tracking-wide transition-all ${
                   activeTab === key
                     ? `${color} text-white`
-                    : "text-[#858585] hover:text-[#b5b5b5] hover:bg-[#3c3c3c]"
+                    : "text-[#6e6e73] hover:text-[#1d1d1f] hover:bg-[#d7d7dc] dark:text-[#858585] dark:hover:text-[#b5b5b5] dark:hover:bg-[#3c3c3c]"
                 }`}
               >
                 {label}
@@ -304,12 +304,12 @@ function TracePageContent() {
         <div className="flex-1 flex min-h-0">
           {/* Session Sidebar */}
           {showSidebar && (
-            <aside className="w-80 border-r border-[#3c3c3c] bg-[#1f1f1f] flex flex-col">
-              <div className="px-4 py-3 border-b border-[#3c3c3c]">
-                <h2 className="text-xs font-semibold text-[#cccccc]">
+            <aside className="w-80 border-r border-[#c4c7cc] dark:border-[#3c3c3c] bg-[#efeff2] dark:bg-[#1f1f1f] flex flex-col">
+              <div className="px-4 py-3 border-b border-[#c4c7cc] dark:border-[#3c3c3c]">
+                <h2 className="text-xs font-semibold text-[#3c3c43] dark:text-[#cccccc]">
                   Sessions
                 </h2>
-                <p className="text-[11px] text-[#858585] mt-0.5">
+                <p className="text-[11px] text-[#6e6e73] mt-0.5 dark:text-[#858585]">
                   {sessions.length} session{sessions.length !== 1 ? "s" : ""} found
                 </p>
               </div>
@@ -317,7 +317,7 @@ function TracePageContent() {
               <div className="flex-1 overflow-y-auto">
                 {loading && sessions.length === 0 ? (
                   <div className="p-4 text-center">
-                    <p className="text-xs text-[#858585]">Loading sessions...</p>
+                    <p className="text-xs text-[#6e6e73] dark:text-[#858585]">Loading sessions...</p>
                   </div>
                 ) : sessions.length === 0 ? (
                   <div className="p-4 text-center">
@@ -334,13 +334,13 @@ function TracePageContent() {
                         d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                       />
                     </svg>
-                    <p className="text-xs text-[#858585]">No sessions found</p>
-                    <p className="text-[10px] text-[#6b6b6b] mt-1">
+                    <p className="text-xs text-[#6e6e73] dark:text-[#858585]">No sessions found</p>
+                    <p className="text-[10px] text-[#6b6b6b] dark:text-[#6b6b6b] mt-1">
                       Start a conversation to create traces
                     </p>
                   </div>
                 ) : (
-                  <div className="divide-y divide-[#2a2a2a]">
+                  <div className="divide-y divide-[#c4c7cc] dark:divide-[#2a2a2a]">
                     {(() => {
                       // Separate top-level (parent) sessions from child sessions
                       const parentSessions = sessions.filter((s) => !s.parentSessionId);
@@ -366,27 +366,27 @@ function TracePageContent() {
                           <div key={session.sessionId}>
                             <button
                               onClick={() => handleSessionSelect(session.sessionId)}
-                              className={`w-full px-4 py-3 text-left hover:bg-[#2a2a2a] transition-colors ${
+                              className={`w-full px-4 py-3 text-left hover:bg-[#d7d7dc] transition-colors ${
                                 isChild ? "pl-8 py-2" : ""
                               } ${
                                 selectedSessionId === session.sessionId
-                                  ? "bg-[#0e639c]/20 border-l-2 border-[#0e639c]"
+                                  ? "bg-[#dce8ff] dark:bg-[#0e639c]/20 border-l-2 border-[#0a84ff] dark:border-[#0e639c]"
                                   : ""
                               }`}
                             >
                               <div className="flex items-start justify-between gap-2 mb-1">
-                                <span className="text-xs font-medium text-[#e5e5e5] truncate">
+                                <span className="text-xs font-medium text-[#3c3c43] dark:text-[#e5e5e5] truncate">
                                   {session.name || (
                                     <code className="font-mono">
                                       {session.sessionId.slice(0, 8)}…
                                     </code>
                                   )}
                                 </span>
-                                <span className="text-[10px] font-medium text-[#858585] shrink-0">
+                                <span className="text-[10px] font-medium text-[#6e6e73] dark:text-[#858585] shrink-0">
                                   {session.count}
                                 </span>
                               </div>
-                              <div className="flex items-center gap-1.5 text-[10px] text-[#858585] flex-wrap">
+                              <div className="flex items-center gap-1.5 text-[10px] text-[#6e6e73] dark:text-[#858585] flex-wrap">
                                 <span>{formatTimestamp(session.lastTimestamp)}</span>
                                 {session.role && (
                                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${roleClass}`}>
@@ -394,7 +394,7 @@ function TracePageContent() {
                                   </span>
                                 )}
                                 {session.provider && (
-                                  <span className="px-1.5 py-0.5 rounded bg-[#2a2a2a] text-[#858585] text-[10px]">
+                                  <span className="px-1.5 py-0.5 rounded bg-[#e7e7ea] text-[#6e6e73] dark:bg-[#2a2a2a] dark:text-[#858585] text-[10px]">
                                     {session.provider}
                                   </span>
                                 )}
@@ -402,7 +402,7 @@ function TracePageContent() {
                             </button>
                             {/* Child sessions indented under parent */}
                             {!isChild && childSessionMap.has(session.sessionId) && (
-                              <div className="border-l-2 border-[#3a3a3a] ml-4">
+                              <div className="border-l-2 border-[#c4c7cc] dark:border-[#3a3a3a] ml-4">
                                 {(childSessionMap.get(session.sessionId) ?? []).map((child) => renderSession(child, true))}
                               </div>
                             )}
@@ -425,7 +425,7 @@ function TracePageContent() {
           )}
 
           {/* Trace Panel */}
-          <main className="flex-1 min-w-0 bg-[#252526]">
+          <main className="flex-1 min-w-0 bg-[#f2f2f7] dark:bg-[#252526]">
             {selectedSessionId ? (
               <>
                 {activeTab === "chat" && (
@@ -454,10 +454,10 @@ function TracePageContent() {
                       d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                     />
                   </svg>
-                  <p className="text-[13px] text-[#858585] mb-2">
+                  <p className="text-[13px] text-[#6e6e73] mb-2 dark:text-[#858585]">
                     No session selected
                   </p>
-                  <p className="text-xs text-[#6b6b6b]">
+                  <p className="text-xs text-[#6b6b6b] dark:text-[#6b6b6b]">
                     Select a session from the sidebar to view traces
                   </p>
                 </div>
@@ -474,10 +474,10 @@ function TracePageContent() {
 export default function TracePage() {
   return (
     <Suspense fallback={
-      <div className="h-screen flex items-center justify-center bg-[#252526] dark">
+      <div className="h-screen flex items-center justify-center bg-[#f2f2f7] dark:bg-[#1e1e1e]">
         <div className="text-center">
           <div className="animate-spin w-8 h-8 border-2 border-[#0e639c] border-t-transparent rounded-full mx-auto mb-4" />
-          <p className="text-sm text-[#858585]">Loading...</p>
+          <p className="text-sm text-[#6e6e73] dark:text-[#858585]">Loading...</p>
         </div>
       </div>
     }>
