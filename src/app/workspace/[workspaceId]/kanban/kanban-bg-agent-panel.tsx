@@ -418,7 +418,7 @@ export function KanbanBgAgentPanel({ workspaceId }: KanbanBgAgentPanelProps) {
                       These are the agent ids currently used by background tasks in this workspace.
                     </p>
 
-                    <div className="mt-3 space-y-2">
+                    <div className="mt-3 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
                       {groupedRoutes.length === 0 ? (
                         <div className="rounded-xl border border-dashed border-gray-200 px-3 py-6 text-center text-[12px] text-gray-400 dark:border-[#2a3040] dark:text-gray-500">
                           No queue activity yet.
@@ -427,9 +427,9 @@ export function KanbanBgAgentPanel({ workspaceId }: KanbanBgAgentPanelProps) {
                         groupedRoutes.map((route) => {
                           const linked = !unlinkedRoutes.some((item) => item.agentId === route.agentId);
                           return (
-                            <div
+                            <article
                               key={route.routeKey}
-                              className="rounded-xl border border-gray-200/70 bg-white px-3 py-2 dark:border-[#2a3040] dark:bg-[#12141c]"
+                              className="rounded-2xl border border-gray-200/70 bg-gradient-to-br from-white via-white to-gray-50 px-4 py-3 dark:border-[#252838] dark:from-[#151822] dark:via-[#12141c] dark:to-[#0d1018]"
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
@@ -441,9 +441,6 @@ export function KanbanBgAgentPanel({ workspaceId }: KanbanBgAgentPanelProps) {
                                       Schedule triggers: {route.scheduleTriggerIds.length}
                                     </div>
                                   )}
-                                  <div className="mt-1 text-[10px] text-gray-400 dark:text-gray-500">
-                                    {route.latestTask ? `${route.latestTask.title} · ${formatRelativeTime(route.latestTask.createdAt)}` : "No recent task"}
-                                  </div>
                                 </div>
                                 <span
                                   className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${
@@ -455,22 +452,25 @@ export function KanbanBgAgentPanel({ workspaceId }: KanbanBgAgentPanelProps) {
                                   {linked ? "linked" : "external"}
                                 </span>
                               </div>
-                              <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
-                                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-gray-600 dark:bg-[#20242f] dark:text-gray-300">
-                                  {route.total} total
-                                </span>
-                                {route.pending > 0 && (
-                                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
-                                    {route.pending} pending
-                                  </span>
-                                )}
-                                {route.running > 0 && (
-                                  <span className="rounded-full bg-blue-100 px-2 py-0.5 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
-                                    {route.running} running
-                                  </span>
-                                )}
+                              <div className="mt-3 grid grid-cols-3 gap-2">
+                                {[
+                                  { label: "All", value: route.total },
+                                  { label: "Pending", value: route.pending },
+                                  { label: "Running", value: route.running },
+                                ].map((item) => (
+                                  <div key={item.label} className="rounded-xl bg-gray-50 px-2 py-1.5 text-center dark:bg-[#0b0e15]">
+                                    <div className="text-[9px] uppercase tracking-[0.12em] text-gray-400 dark:text-gray-500">{item.label}</div>
+                                    <div className="mt-1 text-[13px] font-semibold text-gray-800 dark:text-gray-100 tabular-nums">{item.value}</div>
+                                  </div>
+                                ))}
                               </div>
-                            </div>
+                              <div className="mt-3 rounded-xl border border-dashed border-gray-200 px-3 py-2 text-[11px] text-gray-500 dark:border-[#2a3040] dark:text-gray-400">
+                                <span className="font-medium text-gray-700 dark:text-gray-200">Latest task</span>
+                                <div className="mt-1">
+                                  {route.latestTask ? `${route.latestTask.title} · ${formatRelativeTime(route.latestTask.createdAt)}` : "No recent task"}
+                                </div>
+                              </div>
+                            </article>
                           );
                         })
                       )}
