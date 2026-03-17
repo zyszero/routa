@@ -29,9 +29,6 @@ interface DesktopAppShellProps {
   workspaceId: string;
   /** Current workspace title for display */
   workspaceTitle?: string;
-  /** Optional badge counts */
-  sessionCount?: number;
-  taskCount?: number;
   /** Optional right side content for the title bar */
   titleBarRight?: React.ReactNode;
   /** Optional workspace switcher component */
@@ -42,8 +39,6 @@ export function DesktopAppShell({
   children,
   workspaceId,
   workspaceTitle,
-  sessionCount: _sessionCount = 0,
-  taskCount: _taskCount = 0,
   titleBarRight,
   workspaceSwitcher,
 }: DesktopAppShellProps) {
@@ -99,16 +94,16 @@ export function DesktopAppShell({
   };
 
   return (
-    <div className="h-screen flex flex-col bg-[#f2f2f7] dark:bg-[#1e1e1e] overflow-hidden">
+    <div className="desktop-theme h-screen flex flex-col bg-[var(--dt-bg-primary)] overflow-hidden">
       {/* Title Bar - compact, native feel */}
-      <header className="h-9 shrink-0 flex items-center bg-[#f8f8f8] dark:bg-[#323233] border-b border-[#c4c7cc] dark:border-[#252526] select-none">
+      <header className="h-9 shrink-0 flex items-center bg-[var(--dt-bg-tertiary)] border-b border-[var(--dt-border)] select-none">
         {/* Drag region for window - macOS traffic lights area */}
         <div className="w-20 h-full app-drag-region" />
 
         {/* Logo + App Name */}
         <div className="flex items-center gap-2 px-2">
           <Image src="/logo.svg" alt="Routa" width={16} height={16} className="rounded" />
-          <span className="text-[11px] font-medium text-[#3c3c43] dark:text-[#cccccc]">Routa</span>
+          <span className="text-[11px] font-medium text-[var(--dt-text-primary)]">Routa</span>
         </div>
 
         {/* Workspace Switcher or Title */}
@@ -116,9 +111,9 @@ export function DesktopAppShell({
           {workspaceSwitcher ?? (
             <Link
               href={`/workspace/${workspaceId}`}
-              className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] text-[#3c3c43] hover:text-[#1d1d1f] dark:text-[#cccccc] dark:hover:bg-[#3c3c3c] transition-colors"
-            >
-              <svg className="w-3 h-3 text-[#8e8e93] dark:text-[#858585]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] text-[var(--dt-text-primary)] hover:text-[var(--dt-text-primary)] hover:bg-[var(--dt-bg-active)] transition-colors"
+              >
+              <svg className="w-3 h-3 text-[var(--dt-text-secondary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
               </svg>
               <span className="max-w-[120px] truncate">{workspaceTitle ?? workspaceId}</span>
@@ -140,7 +135,7 @@ export function DesktopAppShell({
       {/* Main Content Area */}
       <div className="flex-1 flex min-h-0">
         {/* Left Sidebar Navigation */}
-        <aside className="w-12 shrink-0 flex flex-col bg-[#efeff2] dark:bg-[#1e1e1e] border-r border-[#c4c7cc] dark:border-[#333] h-full">
+        <aside className="w-12 shrink-0 flex flex-col bg-[var(--dt-bg-secondary)] border-r border-[var(--dt-border)] h-full">
           {/* Primary Navigation */}
           <nav className="flex-1 flex flex-col items-center py-2 gap-0.5">
             {navItems.map((item) => {
@@ -152,15 +147,15 @@ export function DesktopAppShell({
                   className={`
                     relative w-10 h-10 flex items-center justify-center rounded-md transition-colors
                     ${active
-                      ? "text-[#0a84ff] bg-[#dce8ff] dark:text-white dark:bg-[#37373d]"
-                      : "text-[#6e6e73] hover:text-[#1d1d1f] hover:bg-[#d7d7dc] dark:text-[#858585] dark:hover:text-white dark:hover:bg-[#2a2a2a]"
+                      ? "text-[var(--dt-accent)] bg-[var(--dt-bg-active)]"
+                      : "text-[var(--dt-text-secondary)] hover:text-[var(--dt-text-primary)] hover:bg-[var(--dt-bg-active)]/70"
                     }
                   `}
                   title={item.label}
                 >
                   {/* Active indicator */}
                   {active && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-[#0a84ff] dark:bg-white rounded-r" />
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-[var(--dt-accent)] rounded-r" />
                   )}
                   {item.icon}
                 </Link>
@@ -169,7 +164,7 @@ export function DesktopAppShell({
           </nav>
 
           {/* Divider */}
-          <div className="mx-2 border-t border-[#c4c7cc] dark:border-[#333]" />
+          <div className="mx-2 border-t border-[var(--dt-border)]" />
 
           {/* Secondary Actions */}
           <div className="flex flex-col items-center py-2 gap-0.5">
@@ -178,8 +173,8 @@ export function DesktopAppShell({
               className={`
                 w-10 h-10 flex items-center justify-center rounded-md transition-colors
                 ${pathname === "/settings"
-                  ? "text-[#0a84ff] bg-[#dce8ff] dark:text-white dark:bg-[#37373d]"
-                  : "text-[#6e6e73] hover:text-[#1d1d1f] hover:bg-[#d7d7dc] dark:text-[#858585] dark:hover:text-white dark:hover:bg-[#2a2a2a]"
+                  ? "text-[var(--dt-accent)] bg-[var(--dt-bg-active)]"
+                  : "text-[var(--dt-text-secondary)] hover:text-[var(--dt-text-primary)] hover:bg-[var(--dt-bg-active)]/70"
                 }
               `}
               title="Settings"
@@ -193,10 +188,10 @@ export function DesktopAppShell({
         </aside>
 
         {/* Content */}
-        <main className="flex-1 min-w-0 bg-[#f2f2f7] dark:bg-[#1e1e1e] overflow-hidden dark">
-          {children}
-        </main>
-      </div>
+      <main className="flex-1 min-w-0 bg-[var(--dt-bg-primary)] overflow-hidden">
+        {children}
+      </main>
+    </div>
     </div>
   );
 }
