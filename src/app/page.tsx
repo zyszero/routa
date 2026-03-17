@@ -433,110 +433,70 @@ export default function HomePage() {
               </div>
             </div>
           ) : (
-            <div className="mx-auto flex w-full max-w-[112rem] px-3 py-4 sm:px-6 sm:py-7">
-              <div className="w-full space-y-4">
-                <section className="overflow-hidden rounded-[34px] border border-sky-200/75 bg-[linear-gradient(180deg,rgba(250,253,255,0.98),rgba(238,246,255,0.96))] shadow-[0_60px_170px_-120px_rgba(37,99,235,0.45)] dark:border-[#223049] dark:bg-[linear-gradient(180deg,rgba(7,12,21,0.96),rgba(9,15,26,0.98))]">
-                  <div className="grid gap-5 p-4 sm:p-6 lg:grid-cols-[minmax(0,1.17fr)_355px] lg:p-7">
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#4a74a8] dark:text-slate-400">
-                        Kanban Core
-                      </p>
-                      <h1 className="mt-2 max-w-3xl font-['Avenir_Next_Condensed','Avenir_Next','Segoe_UI','Helvetica_Neue',sans-serif] text-[2.25rem] leading-[0.95] font-semibold tracking-[-0.04em] text-[#081120] dark:text-white sm:text-[2.9rem] lg:text-[3.2rem]">
-                        Start with a requirement, move in lanes.
-                      </h1>
-                      <p className="mt-3 max-w-2xl text-sm leading-7 text-[#4d6689] dark:text-slate-300">
-                        The homepage now puts your active Kanban board first. Create tasks from one composer, then immediately check where they sit: Backlog, Dev, Review, or Blocked.
-                      </p>
+            <div className="mx-auto flex w-full max-w-5xl px-3 py-6 sm:px-6 sm:py-10">
+              <section className="w-full overflow-hidden rounded-[34px] border border-sky-200/75 bg-[linear-gradient(180deg,rgba(252,254,255,0.98),rgba(237,246,255,0.95))] shadow-[0_60px_170px_-120px_rgba(37,99,235,0.45)] dark:border-[#223049] dark:bg-[linear-gradient(180deg,rgba(7,12,21,0.96),rgba(9,15,26,0.98))]">
+                <div className="p-4 sm:p-6 lg:p-8">
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-[#4a74a8] dark:text-slate-400">
+                    <span className="rounded-full border border-sky-200/70 bg-white/80 px-3 py-1.5 dark:border-white/10 dark:bg-white/5">
+                      Minimal Home
+                    </span>
+                    <span className="rounded-full border border-sky-200/70 bg-white/60 px-3 py-1.5 dark:border-white/10 dark:bg-white/[0.03]">
+                      {acp.connected ? "Runtime ready" : "Runtime offline"}
+                    </span>
+                  </div>
 
-                      <div className="mt-5 grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
-                        <BoardStat label="Board" value={String(workspaceCount).padStart(2, "0")} detail="Connected workspaces" />
-                        <BoardStat label="Active" value={String(totalActiveTasks)} detail="In flow lanes" />
-                        <BoardStat label="Done" value={String(totalDoneTasks)} detail="Completed tasks" />
-                        <BoardStat label="Runtime" value={acp.connected ? "Connected" : "Offline"} detail={acp.connected ? "ACP ready" : "Waiting for runtime"} />
-                        <BoardStat label="Running" value={String(runningCount)} detail="Sessions" />
-                        <BoardStat label="Queued" value={String(queuedCount)} detail="Awaiting concurrency" />
+                  <h1 className="mt-5 max-w-3xl font-['Avenir_Next_Condensed','Avenir_Next','Segoe_UI','Helvetica_Neue',sans-serif] text-[2.3rem] leading-[0.94] font-semibold tracking-[-0.05em] text-[#081120] dark:text-white sm:text-[3.1rem]">
+                    Start with a requirement.
+                  </h1>
+                  <p className="mt-4 max-w-2xl text-sm leading-7 text-[#4d6689] dark:text-slate-300">
+                    Pick a workspace, describe the task, and route it. Everything else can happen after you enter the flow.
+                  </p>
+
+                  <div className="mt-6 rounded-[30px] border border-sky-200/80 bg-white/82 p-4 shadow-[0_30px_100px_-58px_rgba(37,99,235,0.24)] backdrop-blur dark:border-white/10 dark:bg-[#0a1322]/70 sm:p-5">
+                    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#356fb0] dark:text-slate-400">
+                        Composer
                       </div>
-
-                      <div className="mt-5 rounded-[28px] border border-sky-200/75 bg-white/78 p-3 shadow-[0_30px_100px_-58px_rgba(37,99,235,0.24)] backdrop-blur dark:border-white/10 dark:bg-[#0a1322]/66 sm:p-4">
-                        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#356fb0] dark:text-slate-400">
-                          Composer (open board first)
-                        </div>
-                        <HomeInput
-                          variant="hero"
-                          workspaceId={activeWorkspaceId ?? undefined}
-                          onWorkspaceChange={(workspaceId) => {
-                            setActiveWorkspaceId(workspaceId);
-                            setRefreshKey((value) => value + 1);
-                          }}
-                          onSessionCreated={() => {
-                            setRefreshKey((value) => value + 1);
-                          }}
-                        />
-                      </div>
-
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <Link
-                          href={activeWorkspaceHref}
-                          className="inline-flex items-center justify-center rounded-full border border-sky-200/70 bg-white/90 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2b6fc8] transition-colors hover:bg-white dark:border-white/10 dark:bg-[#1b2232] dark:text-slate-300 dark:hover:bg-[#101826]"
-                        >
-                          Open workspace
-                        </Link>
-                        <Link
-                          href={activeKanbanHref}
-                          className="inline-flex items-center justify-center rounded-full bg-[#0f62d6] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white transition-colors hover:bg-[#2a77e4] dark:bg-[#5ee5ff] dark:text-[#04111d] dark:hover:bg-[#87edff]"
-                        >
-                          Open board
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() => setShowWorkspacesMenu((value) => !value)}
-                          className="inline-flex items-center justify-center rounded-full border border-sky-200/70 px-3 py-2 text-[11px] font-medium uppercase tracking-[0.16em] text-[#45678f] transition-colors hover:border-sky-300 hover:text-[#081120] dark:border-[#2a3042] dark:text-slate-400 dark:hover:border-[#39415a] dark:hover:text-slate-200"
-                        >
-                          {activeWorkspace?.title ?? "Switch workspace"}
-                        </button>
+                      <div className="text-[10px] uppercase tracking-[0.16em] text-[#6b84aa] dark:text-slate-500">
+                        Current workspace: {activeWorkspace?.title ?? "None"}
                       </div>
                     </div>
-
-                    <aside className="overflow-hidden rounded-[24px] border border-[#1f3354] bg-[linear-gradient(180deg,#07111f,#0b1630)] p-4 text-white sm:p-5">
-                      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.13),_transparent_30%),radial-gradient(circle_at_85%_0%,_rgba(37,99,235,0.1),_transparent_30%)]" />
-
-                      <div className="relative">
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-200/75">
-                          Board Snapshot
-                        </div>
-                        <div className="mt-2 text-[1.3rem] font-semibold text-white">
-                          {activeBoard?.name ?? "Loading board"}
-                        </div>
-                        <div className="mt-4 space-y-2">
-                          {isBoardLoading ? (
-                            <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-slate-300">Loading board status...</div>
-                          ) : (
-                            laneCards.slice(0, 4).map((lane) => (
-                              <div key={lane.column.id} className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2.5">
-                                <div className="flex items-center justify-between gap-2 text-xs uppercase tracking-[0.15em] text-slate-300">
-                                  <span>{lane.column.name}</span>
-                                  <span>{lane.count}</span>
-                                </div>
-                                {lane.items.length === 0 ? (
-                                  <div className="mt-2 text-[11px] text-slate-500">No cards</div>
-                                ) : (
-                                  <div className="mt-2 space-y-1">
-                                    {lane.items.map((task) => (
-                                      <div key={task.id} className="truncate rounded-[12px] border border-white/8 bg-white/[0.03] px-2 py-1.5 text-[11px] leading-5 text-slate-200">
-                                        {task.title}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    </aside>
+                    <HomeInput
+                      variant="hero"
+                      workspaceId={activeWorkspaceId ?? undefined}
+                      onWorkspaceChange={(workspaceId) => {
+                        setActiveWorkspaceId(workspaceId);
+                        setRefreshKey((value) => value + 1);
+                      }}
+                      onSessionCreated={() => {
+                        setRefreshKey((value) => value + 1);
+                      }}
+                    />
                   </div>
-                </section>
-              </div>
+
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowWorkspacesMenu((value) => !value)}
+                      className="inline-flex items-center justify-center rounded-full border border-sky-200/70 px-3 py-2 text-[11px] font-medium uppercase tracking-[0.16em] text-[#45678f] transition-colors hover:border-sky-300 hover:text-[#081120] dark:border-[#2a3042] dark:text-slate-400 dark:hover:border-[#39415a] dark:hover:text-slate-200"
+                    >
+                      {activeWorkspace?.title ?? "Switch workspace"}
+                    </button>
+                    <Link
+                      href={activeWorkspaceHref}
+                      className="inline-flex items-center justify-center rounded-full border border-sky-200/70 bg-white/90 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2b6fc8] transition-colors hover:bg-white dark:border-white/10 dark:bg-[#1b2232] dark:text-slate-300 dark:hover:bg-[#101826]"
+                    >
+                      Open workspace
+                    </Link>
+                    <Link
+                      href={activeKanbanHref}
+                      className="inline-flex items-center justify-center rounded-full bg-[#0f62d6] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white transition-colors hover:bg-[#2a77e4] dark:bg-[#5ee5ff] dark:text-[#04111d] dark:hover:bg-[#87edff]"
+                    >
+                      Open board
+                    </Link>
+                  </div>
+                </div>
+              </section>
             </div>
           )}
         </main>
