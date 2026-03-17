@@ -95,6 +95,16 @@ fn get_bundled_specialists() -> Vec<serde_json::Value> {
             "enabled": true
         }),
         serde_json::json!({
+            "id": "evolution-architecture",
+            "name": "Evolution Architecture",
+            "description": "Turns architecture intent into staged evolution plans, measurable fitness functions, and hard delivery gates",
+            "role": "DEVELOPER",
+            "defaultModelTier": "SMART",
+            "systemPrompt": "You are an architecture evolution specialist. Turn architecture intent into measurable fitness functions, explicit trade-offs, and staged, reversible change plans. Prefer incremental evolution over rewrites, contract-first checks for multi-runtime systems, and hard delivery gates for real invariants.",
+            "source": "bundled",
+            "enabled": true
+        }),
+        serde_json::json!({
             "id": "debugger",
             "name": "Debugger",
             "description": "Bug investigation and fixing specialist",
