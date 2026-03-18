@@ -470,12 +470,13 @@ describe("KanbanTab card detail manual runs", () => {
       expect(acp.selectSession).toHaveBeenCalledWith("session-456");
     });
 
-    const runOne = await screen.findByRole("button", { name: /Initial run/i });
-    const runTwo = await screen.findByRole("button", { name: /Verify run/i });
+    const runOne = await screen.findByRole("button", { name: /Dev/i });
+    const runTwo = await screen.findByRole("button", { name: /Review/i });
 
     expect(runOne.textContent).toContain("Dev");
     expect(runTwo.textContent).toContain("Review");
     expect(runTwo.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("completed")).toBeTruthy();
 
     fireEvent.click(runOne);
 

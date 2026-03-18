@@ -135,6 +135,8 @@ export function KanbanCardActivityBar({
   const selectedRunId = currentSessionId && orderedSessionIds.includes(currentSessionId)
     ? currentSessionId
     : orderedSessionIds[orderedSessionIds.length - 1];
+  const selectedLaneSession = selectedRunId ? laneSessionMap.get(selectedRunId) : undefined;
+  const selectedStepLabel = getLaneSessionStepLabel(selectedLaneSession);
 
   if (orderedSessionIds.length === 0) {
     return (
@@ -145,58 +147,58 @@ export function KanbanCardActivityBar({
   }
 
   return (
-    <div className="rounded-2xl border border-gray-200/80 bg-white/95 px-3 py-2 shadow-sm dark:border-[#232736] dark:bg-[#121620]">
-      <div className="overflow-x-auto">
-        <div className="flex min-w-max items-center gap-1.5">
-          {orderedSessionIds.map((sessionId, index) => {
-            const active = sessionId === selectedRunId;
-            const laneSession = laneSessionMap.get(sessionId);
-            const laneLabel = laneSession?.columnName ?? laneSession?.columnId;
-            const stepLabel = getLaneSessionStepLabel(laneSession);
-            const runLabel = buildSessionDisplayLabel(sessionId, index, sessionMap);
+    <div className="rounded-2xl border border-gray-200/80 bg-white/95 px-3 pt-2 pb-2 shadow-sm dark:border-[#232736] dark:bg-[#121620]">
+      <div className="flex flex-wrap items-end gap-1.5">
+        {orderedSessionIds.map((sessionId, index) => {
+          const active = sessionId === selectedRunId;
+          const laneSession = laneSessionMap.get(sessionId);
+          const laneLabel = laneSession?.columnName ?? laneSession?.columnId ?? "Run";
+          const runLabel = buildSessionDisplayLabel(sessionId, index, sessionMap);
 
-            return (
-              <button
-                key={sessionId}
-                type="button"
-                onClick={() => onSelectSession?.(sessionId)}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                  active
-                    ? "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-200"
-                    : "border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-400 dark:hover:text-gray-200"
-                }`}
-                aria-pressed={active}
-                title={`${runLabel} (${sessionId.slice(0, 8)})`}
-              >
-                <span className="max-w-36 truncate">{runLabel}</span>
-                {laneLabel && (
-                  <span className={`max-w-24 truncate rounded-full px-1.5 py-0.5 text-[10px] ${
-                    active
-                      ? "bg-amber-200/70 text-amber-900 dark:bg-amber-800/50 dark:text-amber-100"
-                      : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"
-                  }`}>
-                    {laneLabel}
-                  </span>
-                )}
-                {stepLabel && (
-                  <span className={`max-w-28 truncate rounded-full px-1.5 py-0.5 text-[10px] ${
-                    active
-                      ? "bg-sky-200/70 text-sky-900 dark:bg-sky-800/50 dark:text-sky-100"
-                      : "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300"
-                  }`}>
-                    {stepLabel}
-                  </span>
-                )}
-                {laneSession?.status && active && (
-                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
-                    {laneSession.status}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+          return (
+            <button
+              key={sessionId}
+              type="button"
+              onClick={() => onSelectSession?.(sessionId)}
+              className={`inline-flex max-w-full items-center gap-1.5 rounded-t-lg border px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                active
+                  ? "border-gray-300 border-b-white bg-white text-gray-900 dark:border-[#3b4158] dark:border-b-[#121620] dark:bg-[#161b27] dark:text-gray-100"
+                  : "border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300 hover:bg-white hover:text-gray-800 dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-[#131826] dark:hover:text-gray-200"
+              }`}
+              aria-pressed={active}
+              title={`${laneLabel} · Run ${index + 1} (${runLabel})`}
+            >
+              <span className="truncate font-semibold">{laneLabel}</span>
+              <span className={`rounded-md px-1.5 py-0.5 text-[10px] ${
+                active
+                  ? "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                  : "bg-white text-gray-500 dark:bg-[#141926] dark:text-gray-400"
+              }`}>
+                #{index + 1}
+              </span>
+            </button>
+          );
+        })}
       </div>
+      {(selectedLaneSession?.columnName || selectedStepLabel || selectedLaneSession?.status) && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-gray-200/80 pt-2 text-[10px] dark:border-[#232736]">
+          {selectedLaneSession?.columnName && (
+            <span className="rounded-full bg-sky-100 px-2 py-0.5 font-semibold uppercase tracking-wide text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">
+              {selectedLaneSession.columnName}
+            </span>
+          )}
+          {selectedStepLabel && (
+            <span className="rounded-full bg-indigo-100 px-2 py-0.5 font-semibold uppercase tracking-wide text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+              {selectedStepLabel}
+            </span>
+          )}
+          {selectedLaneSession?.status && (
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
+              {selectedLaneSession.status}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -103,21 +103,6 @@ function getSyncLabel(
   return "Not synced";
 }
 
-function getSyncDetail(
-  sessionStatus: "connecting" | "ready" | "error" | undefined,
-  queuePosition: number | undefined,
-  sessionError: string | undefined,
-  lastSyncError: string | undefined,
-  githubSyncedAt?: string,
-) {
-  if (sessionStatus === "connecting") return "Session starting...";
-  if (queuePosition) return "Waiting for an available slot.";
-  if (sessionStatus === "error") return sessionError ?? "Session failed";
-  if (lastSyncError) return lastSyncError;
-  if (githubSyncedAt) return new Date(githubSyncedAt).toLocaleString();
-  return null;
-}
-
 function formatArtifactGateBadgeLabel(
   nextColumnName: string | undefined,
   missingArtifacts: string[],
@@ -165,16 +150,12 @@ export function KanbanCard({
   onRefresh,
 }: KanbanCardProps) {
   const sessionStatus = linkedSession?.acpStatus;
-  const sessionError = linkedSession?.acpError;
   const canRetry = Boolean(task.assignedProvider) && (
     sessionStatus === "error" || (!task.triggerSessionId && task.columnId === "dev")
   ) && !queuePosition;
   const canRun = Boolean(task.assignedProvider) && !task.triggerSessionId && task.columnId !== "done" && !queuePosition;
   const [showAssignment, setShowAssignment] = useState(false);
 
-  const assignedProvider = availableProviders.find((provider) => provider.id === task.assignedProvider);
-  const assignedRole = task.assignedRole ?? "DEVELOPER";
-  const assignedSpecialist = specialists.find((item) => item.id === task.assignedSpecialistId);
   const hasCardOverride = Boolean(task.assignedProvider || task.assignedRole || task.assignedSpecialistId || task.assignedSpecialistName);
   const priorityTone = getPriorityTone(task.priority);
   const sessionTone = getSessionTone(sessionStatus, queuePosition);
@@ -183,10 +164,6 @@ export function KanbanCard({
   const automationSourceTone = hasCardOverride
     ? "bg-violet-100 text-violet-700 ring-1 ring-inset ring-violet-200 dark:bg-violet-900/20 dark:text-violet-300 dark:ring-violet-900/40"
     : "bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200 dark:bg-[#181c28] dark:text-slate-300 dark:ring-white/5";
-  const executionSummaryParts = assignedProvider
-    ? [assignedProvider.name, assignedRole, assignedSpecialist?.name].filter(Boolean)
-    : ["Inherited from lane defaults"];
-  const executionSummaryText = executionSummaryParts.join(" · ");
   const visibleLabels = (task.labels ?? []).slice(0, 2);
   const remainingLabelCount = Math.max((task.labels?.length ?? 0) - visibleLabels.length, 0);
   const visibleCodebaseIds = (task.codebaseIds && task.codebaseIds.length > 0 ? task.codebaseIds : allCodebaseIds).slice(0, 1);
@@ -196,7 +173,6 @@ export function KanbanCard({
   );
   const syncLabel = getSyncLabel(sessionStatus, queuePosition, Boolean(task.lastSyncError), task.githubSyncedAt);
   const syncTone = getSyncTone(sessionStatus, queuePosition, Boolean(task.lastSyncError), task.githubSyncedAt);
-  const syncDetail = getSyncDetail(sessionStatus, queuePosition, sessionError, task.lastSyncError, task.githubSyncedAt);
   const objectiveText = task.objective?.trim() || "No objective captured yet.";
   const transitionArtifacts = resolveKanbanTransitionArtifacts(boardColumns, task.columnId);
   const missingNextArtifacts = transitionArtifacts.nextRequiredArtifacts.filter(
@@ -337,12 +313,12 @@ export function KanbanCard({
 
       <p className="line-clamp-3 text-[12px] leading-5 text-slate-600 dark:text-slate-400">{objectiveText}</p>
       {liveMessageTail && (
-        <div className="rounded-lg border border-sky-200/80 bg-sky-50/70 px-2.5 py-1.5 dark:border-sky-900/50 dark:bg-sky-900/10">
-          <div className="text-[9px] font-semibold uppercase tracking-[0.18em] text-sky-600 dark:text-sky-300">
+        <div className="rounded-xl border border-sky-200/80 bg-sky-50/70 px-3 py-2.5 dark:border-sky-900/50 dark:bg-sky-900/10">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-600 dark:text-sky-300">
             Live Session
           </div>
           <div
-            className="mt-0.5 truncate font-mono text-[11px] leading-4 text-sky-700 dark:text-sky-200"
+            className="mt-1 line-clamp-2 font-mono text-[12px] leading-5 text-sky-700 dark:text-sky-200"
             title={liveMessageTail}
             data-testid="kanban-card-live-tail"
           >
@@ -396,13 +372,7 @@ export function KanbanCard({
 
       <div className="border-t border-slate-200/80 pt-2.5 dark:border-[#262938]">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            {syncDetail && (
-              <div className="truncate text-[10px] text-slate-500 dark:text-slate-400">
-                {syncDetail}
-              </div>
-            )}
-          </div>
+          <div className="min-w-0 flex-1" />
           {(canRun || canRetry) && (
             <button
               onClick={() => void onRetryTrigger(task.id)}
@@ -418,7 +388,7 @@ export function KanbanCard({
           )}
         </div>
 
-        <div className="mt-2 border-t border-slate-200/80 pt-2 dark:border-[#262938]">
+        <div className="mt-2 pt-2">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-1.5">
@@ -429,11 +399,6 @@ export function KanbanCard({
                   {automationSourceLabel}
                 </span>
               </div>
-              {hasCardOverride && (
-                <div className="mt-1 line-clamp-2 text-[11px] font-medium text-slate-700 dark:text-slate-200">
-                  {executionSummaryText}
-                </div>
-              )}
             </div>
             <button
               type="button"
