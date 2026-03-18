@@ -25,6 +25,7 @@ pub async fn run(
     workspace_id: &str,
     provider: &str,
     role: &str,
+    requested_session_id: Option<&str>,
 ) -> Result<(), String> {
     let _agent_role = AgentRole::from_str(role).ok_or_else(|| {
         format!(
@@ -57,64 +58,114 @@ pub async fn run(
         .ok_or("Failed to get agent ID from creation result")?
         .to_string();
 
-    // Create ACP session
-    let session_id = uuid::Uuid::new_v4().to_string();
-    let cwd = std::env::current_dir()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|_| ".".to_string());
+    let resumed_session = if let Some(session_id) = requested_session_id {
+        Some(
+            state
+                .acp_session_store
+                .get(session_id)
+                .await
+                .map_err(|e| format!("Failed to load session {}: {}", session_id, e))?
+                .ok_or_else(|| format!("Session not found: {}", session_id))?,
+        )
+    } else {
+        None
+    };
+    let session_id = resumed_session
+        .as_ref()
+        .map(|session| session.id.clone())
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let cwd = resumed_session
+        .as_ref()
+        .map(|session| session.cwd.clone())
+        .unwrap_or_else(|| {
+            std::env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| ".".to_string())
+        });
+    let effective_workspace_id = resumed_session
+        .as_ref()
+        .map(|session| session.workspace_id.clone())
+        .unwrap_or_else(|| workspace_id.to_string());
+    let effective_provider = resumed_session
+        .as_ref()
+        .and_then(|session| session.provider.clone())
+        .unwrap_or_else(|| provider.to_string());
+    let effective_role = resumed_session
+        .as_ref()
+        .and_then(|session| session.role.clone())
+        .unwrap_or_else(|| role.to_string());
 
     println!("╔══════════════════════════════════════════════════════════╗");
     println!("║  Routa CLI Chat                                         ║");
     println!("╠══════════════════════════════════════════════════════════╣");
     println!(
         "║  Agent : {:<48} ║",
-        format!("{} ({})", &agent_id[..8], role)
+        format!("{} ({})", &agent_id[..8], effective_role)
     );
-    println!("║  Workspace : {:<44} ║", workspace_id);
-    println!("║  Provider  : {:<44} ║", provider);
+    println!("║  Workspace : {:<44} ║", effective_workspace_id);
+    println!("║  Provider  : {:<44} ║", effective_provider);
     println!("╚══════════════════════════════════════════════════════════╝");
 
-    let mut session_rx: Option<broadcast::Receiver<serde_json::Value>> = None;
+    let session_exists = state.acp_manager.get_session(&session_id).await.is_some();
 
-    let spawn_result = state
-        .acp_manager
-        .create_session(
-            session_id.clone(),
-            cwd.clone(),
-            workspace_id.to_string(),
-            Some(provider.to_string()),
-            Some(role.to_string()),
-            None,
-            None,
-        )
-        .await;
+    if !session_exists {
+        let spawn_result = state
+            .acp_manager
+            .create_session(
+                session_id.clone(),
+                cwd.clone(),
+                effective_workspace_id.clone(),
+                Some(effective_provider.clone()),
+                Some(effective_role.clone()),
+                None,
+                resumed_session
+                    .as_ref()
+                    .and_then(|session| session.parent_session_id.clone()),
+            )
+            .await;
 
-    match spawn_result {
-        Ok((sid, _)) => {
-            println!("  {} Session: {}", style("●").green(), sid);
-            // Register with orchestrator
-            let acp = Arc::new(state.acp_manager.clone());
-            let orchestrator = RoutaOrchestrator::new(
-                OrchestratorConfig::default(),
-                acp,
-                state.agent_store.clone(),
-                state.task_store.clone(),
-                state.event_bus.clone(),
-            );
-            orchestrator
-                .register_agent_session(&agent_id, &session_id)
-                .await;
-
-            session_rx = state.acp_manager.subscribe(&session_id).await;
+        match spawn_result {
+            Ok((sid, _)) => {
+                println!("  {} Session: {}", style("●").green(), sid);
+                if resumed_session.is_none() {
+                    state
+                        .acp_session_store
+                        .create(
+                            &session_id,
+                            &cwd,
+                            &effective_workspace_id,
+                            Some(&effective_provider),
+                            Some(&effective_role),
+                            None,
+                        )
+                        .await
+                        .map_err(|e| format!("Failed to persist session {}: {}", session_id, e))?;
+                }
+            }
+            Err(e) => {
+                println!(
+                    "  {} Could not create ACP session: {}. Running in offline mode.",
+                    style("!").yellow(),
+                    e
+                );
+            }
         }
-        Err(e) => {
-            println!(
-                "  {} Could not create ACP session: {}. Running in offline mode.",
-                style("!").yellow(),
-                e
-            );
-        }
+    } else {
+        println!("  {} Session: {}", style("●").green(), session_id);
     }
+
+    let acp = Arc::new(state.acp_manager.clone());
+    let orchestrator = RoutaOrchestrator::new(
+        OrchestratorConfig::default(),
+        acp,
+        state.agent_store.clone(),
+        state.task_store.clone(),
+        state.event_bus.clone(),
+    );
+    orchestrator
+        .register_agent_session(&agent_id, &session_id)
+        .await;
+    let mut session_rx = state.acp_manager.subscribe(&session_id).await;
 
     println!();
     println!(
@@ -158,7 +209,7 @@ pub async fn run(
                         "jsonrpc": "2.0",
                         "id": 1,
                         "method": "agents.list",
-                        "params": { "workspaceId": workspace_id }
+                        "params": { "workspaceId": effective_workspace_id }
                     }))
                     .await;
                 if let Some(result) = response.get("result") {
@@ -177,7 +228,7 @@ pub async fn run(
                         "jsonrpc": "2.0",
                         "id": 1,
                         "method": "tasks.list",
-                        "params": { "workspaceId": workspace_id }
+                        "params": { "workspaceId": effective_workspace_id }
                     }))
                     .await;
                 if let Some(result) = response.get("result") {
@@ -243,7 +294,12 @@ pub async fn run(
                             .interact_text()
                             .unwrap_or_default()
                     };
-                    build_specialist_prompt(&specialist, &agent_id, workspace_id, &user_req)
+                    build_specialist_prompt(
+                        &specialist,
+                        &agent_id,
+                        &effective_workspace_id,
+                        &user_req,
+                    )
                 }
                 None => {
                     // User cancelled picker — skip this line
@@ -265,9 +321,18 @@ pub async fn run(
         // ── Send prompt ──────────────────────────────────────────────────
         match state.acp_manager.prompt(&session_id, &final_prompt).await {
             Ok(_) => {
+                if let Err(e) = state.acp_session_store.set_first_prompt_sent(&session_id).await {
+                    eprintln!("Failed to mark first prompt sent: {}", e);
+                }
                 // Stream updates until idle / turn_complete
                 if let Some(ref mut rx) = session_rx {
                     stream_until_idle(rx, state, &session_id).await;
+                }
+                if let Some(history) = state.acp_manager.get_session_history(&session_id).await {
+                    if let Err(e) = state.acp_session_store.save_history(&session_id, &history).await
+                    {
+                        eprintln!("Failed to persist session history: {}", e);
+                    }
                 }
             }
             Err(e) => {

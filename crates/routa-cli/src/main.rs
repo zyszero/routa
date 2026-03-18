@@ -137,6 +137,9 @@ enum Commands {
         /// Agent role: ROUTA, CRAFTER, GATE, or DEVELOPER
         #[arg(long, default_value = "DEVELOPER")]
         role: String,
+        /// Resume or attach to an existing ACP session ID
+        #[arg(long)]
+        session_id: Option<String>,
     },
 
     /// Run repository static/security scans (TypeScript, Rust, Docker)
@@ -1023,9 +1026,11 @@ async fn main() {
                 workspace_id,
                 provider,
                 role,
+                session_id,
             } => {
                 let state = commands::init_state(&cli.db).await;
-                commands::chat::run(&state, &workspace_id, &provider, &role).await
+                commands::chat::run(&state, &workspace_id, &provider, &role, session_id.as_deref())
+                    .await
             }
 
             Commands::Scan {
