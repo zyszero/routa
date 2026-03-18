@@ -1,4 +1,9 @@
-import type { SandboxInfo, SandboxPermissionConstraints } from "./types";
+import type {
+  CreateSandboxRequest,
+  SandboxInfo,
+  SandboxPermissionConstraints,
+  SandboxPolicyInput,
+} from "./types";
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/$/, "");
@@ -53,6 +58,70 @@ export async function applySandboxPermissionConstraints(
   );
 
   return parseJsonResponse<SandboxInfo>(response);
+}
+
+export async function createRustSandbox(
+  request: CreateSandboxRequest,
+): Promise<SandboxInfo> {
+  const baseUrl = getRustSandboxApiBaseUrl();
+  if (!baseUrl) {
+    throw new Error("Rust sandbox API is not configured. Set ROUTA_SERVER_URL to create sandboxes.");
+  }
+
+  const response = await fetch(`${baseUrl}/api/sandboxes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+    cache: "no-store",
+  });
+
+  return parseJsonResponse<SandboxInfo>(response);
+}
+
+export async function explainRustSandboxPolicy(
+  request: CreateSandboxRequest,
+): Promise<{ policy: unknown }> {
+  const baseUrl = getRustSandboxApiBaseUrl();
+  if (!baseUrl) {
+    throw new Error("Rust sandbox API is not configured. Set ROUTA_SERVER_URL to explain sandbox policies.");
+  }
+
+  const response = await fetch(`${baseUrl}/api/sandboxes/explain`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+    cache: "no-store",
+  });
+
+  return parseJsonResponse<{ policy: unknown }>(response);
+}
+
+export async function createWorkspaceSessionSandbox(options: {
+  workspaceId?: string;
+  workdir?: string;
+  policy?: SandboxPolicyInput;
+}): Promise<SandboxInfo | null> {
+  if (!getRustSandboxApiBaseUrl()) {
+    return null;
+  }
+
+  const policy: SandboxPolicyInput = {
+    workspaceId: options.workspaceId,
+    workdir: options.workdir,
+    trustWorkspaceConfig: true,
+    capabilities: ["workspaceRead"],
+    networkMode: "none",
+    ...options.policy,
+  };
+
+  if (!policy.workspaceId && !policy.workdir) {
+    return null;
+  }
+
+  return createRustSandbox({
+    lang: "python",
+    policy,
+  });
 }
 
 export async function explainSandboxPermissionConstraints(

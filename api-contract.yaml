@@ -591,6 +591,100 @@ components:
           type: string
           description: Language for the sandbox kernel (currently only "python")
           example: python
+        policy:
+          $ref: "#/components/schemas/SandboxPolicyInput"
+
+    SandboxPolicyInput:
+      type: object
+      properties:
+        workspaceId:
+          type: string
+        codebaseId:
+          type: string
+        workdir:
+          type: string
+        readOnlyPaths:
+          type: array
+          items:
+            type: string
+        readWritePaths:
+          type: array
+          items:
+            type: string
+        networkMode:
+          type: string
+          enum: [bridge, none]
+        envMode:
+          type: string
+          enum: [sanitized, inherit]
+        envFile:
+          type: string
+        envAllowlist:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+            enum: [workspaceRead, workspaceWrite, networkAccess, linkedWorktreeRead]
+        linkedWorktreeMode:
+          type: string
+          enum: [disabled, all, explicit]
+        linkedWorktreeIds:
+          type: array
+          items:
+            type: string
+        trustWorkspaceConfig:
+          type: boolean
+
+    SandboxPermissionConstraints:
+      type: object
+      properties:
+        readOnlyPaths:
+          type: array
+          items:
+            type: string
+        readWritePaths:
+          type: array
+          items:
+            type: string
+        envFile:
+          type: string
+        envAllowlist:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+            enum: [workspaceRead, workspaceWrite, networkAccess, linkedWorktreeRead]
+        networkMode:
+          type: string
+          enum: [bridge, none]
+        linkedWorktreeMode:
+          type: string
+          enum: [disabled, all, explicit]
+        linkedWorktreeIds:
+          type: array
+          items:
+            type: string
+
+    SandboxPermissionConstraintRequest:
+      type: object
+      required: [constraints]
+      properties:
+        constraints:
+          $ref: "#/components/schemas/SandboxPermissionConstraints"
+
+    SandboxPolicyExplainResponse:
+      type: object
+      required: [policy]
+      properties:
+        policy:
+          type: object
+          additionalProperties: true
 
     ExecuteRequest:
       type: object
@@ -3716,6 +3810,30 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/sandboxes/explain:
+    post:
+      operationId: explainSandboxPolicy
+      summary: Resolve and explain an effective sandbox policy without creating a sandbox
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSandboxRequest"
+      responses:
+        "200":
+          description: Resolved effective sandbox policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxPolicyExplainResponse"
+        "400":
+          description: Invalid sandbox policy input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/sandboxes/{id}:
     get:
       operationId: getSandbox
@@ -3760,6 +3878,78 @@ paths:
                     type: string
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/sandboxes/{id}/permissions/explain:
+    post:
+      operationId: explainSandboxPermissionConstraints
+      summary: Preview the effective sandbox policy after applying permission constraints
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SandboxPermissionConstraintRequest"
+      responses:
+        "200":
+          description: Resolved effective sandbox policy after mutation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxPolicyExplainResponse"
+        "400":
+          description: Invalid constraint payload or sandbox policy state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Sandbox not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/sandboxes/{id}/permissions/apply:
+    post:
+      operationId: applySandboxPermissionConstraints
+      summary: Recreate a sandbox with permission constraints applied to its policy
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SandboxPermissionConstraintRequest"
+      responses:
+        "200":
+          description: Updated sandbox info after policy mutation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxInfo"
+        "400":
+          description: Invalid constraint payload or sandbox policy state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Sandbox not found
           content:
             application/json:
               schema:

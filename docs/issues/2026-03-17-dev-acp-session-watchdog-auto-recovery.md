@@ -255,4 +255,8 @@ This gives Routa multiple viable paths:
 - Verified the live dev board still exposes prior watchdog recovery evidence in the UI:
   - `/workspace/default/kanban` currently shows watchdog-related cards whose latest state includes
     `Dev automation recovered after session inactive too long. Attempt 2/2.`
+- Captured manual UI evidence for the live watchdog recovery flow:
+  - `docs/issues/assets/2026-03-18-watchdog-e2e/01-kanban-watchdog-board.png`
+  - `docs/issues/assets/2026-03-18-watchdog-e2e/02-traces-session-list.png`
+  - `docs/issues/assets/2026-03-18-watchdog-e2e/03-watchdog-session-detail.png`
 - Based on current code, tests, and live board state, this issue is not reproducible as an unhandled silent-stall path anymore.

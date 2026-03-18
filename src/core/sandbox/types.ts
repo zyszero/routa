@@ -12,12 +12,29 @@ export const SANDBOX_IDLE_TIMEOUT_MS = 60_000;
 export const SANDBOX_CHECK_INTERVAL_MS = 60_000;
 
 export type SandboxNetworkMode = "bridge" | "none";
+export type SandboxEnvMode = "sanitized" | "inherit";
 export type SandboxCapability =
   | "workspaceRead"
   | "workspaceWrite"
   | "networkAccess"
   | "linkedWorktreeRead";
 export type SandboxLinkedWorktreeMode = "disabled" | "all" | "explicit";
+
+export interface SandboxPolicyInput {
+  workspaceId?: string;
+  codebaseId?: string;
+  workdir?: string;
+  readOnlyPaths?: string[];
+  readWritePaths?: string[];
+  networkMode?: SandboxNetworkMode;
+  envMode?: SandboxEnvMode;
+  envFile?: string;
+  envAllowlist?: string[];
+  capabilities?: SandboxCapability[];
+  linkedWorktreeMode?: SandboxLinkedWorktreeMode;
+  linkedWorktreeIds?: string[];
+  trustWorkspaceConfig?: boolean;
+}
 
 /** Information about a running sandbox container. */
 export interface SandboxInfo {
@@ -41,6 +58,8 @@ export interface SandboxInfo {
 export interface CreateSandboxRequest {
   /** Language for the sandbox kernel. Currently only "python" is supported. */
   lang: string;
+  /** Optional workspace-aware Rust sandbox policy. */
+  policy?: SandboxPolicyInput;
 }
 
 /** Permission-driven sandbox policy mutations that map to Rust SandboxPermissionConstraints. */
