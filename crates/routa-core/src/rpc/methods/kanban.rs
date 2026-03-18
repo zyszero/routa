@@ -328,6 +328,10 @@ pub async fn move_card(state: &AppState, params: MoveCardParams) -> Result<MoveC
         .cloned()
         .ok_or_else(|| RpcError::NotFound(format!("Column {} not found", params.target_column_id)))?;
     let previous_column_id = task.column_id.clone();
+    let source_column = previous_column_id
+        .as_deref()
+        .and_then(|column_id| board.columns.iter().find(|column| column.id == column_id))
+        .cloned();
 
     task.column_id = Some(params.target_column_id.clone());
     task.position = match params.position {
@@ -347,14 +351,22 @@ pub async fn move_card(state: &AppState, params: MoveCardParams) -> Result<MoveC
     };
     sync_task_status_from_column(&mut task);
     if previous_column_id.as_deref() != Some(params.target_column_id.as_str()) {
-        maybe_apply_lane_automation_defaults(&mut task, Some(&target_column));
+        let transition_column = resolve_transition_automation_column(
+            source_column.as_ref(),
+            Some(&target_column),
+        );
+        maybe_apply_lane_automation_defaults(&mut task, transition_column);
         task.trigger_session_id = None;
     }
     task.updated_at = Utc::now();
 
     state.task_store.save(&task).await?;
     if previous_column_id.as_deref() != Some(params.target_column_id.as_str()) {
-        maybe_trigger_lane_automation(state, &mut task, Some(&target_column)).await;
+        let transition_column = resolve_transition_automation_column(
+            source_column.as_ref(),
+            Some(&target_column),
+        );
+        maybe_trigger_lane_automation(state, &mut task, transition_column).await;
         state.task_store.save(&task).await?;
     }
     Ok(MoveCardResult {
@@ -395,6 +407,41 @@ fn maybe_apply_lane_automation_defaults(task: &mut Task, target_column: Option<&
             .and_then(|step| step.specialist_name.clone())
             .or_else(|| automation.specialist_name.clone());
     }
+}
+
+fn resolve_transition_automation_column<'a>(
+    source_column: Option<&'a KanbanColumn>,
+    target_column: Option<&'a KanbanColumn>,
+) -> Option<&'a KanbanColumn> {
+    let source_transition_type = source_column
+        .and_then(|column| column.automation.as_ref())
+        .and_then(|automation| automation.transition_type.as_deref())
+        .unwrap_or("entry");
+    if source_column
+        .and_then(|column| column.automation.as_ref())
+        .is_some_and(|automation| {
+            automation.enabled
+                && (source_transition_type == "exit" || source_transition_type == "both")
+        })
+    {
+        return source_column;
+    }
+
+    let target_transition_type = target_column
+        .and_then(|column| column.automation.as_ref())
+        .and_then(|automation| automation.transition_type.as_deref())
+        .unwrap_or("entry");
+    if target_column
+        .and_then(|column| column.automation.as_ref())
+        .is_some_and(|automation| {
+            automation.enabled
+                && (target_transition_type == "entry" || target_transition_type == "both")
+        })
+    {
+        return target_column;
+    }
+
+    None
 }
 
 async fn maybe_trigger_lane_automation(

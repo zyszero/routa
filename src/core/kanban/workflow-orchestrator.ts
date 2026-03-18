@@ -21,6 +21,7 @@ import type { Task, TaskLaneSessionRecoveryReason } from "../models/task";
 import type { KanbanBoardStore } from "../store/kanban-board-store";
 import type { TaskStore } from "../store/task-store";
 import type { ColumnTransitionData } from "./column-transition";
+import { resolveTransitionAutomation } from "./column-transition";
 import { getDefaultKanbanDevSessionSupervision } from "./board-session-supervision";
 import { markTaskLaneSessionStatus, upsertTaskLaneSession } from "./task-lane-history";
 
@@ -235,18 +236,13 @@ export class KanbanWorkflowOrchestrator {
     const data = event.data as unknown as ColumnTransitionData;
     const board = await this.kanbanBoardStore.get(data.boardId);
     if (!board) return;
-
-    const targetColumn = board.columns.find((column) => column.id === data.toColumnId);
-    if (!targetColumn?.automation?.enabled) return;
+    const resolved = resolveTransitionAutomation(board, data);
+    if (!resolved) return;
     const task = await this.taskStore.get(data.cardId);
     const laneObjective = task?.objective?.trim() || data.cardTitle;
-
-    const automation = targetColumn.automation;
-    const transitionType = automation.transitionType ?? "entry";
+    const targetColumn = resolved.column;
+    const automation = resolved.automation;
     const steps = getKanbanAutomationSteps(automation);
-
-    // Only trigger on entry or both
-    if (transitionType !== "entry" && transitionType !== "both") return;
     if (steps.length === 0) return;
 
     const supervision = shouldSuperviseStage(targetColumn.stage)

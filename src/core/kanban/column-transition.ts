@@ -7,7 +7,7 @@
  */
 
 import { EventBus, AgentEventType, AgentEvent } from "../events/event-bus";
-import type { KanbanColumnAutomation } from "../models/kanban";
+import type { KanbanBoard, KanbanColumn, KanbanColumnAutomation } from "../models/kanban";
 import type { KanbanBoardStore } from "../store/kanban-board-store";
 
 /** Data payload for COLUMN_TRANSITION events */
@@ -50,6 +50,32 @@ export type TransitionTriggerCallback = (params: {
   automation: KanbanColumnAutomation;
 }) => Promise<void>;
 
+export function resolveTransitionAutomation(
+  board: Pick<KanbanBoard, "columns">,
+  data: ColumnTransitionData,
+): { column: KanbanColumn; automation: KanbanColumnAutomation } | undefined {
+  const sourceColumn = board.columns.find((column) => column.id === data.fromColumnId);
+  const targetColumn = board.columns.find((column) => column.id === data.toColumnId);
+
+  const sourceTransitionType = sourceColumn?.automation?.transitionType ?? "entry";
+  if (
+    sourceColumn?.automation?.enabled
+    && (sourceTransitionType === "exit" || sourceTransitionType === "both")
+  ) {
+    return { column: sourceColumn, automation: sourceColumn.automation };
+  }
+
+  const targetTransitionType = targetColumn?.automation?.transitionType ?? "entry";
+  if (
+    targetColumn?.automation?.enabled
+    && (targetTransitionType === "entry" || targetTransitionType === "both")
+  ) {
+    return { column: targetColumn, automation: targetColumn.automation };
+  }
+
+  return undefined;
+}
+
 /**
  * ColumnTransitionHandler — Listens for COLUMN_TRANSITION events and
  * triggers the configured Column Agent for the target column.
@@ -80,15 +106,8 @@ export class ColumnTransitionHandler {
     const data = event.data as unknown as ColumnTransitionData;
     const board = await this.kanbanBoardStore.get(data.boardId);
     if (!board) return;
-
-    const targetColumn = board.columns.find((c) => c.id === data.toColumnId);
-    if (!targetColumn?.automation?.enabled) return;
-
-    const automation = targetColumn.automation;
-    const transitionType = automation.transitionType ?? "entry";
-
-    // Only trigger on entry or both
-    if (transitionType !== "entry" && transitionType !== "both") return;
+    const resolved = resolveTransitionAutomation(board, data);
+    if (!resolved) return;
 
     try {
       await this.onTrigger({
@@ -96,9 +115,9 @@ export class ColumnTransitionHandler {
         boardId: data.boardId,
         cardId: data.cardId,
         cardTitle: data.cardTitle,
-        columnId: targetColumn.id,
-        columnName: targetColumn.name,
-        automation,
+        columnId: resolved.column.id,
+        columnName: resolved.column.name,
+        automation: resolved.automation,
       });
     } catch (err) {
       console.error("[ColumnTransitionHandler] Failed to trigger agent:", err);

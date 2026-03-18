@@ -103,6 +103,98 @@ describe("KanbanWorkflowOrchestrator", () => {
     });
   });
 
+  it("prefers source-column exit automation over target-column entry automation", async () => {
+    const eventBus = new EventBus();
+    const boardStore = new InMemoryKanbanBoardStore();
+    const taskStore = new InMemoryTaskStore();
+    const createSession = vi.fn().mockResolvedValue("session-exit-1");
+
+    const board = createKanbanBoard({
+      id: "board-exit-1",
+      workspaceId: "default",
+      name: "Exit Board",
+      isDefault: true,
+      columns: [
+        {
+          id: "backlog",
+          name: "Backlog",
+          stage: "backlog",
+          position: 0,
+          automation: {
+            enabled: true,
+            providerId: "claude",
+            role: "ROUTA",
+            transitionType: "exit",
+          },
+        },
+        {
+          id: "todo",
+          name: "Todo",
+          stage: "todo",
+          position: 1,
+          automation: {
+            enabled: true,
+            providerId: "codex",
+            role: "DEVELOPER",
+            transitionType: "entry",
+          },
+        },
+      ],
+    });
+    await boardStore.save(board);
+
+    const task = createTask({
+      id: "task-exit-1",
+      title: "Prefer exit automation",
+      objective: "Verify source exit automation wins for a single transition",
+      workspaceId: "default",
+      boardId: board.id,
+      columnId: "backlog",
+    });
+    await taskStore.save(task);
+
+    const orchestrator = new KanbanWorkflowOrchestrator(
+      eventBus,
+      boardStore,
+      taskStore,
+      createSession,
+    );
+    orchestrator.start();
+
+    eventBus.emit({
+      type: AgentEventType.COLUMN_TRANSITION,
+      agentId: "test",
+      workspaceId: "default",
+      data: {
+        cardId: task.id,
+        cardTitle: task.title,
+        boardId: board.id,
+        workspaceId: "default",
+        fromColumnId: "backlog",
+        toColumnId: "todo",
+      },
+      timestamp: new Date(),
+    });
+
+    await vi.waitFor(() => {
+      expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+        columnId: "backlog",
+        columnName: "Backlog",
+        automation: expect.objectContaining({
+          providerId: "claude",
+          role: "ROUTA",
+          transitionType: "exit",
+        }),
+      }));
+    });
+
+    expect(createSession).toHaveBeenCalledTimes(1);
+    expect(orchestrator.getAutomationForCard(task.id)).toMatchObject({
+      columnId: "backlog",
+      sessionId: "session-exit-1",
+    });
+  });
+
   it("runs lane automation steps sequentially within the same column", async () => {
     const eventBus = new EventBus();
     const boardStore = new InMemoryKanbanBoardStore();
