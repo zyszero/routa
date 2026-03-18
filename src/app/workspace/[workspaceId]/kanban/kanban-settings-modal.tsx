@@ -2,7 +2,6 @@
 
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { AcpProviderInfo } from "@/client/acp-client";
-import { formatArtifactSummary } from "@/core/kanban/transition-artifacts";
 import {
   getKanbanAutomationSteps,
   type KanbanAutomationStep,
@@ -208,40 +207,35 @@ export function KanbanSettingsModal({
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
       <div className="relative flex h-full w-full items-center justify-center p-2 sm:p-4">
         <div className="relative flex h-[94vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-[24px] border border-white/10 bg-white shadow-[0_30px_120px_rgba(15,23,42,0.32)] dark:bg-[#0d1118]">
-          <div className="relative overflow-hidden border-b border-slate-200/80 bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.16),_transparent_30%),linear-gradient(135deg,_rgba(255,255,255,0.98),_rgba(248,250,252,0.94))] px-4 py-4 dark:border-slate-800 dark:bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.12),_transparent_28%),linear-gradient(135deg,_rgba(15,23,42,0.96),_rgba(13,17,24,0.98))] sm:px-5">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div className="min-w-0 space-y-2">
-                <div className="inline-flex items-center rounded-full border border-amber-300/70 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-                  Kanban Control Room
-                </div>
-                <div className="space-y-1">
-                  <h2 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white sm:text-2xl">
+          <div className="relative overflow-hidden border-b border-slate-200/80 bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.16),_transparent_30%),linear-gradient(135deg,_rgba(255,255,255,0.98),_rgba(248,250,252,0.94))] px-4 py-3 dark:border-slate-800 dark:bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.12),_transparent_28%),linear-gradient(135deg,_rgba(15,23,42,0.96),_rgba(13,17,24,0.98))] sm:px-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex items-center rounded-full border border-amber-300/70 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                    Kanban
+                  </div>
+                  <h2 className="truncate text-lg font-semibold tracking-tight text-slate-900 dark:text-white sm:text-xl">
                     {board.name}
                   </h2>
-                  <p className="max-w-2xl text-sm leading-5 text-slate-600 dark:text-slate-300">
-                    Keep stage setup simple first. Advanced runtime controls stay collapsed unless you need them.
-                  </p>
                 </div>
               </div>
 
-              <div className="w-full xl:w-auto xl:min-w-[560px] rounded-[20px] border border-white/60 bg-white/90 p-3.5 shadow-sm backdrop-blur dark:border-slate-700/70 dark:bg-slate-950/50">
-                <div className="flex flex-col gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2.5">
-                      <StatPill label="Visible" value={`${visibleColumnCount}/${sortedColumns.length}`} tone="amber" />
-                      <StatPill label="Automation" value={String(automationEnabledCount)} tone="emerald" />
-                      <StatPill label="Queue" value={`Max ${sessionConcurrencyLimit}`} tone="slate" />
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowRuntimeSettings((current) => !current)}
-                    className="inline-flex w-fit items-center rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-[#111722]"
-                  >
-                    {showRuntimeSettings ? "Hide runtime settings" : "Show runtime settings"}
-                  </button>
-                  {showRuntimeSettings ? (
-                    <div className="grid gap-3 border-t border-slate-200/80 pt-3 dark:border-slate-800 lg:grid-cols-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatPill label="Visible" value={`${visibleColumnCount}/${sortedColumns.length}`} tone="amber" />
+                <StatPill label="Automation" value={String(automationEnabledCount)} tone="emerald" />
+                <StatPill label="Queue" value={`Max ${sessionConcurrencyLimit}`} tone="slate" />
+                <button
+                  type="button"
+                  onClick={() => setShowRuntimeSettings((current) => !current)}
+                  className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-[#111722]"
+                >
+                  {showRuntimeSettings ? "Hide runtime" : "Runtime"}
+                </button>
+              </div>
+            </div>
+            {showRuntimeSettings ? (
+              <div className="mt-3 rounded-[18px] border border-white/60 bg-white/90 p-3 shadow-sm backdrop-blur dark:border-slate-700/70 dark:bg-slate-950/50">
+                <div className="grid gap-3 dark:border-slate-800 lg:grid-cols-2">
                       <div>
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
                           Session queue
@@ -334,21 +328,19 @@ export function KanbanSettingsModal({
                         </div>
                       </div>
                     </div>
-                  ) : null}
-                </div>
               </div>
-            </div>
+            ) : null}
           </div>
 
-          <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)]">
-            <aside className="min-h-0 overflow-y-auto border-b border-slate-200/80 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-[#0a0f16] xl:border-b-0 xl:border-r">
+          <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)]">
+            <aside className="min-h-0 overflow-y-auto border-b border-slate-200/80 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-[#0a0f16] xl:border-b-0 xl:border-r xl:p-4">
               <div className="space-y-4">
                 <SectionCard
                   eyebrow="Stage map"
                   title="Stages"
-                  description="Pick a stage and decide whether it stays visible."
+                  description=""
                 >
-                  <div className="space-y-2">
+                  <div className="flex gap-2 overflow-x-auto pb-1 xl:block xl:space-y-1.5 xl:overflow-visible xl:pb-0">
                     {sortedColumns.map((column) => {
                       const automation = columnAutomation[column.id] ?? { enabled: false };
                       const active = selectedColumnId === column.id;
@@ -356,7 +348,7 @@ export function KanbanSettingsModal({
                       return (
                         <div
                           key={column.id}
-                          className={`rounded-[18px] border px-3 py-2.5 transition ${
+                          className={`min-w-[190px] rounded-[16px] border px-2.5 py-2 transition xl:min-w-0 ${
                             active
                               ? "border-slate-900 bg-slate-900 text-white shadow-lg shadow-slate-900/10 dark:border-amber-400/40 dark:bg-slate-900"
                               : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-[#111722] dark:hover:border-slate-700"
@@ -373,7 +365,7 @@ export function KanbanSettingsModal({
                                 <div className={`truncate text-[11px] uppercase tracking-[0.18em] ${active ? "text-slate-300" : "text-slate-400 dark:text-slate-500"}`}>
                                   {column.id}
                                 </div>
-                                <div className={`mt-1 text-[11px] leading-4 ${active ? "text-slate-300" : "text-slate-500 dark:text-slate-400"}`}>
+                                <div className={`mt-1 text-[10px] leading-4 ${active ? "text-slate-300" : "text-slate-500 dark:text-slate-400"}`}>
                                   {automation.enabled ? getAutomationSummary(automation, availableProviders, specialists) : "Manual only"}
                                 </div>
                               </div>
@@ -393,19 +385,14 @@ export function KanbanSettingsModal({
                             </div>
                           </button>
                           <div
-                            className={`mt-2 flex items-center justify-between rounded-xl border px-2.5 py-1.5 ${
+                            className={`mt-2 flex items-center justify-between rounded-xl border px-2 py-1 ${
                               active
                                 ? "border-white/15 bg-white/5"
                                 : "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-[#0b1119]"
                             }`}
                           >
                             <div className="space-y-0.5">
-                              <div className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${active ? "text-slate-300" : "text-slate-500 dark:text-slate-400"}`}>
-                                Visible
-                              </div>
-                              <div className={`text-[11px] leading-4 ${active ? "text-slate-400" : "text-slate-500 dark:text-slate-400"}`}>
-                                Hidden stages stay in the board data.
-                              </div>
+                              <div className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${active ? "text-slate-300" : "text-slate-500 dark:text-slate-400"}`}>Visible</div>
                             </div>
                             <input
                               type="checkbox"
@@ -430,7 +417,7 @@ export function KanbanSettingsModal({
               </div>
             </aside>
 
-            <main className="min-h-0 overflow-y-auto bg-white p-4 dark:bg-[#0d1118] sm:p-5">
+            <main className="min-h-0 overflow-y-auto bg-white p-3 dark:bg-[#0d1118] sm:p-4 xl:p-5">
               {selectedColumn ? (
                 <ColumnAutomationWorkspace
                   column={selectedColumn}
@@ -497,105 +484,73 @@ function ColumnAutomationWorkspace({
     [automation],
   );
   const firstStep = automationSteps[0];
-  const selectedSpecialist = specialists.find((specialist) => specialist.id === firstStep?.specialistId) ?? null;
-  const showAdvancedByDefault = automationSteps.length > 1
-    || Boolean(automation.requiredArtifacts?.length)
-    || Boolean(automation.autoAdvanceOnSuccess);
-  const [showAdvanced, setShowAdvanced] = useState(showAdvancedByDefault);
+  const showAdvancedByDefault = true;
+  const [_showAdvanced, setShowAdvanced] = useState(showAdvancedByDefault);
 
   return (
     <div className="space-y-4">
-      <div className="rounded-[22px] border border-slate-200 bg-[linear-gradient(135deg,_rgba(251,191,36,0.10),_rgba(255,255,255,0.98)_38%,_rgba(255,255,255,1)_100%)] p-4 dark:border-slate-800 dark:bg-[linear-gradient(135deg,_rgba(245,158,11,0.10),_rgba(15,23,42,0.92)_38%,_rgba(13,17,24,0.98)_100%)] sm:p-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:border-slate-700 dark:bg-[#111722] dark:text-slate-400">
-                Column automation
-              </span>
-              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:border-slate-700 dark:bg-[#111722] dark:text-slate-400">
-                {column.id}
-              </span>
-            </div>
-            <div>
-              <h3 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{column.name}</h3>
-              <p className="mt-1.5 max-w-2xl text-sm leading-5 text-slate-600 dark:text-slate-300">
-                Decide who runs when this stage is triggered and what evidence is required.
-              </p>
-            </div>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white/90 p-2.5 dark:border-slate-700 dark:bg-[#0d1118]/90">
-            <label className="flex items-center gap-3">
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Automation</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={automation.enabled}
-                onClick={() => {
-                  if (automation.enabled) {
-                    onUpdate({ ...automation, enabled: false });
-                    return;
-                  }
-                  const defaultAutomation = getDefaultAutomationForStage(column.stage);
-                  setShowAdvanced(
-                    defaultAutomation.steps!.length > 1
-                    || Boolean(defaultAutomation.requiredArtifacts?.length)
-                    || Boolean(defaultAutomation.autoAdvanceOnSuccess),
-                  );
-                  onUpdate(syncAutomationPrimaryStep({
-                    ...defaultAutomation,
-                    ...automation,
-                    enabled: true,
-                    steps: automation.steps?.length ? automation.steps : defaultAutomation.steps,
-                    requiredArtifacts: automation.requiredArtifacts ?? defaultAutomation.requiredArtifacts,
-                    autoAdvanceOnSuccess: automation.autoAdvanceOnSuccess ?? defaultAutomation.autoAdvanceOnSuccess,
-                    transitionType: automation.transitionType ?? defaultAutomation.transitionType,
-                  }));
-                }}
-                className={`relative inline-flex h-7 w-12 items-center rounded-full transition ${
-                  automation.enabled ? "bg-amber-500" : "bg-slate-300 dark:bg-slate-700"
-                }`}
-              >
-                <span
-                  className={`inline-block h-5 w-5 rounded-full bg-white transition ${
-                    automation.enabled ? "translate-x-6" : "translate-x-1"
-                  }`}
-                />
-              </button>
-              <span className={`text-sm font-medium ${automation.enabled ? "text-emerald-600 dark:text-emerald-300" : "text-slate-400 dark:text-slate-500"}`}>
-                {automation.enabled ? "Enabled" : "Disabled"}
-              </span>
-            </label>
-            {automation.enabled ? (
-              <button
-                type="button"
-                onClick={() => {
-                  const defaultAutomation = getDefaultAutomationForStage(column.stage);
-                  setShowAdvanced(
-                    defaultAutomation.steps!.length > 1
-                    || Boolean(defaultAutomation.requiredArtifacts?.length)
-                    || Boolean(defaultAutomation.autoAdvanceOnSuccess),
-                  );
-                  onUpdate(defaultAutomation);
-                }}
-                className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-[#111722]"
-              >
-                Use recommended defaults
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
       {automation.enabled ? (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
-          <div className="space-y-4">
-            <SectionCard
-              eyebrow="Basics"
-              title="What this stage does"
-              description="Start with one recommended step. Only open advanced settings if this lane needs extra orchestration."
-            >
+        <div className="space-y-4">
+          <SectionCard eyebrow="Stage" title={column.name} description="">
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 rounded-[18px] border border-slate-200 bg-[linear-gradient(135deg,_rgba(251,191,36,0.08),_rgba(255,255,255,0.98)_38%,_rgba(255,255,255,1)_100%)] p-3 dark:border-slate-800 dark:bg-[linear-gradient(135deg,_rgba(245,158,11,0.08),_rgba(15,23,42,0.92)_38%,_rgba(13,17,24,0.98)_100%)] lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:border-slate-700 dark:bg-[#111722] dark:text-slate-400">
+                    {column.id}
+                  </span>
+                  <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 dark:border-slate-700 dark:bg-[#0d1118]/90">
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Automation</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={automation.enabled}
+                      onClick={() => {
+                        if (automation.enabled) {
+                          onUpdate({ ...automation, enabled: false });
+                          return;
+                        }
+                        const defaultAutomation = getDefaultAutomationForStage(column.stage);
+                        setShowAdvanced(true);
+                        onUpdate(syncAutomationPrimaryStep({
+                          ...defaultAutomation,
+                          ...automation,
+                          enabled: true,
+                          steps: automation.steps?.length ? automation.steps : defaultAutomation.steps,
+                          requiredArtifacts: automation.requiredArtifacts ?? defaultAutomation.requiredArtifacts,
+                          autoAdvanceOnSuccess: automation.autoAdvanceOnSuccess ?? defaultAutomation.autoAdvanceOnSuccess,
+                          transitionType: automation.transitionType ?? defaultAutomation.transitionType,
+                        }));
+                      }}
+                      className={`relative inline-flex h-7 w-12 items-center rounded-full transition ${
+                        automation.enabled ? "bg-amber-500" : "bg-slate-300 dark:bg-slate-700"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-5 w-5 rounded-full bg-white transition ${
+                          automation.enabled ? "translate-x-6" : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                    <span className={`text-sm font-medium ${automation.enabled ? "text-emerald-600 dark:text-emerald-300" : "text-slate-400 dark:text-slate-500"}`}>
+                      {automation.enabled ? "Enabled" : "Disabled"}
+                    </span>
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const defaultAutomation = getDefaultAutomationForStage(column.stage);
+                    setShowAdvanced(true);
+                    onUpdate(defaultAutomation);
+                  }}
+                  className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-[#111722]"
+                >
+                  Defaults
+                </button>
+              </div>
+
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <ConfigField label="Provider" hint="Leave blank to use the workspace default provider.">
+                <ConfigField label="Provider">
                   <select
                     aria-label="Provider"
                     value={firstStep?.providerId ?? ""}
@@ -615,7 +570,7 @@ function ColumnAutomationWorkspace({
                   </select>
                 </ConfigField>
 
-                <ConfigField label="Role" hint="Choose the orchestration behavior for this stage.">
+                <ConfigField label="Role">
                   <select
                     aria-label="Role"
                     value={firstStep?.role ?? "DEVELOPER"}
@@ -634,7 +589,7 @@ function ColumnAutomationWorkspace({
                   </select>
                 </ConfigField>
 
-                <ConfigField label="Specialist" hint="Pin a named specialist when this stage should use a curated pattern.">
+                <ConfigField label="Specialist">
                   <select
                     aria-label="Specialist"
                     value={firstStep?.specialistId ?? ""}
@@ -662,7 +617,7 @@ function ColumnAutomationWorkspace({
                   </select>
                 </ConfigField>
 
-                <ConfigField label="Trigger moment" hint="Control whether the automation fires when a card enters, exits, or does either.">
+                <ConfigField label="Trigger">
                   <select
                     aria-label="Trigger moment"
                     value={automation.transitionType ?? "entry"}
@@ -675,30 +630,18 @@ function ColumnAutomationWorkspace({
                   </select>
                 </ConfigField>
               </div>
-            </SectionCard>
+            </div>
+          </SectionCard>
 
-            <SectionCard
-              eyebrow="Advanced"
-              title="Optional orchestration"
-              description="Use these controls only when one stage needs multiple steps, stricter evidence, or auto-advance."
-            >
-              <div className="space-y-3">
-                <button
-                  type="button"
-                  onClick={() => setShowAdvanced((current) => !current)}
-                  className="inline-flex items-center rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-[#111722]"
-                >
-                  {showAdvanced ? "Hide advanced settings" : "Show advanced settings"}
-                </button>
-
-                {showAdvanced ? (
-                  <div className="space-y-4">
+          <SectionCard
+            eyebrow="Advanced"
+            title="Advanced"
+            description=""
+          >
+            <div className="space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-[#111722]">
                       <div>
                         <div className="text-sm font-medium text-slate-900 dark:text-slate-100">Automation steps</div>
-                        <div className="text-sm leading-5 text-slate-500 dark:text-slate-400">
-                          The next step starts only after the previous session succeeds.
-                        </div>
                       </div>
                       <button
                         type="button"
@@ -765,7 +708,7 @@ function ColumnAutomationWorkspace({
                           </div>
 
                           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                            <ConfigField label={`Provider ${index + 1}`} hint="Leave blank to use the workspace default provider.">
+                            <ConfigField label={`Provider ${index + 1}`}>
                               <select
                                 aria-label={index === 0 ? "Provider" : `Provider ${index + 1}`}
                                 value={step.providerId ?? ""}
@@ -785,7 +728,7 @@ function ColumnAutomationWorkspace({
                               </select>
                             </ConfigField>
 
-                            <ConfigField label={`Role ${index + 1}`} hint="Choose the orchestration behavior for this step.">
+                            <ConfigField label={`Role ${index + 1}`}>
                               <select
                                 aria-label={index === 0 ? "Role" : `Role ${index + 1}`}
                                 value={step.role ?? "DEVELOPER"}
@@ -804,7 +747,7 @@ function ColumnAutomationWorkspace({
                               </select>
                             </ConfigField>
 
-                            <ConfigField label={`Specialist ${index + 1}`} hint="Pin a named specialist when this step should use a curated pattern.">
+                            <ConfigField label={`Specialist ${index + 1}`}>
                               <select
                                 aria-label={index === 0 ? "Specialist" : `Specialist ${index + 1}`}
                                 value={step.specialistId ?? ""}
@@ -888,50 +831,17 @@ function ColumnAutomationWorkspace({
                         </span>
                       </span>
                     </label>
-                  </div>
-                ) : null}
-              </div>
-            </SectionCard>
-          </div>
-
-          <div className="space-y-3.5">
-            <SectionCard
-              eyebrow="Preview"
-              title="Effective automation"
-              description="A quick readout of the workflow this column will launch."
-            >
-              <dl className="space-y-3">
-                <SummaryRow label="Steps" value={automationSteps.map((step, index) => formatAutomationStepSummary(step, index, availableProviders, specialists)).join(" -> ")} />
-                <SummaryRow label="Provider" value={resolveProviderName(firstStep?.providerId, availableProviders) ?? "Workspace default"} />
-                <SummaryRow label="Role" value={selectedSpecialist?.role ?? firstStep?.role ?? "DEVELOPER"} />
-                <SummaryRow label="Specialist" value={selectedSpecialist?.name ?? firstStep?.specialistName ?? "None"} />
-                <SummaryRow label="Trigger" value={formatTriggerLabel(automation.transitionType)} />
-                <SummaryRow label="Artifacts" value={formatArtifactSummary(automation.requiredArtifacts)} />
-                <SummaryRow label="Auto-advance" value={automation.autoAdvanceOnSuccess ? "Enabled" : "Disabled"} />
-              </dl>
-            </SectionCard>
-
-            <SectionCard
-              eyebrow="Operational note"
-              title="How to use this well"
-              description="A tighter policy usually creates a more predictable board."
-            >
-              <ul className="space-y-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                <li>Use `entry` for build or implementation stages where work should start immediately.</li>
-                <li>Use `exit` or artifact gates for review stages that should verify evidence before moving on.</li>
-                <li>Reserve auto-advance for deterministic flows; manual approvals still fit better in human review columns.</li>
-              </ul>
-            </SectionCard>
-          </div>
+            </div>
+          </SectionCard>
         </div>
       ) : (
         <SectionCard
           eyebrow="Manual stage"
           title="Automation is off"
-          description="This column currently behaves as a human-controlled checkpoint."
+          description=""
         >
-          <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-8 text-sm leading-6 text-slate-500 dark:border-slate-700 dark:bg-[#111722] dark:text-slate-400">
-            Enable automation to assign a provider, choose a specialist, define trigger timing, and add artifact requirements for this stage.
+          <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-6 text-sm leading-6 text-slate-500 dark:border-slate-700 dark:bg-[#111722] dark:text-slate-400">
+            Enable automation to configure this stage.
           </div>
         </SectionCard>
       )}
@@ -962,15 +872,15 @@ function SectionCard({
 }: {
   eyebrow: string;
   title: string;
-  description: string;
+  description?: string;
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-[20px] border border-slate-200 bg-white p-3.5 shadow-sm dark:border-slate-800 dark:bg-[#0f1621] sm:p-4">
-      <div className="mb-3 space-y-1">
+    <section className="rounded-[20px] border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-[#0f1621] sm:p-4">
+      <div className="mb-2.5 space-y-1">
         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">{eyebrow}</div>
         <h4 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h4>
-        <p className="text-sm leading-5 text-slate-500 dark:text-slate-400">{description}</p>
+        {description ? <p className="text-sm leading-5 text-slate-500 dark:text-slate-400">{description}</p> : null}
       </div>
       {children}
     </section>
@@ -979,28 +889,16 @@ function SectionCard({
 
 function ConfigField({
   label,
-  hint,
   children,
 }: {
   label: string;
-  hint: string;
   children: ReactNode;
 }) {
   return (
     <label className="block space-y-2">
       <span className="block text-sm font-medium text-slate-800 dark:text-slate-200">{label}</span>
       {children}
-      <span className="block text-sm leading-5 text-slate-500 dark:text-slate-400">{hint}</span>
     </label>
-  );
-}
-
-function SummaryRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-3.5 py-3 dark:border-slate-800 dark:bg-[#111722]">
-      <dt className="text-sm text-slate-500 dark:text-slate-400">{label}</dt>
-      <dd className="text-right text-sm font-medium text-slate-900 dark:text-slate-100">{value}</dd>
-    </div>
   );
 }
 
