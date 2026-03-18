@@ -420,6 +420,7 @@ impl AgentTools {
         scope: Option<&str>,
         acceptance_criteria: Option<Vec<String>>,
         verification_commands: Option<Vec<String>>,
+        test_cases: Option<Vec<String>>,
         dependencies: Option<Vec<String>>,
         parallel_group: Option<&str>,
     ) -> Result<ToolResult, ServerError> {
@@ -432,6 +433,7 @@ impl AgentTools {
             scope.map(|s| s.to_string()),
             acceptance_criteria,
             verification_commands,
+            test_cases,
             dependencies,
             parallel_group.map(|s| s.to_string()),
         );

@@ -93,6 +93,7 @@ pub struct CreateParams {
     pub scope: Option<String>,
     pub acceptance_criteria: Option<Vec<String>>,
     pub verification_commands: Option<Vec<String>>,
+    pub test_cases: Option<Vec<String>>,
     pub dependencies: Option<Vec<String>>,
     pub parallel_group: Option<String>,
 }
@@ -112,6 +113,7 @@ pub async fn create(state: &AppState, params: CreateParams) -> Result<CreateResu
         params.scope,
         params.acceptance_criteria,
         params.verification_commands,
+        params.test_cases,
         params.dependencies,
         params.parallel_group,
     );

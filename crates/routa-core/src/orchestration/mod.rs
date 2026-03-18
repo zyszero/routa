@@ -438,6 +438,7 @@ impl RoutaOrchestrator {
             task.scope.as_deref(),
             task.acceptance_criteria.as_ref(),
             task.verification_commands.as_ref(),
+            task.test_cases.as_ref(),
             &params.caller_agent_id,
             params.additional_instructions.as_deref(),
         );
@@ -806,6 +807,7 @@ fn build_delegation_prompt(
     task_scope: Option<&str>,
     acceptance_criteria: Option<&Vec<String>>,
     verification_commands: Option<&Vec<String>>,
+    test_cases: Option<&Vec<String>>,
     parent_agent_id: &str,
     additional_context: Option<&str>,
 ) -> String {
@@ -831,6 +833,13 @@ fn build_delegation_prompt(
         prompt.push_str("\n## Verification\n");
         for c in commands {
             prompt.push_str(&format!("- `{}`\n", c));
+        }
+    }
+
+    if let Some(cases) = test_cases {
+        prompt.push_str("\n## Test Cases\n");
+        for case in cases {
+            prompt.push_str(&format!("- {}\n", case));
         }
     }
 

@@ -20,22 +20,23 @@ impl TaskStore {
         self.db
             .with_conn_async(move |conn| {
                 conn.execute(
-                    "INSERT INTO tasks (id, title, objective, scope, acceptance_criteria, verification_commands,
+                    "INSERT INTO tasks (id, title, objective, scope, acceptance_criteria, verification_commands, test_cases,
                                          assigned_to, status, board_id, column_id, position, priority, labels, assignee,
                                          assigned_provider, assigned_role, assigned_specialist_id, assigned_specialist_name,
                                          trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
                                          github_synced_at, last_sync_error, dependencies, parallel_group, workspace_id, session_id,
                                          completion_summary, verification_verdict, verification_report, codebase_ids, worktree_id,
                                          version, created_at, updated_at)
-                                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
-                                         ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35,
-                                         1, ?36, ?37)
+                                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18,
+                                         ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36,
+                                         1, ?37, ?38)
                      ON CONFLICT(id) DO UPDATE SET
                        title = excluded.title,
                        objective = excluded.objective,
                        scope = excluded.scope,
                        acceptance_criteria = excluded.acceptance_criteria,
                        verification_commands = excluded.verification_commands,
+                       test_cases = excluded.test_cases,
                        assigned_to = excluded.assigned_to,
                        status = excluded.status,
                                              board_id = excluded.board_id,
@@ -73,6 +74,7 @@ impl TaskStore {
                         t.scope,
                         t.acceptance_criteria.map(|v| serde_json::to_string(&v).unwrap_or_default()),
                         t.verification_commands.map(|v| serde_json::to_string(&v).unwrap_or_default()),
+                        t.test_cases.map(|v| serde_json::to_string(&v).unwrap_or_default()),
                         t.assigned_to,
                         t.status.as_str(),
                         t.board_id,
@@ -116,7 +118,7 @@ impl TaskStore {
         self.db
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, title, objective, scope, acceptance_criteria, verification_commands,
+                    "SELECT id, title, objective, scope, acceptance_criteria, verification_commands, test_cases,
                      assigned_to, status, board_id, column_id, position, priority, labels, assignee,
                      assigned_provider, assigned_role, assigned_specialist_id, assigned_specialist_name,
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
@@ -135,7 +137,7 @@ impl TaskStore {
         self.db
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, title, objective, scope, acceptance_criteria, verification_commands,
+                    "SELECT id, title, objective, scope, acceptance_criteria, verification_commands, test_cases,
                      assigned_to, status, board_id, column_id, position, priority, labels, assignee,
                      assigned_provider, assigned_role, assigned_specialist_id, assigned_specialist_name,
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
@@ -156,7 +158,7 @@ impl TaskStore {
         self.db
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, title, objective, scope, acceptance_criteria, verification_commands,
+                    "SELECT id, title, objective, scope, acceptance_criteria, verification_commands, test_cases,
                      assigned_to, status, board_id, column_id, position, priority, labels, assignee,
                      assigned_provider, assigned_role, assigned_specialist_id, assigned_specialist_name,
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
@@ -182,7 +184,7 @@ impl TaskStore {
         self.db
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, title, objective, scope, acceptance_criteria, verification_commands,
+                    "SELECT id, title, objective, scope, acceptance_criteria, verification_commands, test_cases,
                      assigned_to, status, board_id, column_id, position, priority, labels, assignee,
                      assigned_provider, assigned_role, assigned_specialist_id, assigned_specialist_name,
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
@@ -205,7 +207,7 @@ impl TaskStore {
         self.db
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, title, objective, scope, acceptance_criteria, verification_commands,
+                    "SELECT id, title, objective, scope, acceptance_criteria, verification_commands, test_cases,
                      assigned_to, status, board_id, column_id, position, priority, labels, assignee,
                      assigned_provider, assigned_role, assigned_specialist_id, assigned_specialist_name,
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
@@ -271,8 +273,8 @@ impl TaskStore {
 use rusqlite::Row;
 
 fn row_to_task(row: &Row<'_>) -> Task {
-    let created_ms: i64 = row.get(35).unwrap_or(0);
-    let updated_ms: i64 = row.get(36).unwrap_or(0);
+    let created_ms: i64 = row.get(36).unwrap_or(0);
+    let updated_ms: i64 = row.get(37).unwrap_or(0);
 
     let acceptance_criteria: Option<Vec<String>> = row
         .get::<_, Option<String>>(4)
@@ -282,13 +284,17 @@ fn row_to_task(row: &Row<'_>) -> Task {
         .get::<_, Option<String>>(5)
         .unwrap_or(None)
         .and_then(|s| serde_json::from_str(&s).ok());
+    let test_cases: Option<Vec<String>> = row
+        .get::<_, Option<String>>(6)
+        .unwrap_or(None)
+        .and_then(|s| serde_json::from_str(&s).ok());
     let labels: Vec<String> = row
-        .get::<_, String>(12)
+        .get::<_, String>(13)
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default();
     let dependencies: Vec<String> = row
-        .get::<_, String>(26)
+        .get::<_, String>(27)
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default();
@@ -300,49 +306,50 @@ fn row_to_task(row: &Row<'_>) -> Task {
         scope: row.get(3).unwrap_or(None),
         acceptance_criteria,
         verification_commands,
-        assigned_to: row.get(6).unwrap_or(None),
-        status: TaskStatus::from_str(&row.get::<_, String>(7).unwrap_or_default())
+        test_cases,
+        assigned_to: row.get(7).unwrap_or(None),
+        status: TaskStatus::from_str(&row.get::<_, String>(8).unwrap_or_default())
             .unwrap_or(TaskStatus::Pending),
-        board_id: row.get(8).unwrap_or(None),
-        column_id: row.get(9).unwrap_or(None),
-        position: row.get(10).unwrap_or(0),
+        board_id: row.get(9).unwrap_or(None),
+        column_id: row.get(10).unwrap_or(None),
+        position: row.get(11).unwrap_or(0),
         priority: row
-            .get::<_, Option<String>>(11)
+            .get::<_, Option<String>>(12)
             .unwrap_or(None)
             .and_then(|s| TaskPriority::from_str(&s)),
         labels,
-        assignee: row.get(13).unwrap_or(None),
-        assigned_provider: row.get(14).unwrap_or(None),
-        assigned_role: row.get(15).unwrap_or(None),
-        assigned_specialist_id: row.get(16).unwrap_or(None),
-        assigned_specialist_name: row.get(17).unwrap_or(None),
-        trigger_session_id: row.get(18).unwrap_or(None),
-        github_id: row.get(19).unwrap_or(None),
-        github_number: row.get(20).unwrap_or(None),
-        github_url: row.get(21).unwrap_or(None),
-        github_repo: row.get(22).unwrap_or(None),
-        github_state: row.get(23).unwrap_or(None),
+        assignee: row.get(14).unwrap_or(None),
+        assigned_provider: row.get(15).unwrap_or(None),
+        assigned_role: row.get(16).unwrap_or(None),
+        assigned_specialist_id: row.get(17).unwrap_or(None),
+        assigned_specialist_name: row.get(18).unwrap_or(None),
+        trigger_session_id: row.get(19).unwrap_or(None),
+        github_id: row.get(20).unwrap_or(None),
+        github_number: row.get(21).unwrap_or(None),
+        github_url: row.get(22).unwrap_or(None),
+        github_repo: row.get(23).unwrap_or(None),
+        github_state: row.get(24).unwrap_or(None),
         github_synced_at: row
-            .get::<_, Option<i64>>(24)
+            .get::<_, Option<i64>>(25)
             .unwrap_or(None)
             .and_then(chrono::DateTime::from_timestamp_millis),
-        last_sync_error: row.get(25).unwrap_or(None),
+        last_sync_error: row.get(26).unwrap_or(None),
         dependencies,
-        parallel_group: row.get(27).unwrap_or(None),
-        workspace_id: row.get(28).unwrap_or_default(),
-        session_id: row.get(29).unwrap_or(None),
-        completion_summary: row.get(30).unwrap_or(None),
+        parallel_group: row.get(28).unwrap_or(None),
+        workspace_id: row.get(29).unwrap_or_default(),
+        session_id: row.get(30).unwrap_or(None),
+        completion_summary: row.get(31).unwrap_or(None),
         verification_verdict: row
-            .get::<_, Option<String>>(31)
+            .get::<_, Option<String>>(32)
             .unwrap_or(None)
             .and_then(|s| VerificationVerdict::from_str(&s)),
-        verification_report: row.get(32).unwrap_or(None),
+        verification_report: row.get(33).unwrap_or(None),
         codebase_ids: row
-            .get::<_, String>(33)
+            .get::<_, String>(34)
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default(),
-        worktree_id: row.get(34).unwrap_or(None),
+        worktree_id: row.get(35).unwrap_or(None),
         created_at: chrono::DateTime::from_timestamp_millis(created_ms).unwrap_or_else(Utc::now),
         updated_at: chrono::DateTime::from_timestamp_millis(updated_ms).unwrap_or_else(Utc::now),
     }

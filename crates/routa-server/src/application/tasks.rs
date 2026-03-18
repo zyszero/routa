@@ -26,6 +26,7 @@ impl TaskApplicationService {
             scope,
             acceptance_criteria,
             verification_commands,
+            test_cases,
             dependencies,
             parallel_group,
             board_id,
@@ -58,6 +59,7 @@ impl TaskApplicationService {
             scope,
             acceptance_criteria,
             verification_commands,
+            test_cases,
             dependencies,
             parallel_group,
         );
@@ -113,6 +115,9 @@ impl TaskApplicationService {
         }
         if let Some(value) = command.verification_commands {
             task.verification_commands = Some(value);
+        }
+        if let Some(value) = command.test_cases {
+            task.test_cases = Some(value);
         }
         if let Some(value) = command.assigned_to {
             task.assigned_to = Some(value);
@@ -287,6 +292,7 @@ pub struct CreateTaskCommand {
     pub scope: Option<String>,
     pub acceptance_criteria: Option<Vec<String>>,
     pub verification_commands: Option<Vec<String>>,
+    pub test_cases: Option<Vec<String>>,
     pub dependencies: Option<Vec<String>>,
     pub parallel_group: Option<String>,
     pub board_id: Option<String>,
@@ -310,6 +316,7 @@ pub struct UpdateTaskCommand {
     pub scope: Option<String>,
     pub acceptance_criteria: Option<Vec<String>>,
     pub verification_commands: Option<Vec<String>>,
+    pub test_cases: Option<Vec<String>>,
     pub assigned_to: Option<String>,
     pub status: Option<String>,
     pub board_id: Option<String>,
@@ -427,6 +434,7 @@ mod tests {
                 scope: None,
                 acceptance_criteria: None,
                 verification_commands: None,
+                test_cases: None,
                 dependencies: None,
                 parallel_group: None,
                 board_id: None,
@@ -466,6 +474,7 @@ mod tests {
                 scope: None,
                 acceptance_criteria: None,
                 verification_commands: None,
+                test_cases: None,
                 dependencies: None,
                 parallel_group: None,
                 board_id: None,
@@ -520,6 +529,7 @@ mod tests {
                 scope: None,
                 acceptance_criteria: None,
                 verification_commands: None,
+                test_cases: None,
                 dependencies: None,
                 parallel_group: None,
                 board_id: None,

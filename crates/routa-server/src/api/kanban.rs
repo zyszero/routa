@@ -382,6 +382,7 @@ async fn decompose_tasks(
             scope: None,
             acceptance_criteria: None,
             verification_commands: None,
+            test_cases: None,
             assigned_to: None,
             status: status.clone(),
             board_id: Some(body.board_id.clone()),

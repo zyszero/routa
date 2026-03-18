@@ -728,6 +728,7 @@ async fn execute_tool(state: &AppState, name: &str, args: &serde_json::Value) ->
                 None,
                 None,
                 None,
+                None,
             );
             match state.task_store.save(&task).await {
                 Ok(_) => tool_result_json(&serde_json::json!({
@@ -1268,6 +1269,7 @@ async fn execute_tool(state: &AppState, name: &str, args: &serde_json::Value) ->
                 title.to_string(),
                 description.unwrap_or("").to_string(),
                 workspace_id.to_string(),
+                None,
                 None,
                 None,
                 None,

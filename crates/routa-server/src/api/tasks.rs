@@ -84,6 +84,7 @@ struct CreateTaskRequest {
     scope: Option<String>,
     acceptance_criteria: Option<Vec<String>>,
     verification_commands: Option<Vec<String>>,
+    test_cases: Option<Vec<String>>,
     dependencies: Option<Vec<String>>,
     parallel_group: Option<String>,
     board_id: Option<String>,
@@ -114,7 +115,7 @@ async fn create_task(
             Some(repo) => match create_github_issue(
                 &repo,
                 &task.title,
-                Some(&task.objective),
+                Some(&build_task_issue_body(&task.objective, task.test_cases.as_ref())),
                 &task.labels,
                 task.assignee.as_deref(),
             )
@@ -155,6 +156,7 @@ struct UpdateTaskRequest {
     scope: Option<String>,
     acceptance_criteria: Option<Vec<String>>,
     verification_commands: Option<Vec<String>>,
+    test_cases: Option<Vec<String>>,
     assigned_to: Option<String>,
     status: Option<String>,
     board_id: Option<String>,
@@ -194,6 +196,7 @@ fn create_task_command(body: CreateTaskRequest) -> CreateTaskCommand {
         scope: body.scope,
         acceptance_criteria: body.acceptance_criteria,
         verification_commands: body.verification_commands,
+        test_cases: body.test_cases,
         dependencies: body.dependencies,
         parallel_group: body.parallel_group,
         board_id: body.board_id,
@@ -218,6 +221,7 @@ fn update_task_command(body: UpdateTaskRequest) -> UpdateTaskCommand {
         scope: body.scope,
         acceptance_criteria: body.acceptance_criteria,
         verification_commands: body.verification_commands,
+        test_cases: body.test_cases,
         assigned_to: body.assigned_to,
         status: body.status,
         board_id: body.board_id,
@@ -264,7 +268,7 @@ async fn update_task(
                 &repo,
                 issue_number,
                 &task.title,
-                Some(&task.objective),
+                Some(&build_task_issue_body(&task.objective, task.test_cases.as_ref())),
                 &task.labels,
                 if task.status == TaskStatus::Completed {
                     "closed"
@@ -633,14 +637,40 @@ async fn update_github_issue(
     }
 }
 
+fn build_task_issue_body(objective: &str, test_cases: Option<&Vec<String>>) -> String {
+    let normalized_test_cases: Vec<&str> = test_cases
+        .into_iter()
+        .flatten()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .collect();
+
+    if normalized_test_cases.is_empty() {
+        return objective.trim().to_string();
+    }
+
+    let mut sections = Vec::new();
+    if !objective.trim().is_empty() {
+        sections.push(objective.trim().to_string());
+    }
+    sections.push(format!(
+        "## Test Cases\n{}",
+        normalized_test_cases
+            .into_iter()
+            .map(|value| format!("- {}", value))
+            .collect::<Vec<_>>()
+            .join("\n")
+    ));
+    sections.join("\n\n")
+}
+
 fn build_task_prompt(task: &Task) -> String {
     let labels = if task.labels.is_empty() {
         "Labels: none".to_string()
     } else {
         format!("Labels: {}", task.labels.join(", "))
     };
-
-    [
+    let mut sections = vec![
         format!("You are assigned to Kanban task: {}", task.title),
         String::new(),
         "## Context".to_string(),
@@ -665,6 +695,22 @@ fn build_task_prompt(task: &Task) -> String {
         String::new(),
         task.objective.clone(),
         String::new(),
+    ];
+
+    if let Some(test_cases) = task.test_cases.as_ref().filter(|value| !value.is_empty()) {
+        sections.push("## Test Cases".to_string());
+        sections.push(String::new());
+        sections.push(
+            test_cases
+                .iter()
+                .map(|value| format!("- {}", value))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+        sections.push(String::new());
+    }
+
+    sections.extend([
         "## Available MCP Tools".to_string(),
         String::new(),
         "You have access to the following MCP tools for task management:".to_string(),
@@ -681,8 +727,9 @@ fn build_task_prompt(task: &Task) -> String {
         "3. Use `move_card` to move the card to 'in-progress' when starting".to_string(),
         "4. Keep changes focused on this task".to_string(),
         "5. When complete, use `move_card` to move to 'done' and `report_to_parent` to report completion".to_string(),
-    ]
-    .join("\n")
+    ]);
+
+    sections.join("\n")
 }
 
 async fn trigger_assigned_task_agent(

@@ -181,6 +181,7 @@ impl Database {
                     scope                   TEXT,
                     acceptance_criteria     TEXT,
                     verification_commands   TEXT,
+                    test_cases              TEXT,
                     assigned_to             TEXT,
                     status                  TEXT NOT NULL DEFAULT 'PENDING',
                     board_id                TEXT,
@@ -347,6 +348,7 @@ impl Database {
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN github_state TEXT", []))?;
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN github_synced_at INTEGER", []))?;
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN last_sync_error TEXT", []))?;
+            Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN test_cases TEXT", []))?;
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN codebase_ids TEXT NOT NULL DEFAULT '[]'", []))?;
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN worktree_id TEXT", []))?;
             // Add session_id to notes if it doesn't exist yet (ignore error if already present)

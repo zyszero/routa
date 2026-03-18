@@ -124,6 +124,8 @@ pub struct Task {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verification_commands: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub test_cases: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub assigned_to: Option<String>,
     pub status: TaskStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -197,6 +199,7 @@ impl Task {
         scope: Option<String>,
         acceptance_criteria: Option<Vec<String>>,
         verification_commands: Option<Vec<String>>,
+        test_cases: Option<Vec<String>>,
         dependencies: Option<Vec<String>>,
         parallel_group: Option<String>,
     ) -> Self {
@@ -208,6 +211,7 @@ impl Task {
             scope,
             acceptance_criteria,
             verification_commands,
+            test_cases,
             assigned_to: None,
             status: TaskStatus::Pending,
             board_id: None,
