@@ -40,11 +40,12 @@
     "route": "/workspace/default/kanban",
     "pageFile": "src/app/workspace/[workspaceId]/kanban/page.tsx",
     "snapshotFile": "src/app/workspace/[workspaceId]/kanban/page.snapshot.yaml",
+    "snapshotSelector": "[data-testid=\"kanban-board-content\"]",
     "waitFor": {
-      "strategy": "selector",
-      "value": "main",
+      "strategy": "text-absent",
+      "value": "worktree loading...",
       "timeoutMs": 20000,
-      "settleMs": 1500
+      "settleMs": 1000
     }
   },
   {
@@ -88,11 +89,12 @@
     "route": "/workspace/default/sessions/1eed8a78-7673-4a1b-b6b9-cd68dc5b75c7",
     "pageFile": "src/app/workspace/[workspaceId]/sessions/[sessionId]/page.tsx",
     "snapshotFile": "src/app/workspace/[workspaceId]/sessions/[sessionId]/page.snapshot.yaml",
+    "snapshotSelector": "[data-testid=\"chat-panel-message-shell\"]",
     "waitFor": {
-      "strategy": "selector",
-      "value": "main",
+      "strategy": "text-absent",
+      "value": "Send a message to start.",
       "timeoutMs": 20000,
-      "settleMs": 1500
+      "settleMs": 1000
     }
   },
   {

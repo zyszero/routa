@@ -13,7 +13,7 @@
  *   - Mermaid diagram rendering in agent responses
  */
 
-import { useState, useRef, useEffect } from "react";
+import { startTransition, useState, useRef, useEffect } from "react";
 import type { ParsedTask } from "../utils/task-block-parser";
 import { MarkdownViewer } from "./markdown/markdown-viewer";
 import { MermaidRenderer } from "./markdown/mermaid-renderer";
@@ -244,6 +244,10 @@ export function CraftersView({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   // Track which agents we've already fetched history for
   const fetchedHistoryRef = useRef<Set<string>>(new Set());
+  const [historyStateByAgentId, setHistoryStateByAgentId] = useState<
+    Record<string, "idle" | "loading" | "loaded">
+  >({});
+  const activeAgentHistoryState = activeAgent ? (historyStateByAgentId[activeAgent.id] ?? "idle") : "idle";
 
   // Auto-scroll
   useEffect(() => {
@@ -256,11 +260,17 @@ export function CraftersView({
     if (activeAgent.status === "running") return; // Don't load history for running agents
     if (fetchedHistoryRef.current.has(activeAgent.id)) return;
     fetchedHistoryRef.current.add(activeAgent.id);
+    startTransition(() => {
+      setHistoryStateByAgentId((prev) => ({ ...prev, [activeAgent.id]: "loading" }));
+    });
 
     fetch(`/api/sessions/${activeAgent.sessionId}/history?consolidated=true`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (!data?.history?.length) return;
+        if (!data?.history?.length) {
+          setHistoryStateByAgentId((prev) => ({ ...prev, [activeAgent.id]: "loaded" }));
+          return;
+        }
         const history = data.history as Array<{
           sessionId: string;
           update?: {
@@ -333,9 +343,11 @@ export function CraftersView({
         if (messages.length > 0 && onUpdateAgentMessages) {
           onUpdateAgentMessages(activeAgent.id, messages);
         }
+        setHistoryStateByAgentId((prev) => ({ ...prev, [activeAgent.id]: "loaded" }));
       })
       .catch(() => {
         // Silently fail — history loading is best-effort
+        setHistoryStateByAgentId((prev) => ({ ...prev, [activeAgent.id]: "loaded" }));
       });
   }, [activeAgent, onUpdateAgentMessages]);
 
@@ -407,6 +419,11 @@ export function CraftersView({
                 <div className="space-y-2">
                   <div className="w-5 h-5 mx-auto border-2 border-gray-300 dark:border-gray-600 border-t-indigo-500 rounded-full animate-spin" />
                   <div>Agent is working...</div>
+                </div>
+              ) : activeAgentHistoryState === "loading" ? (
+                <div className="space-y-2">
+                  <div className="w-5 h-5 mx-auto border-2 border-gray-300 dark:border-gray-600 border-t-indigo-500 rounded-full animate-spin" />
+                  <div>Loading history...</div>
                 </div>
               ) : activeAgent.status === "error" ? (
                 <div className="space-y-2 text-red-500 dark:text-red-400">

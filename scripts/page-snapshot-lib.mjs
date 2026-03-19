@@ -188,7 +188,8 @@ export function normalizeSnapshotBody(content) {
       return `[ref=${refMap.get(originalRef)}]`;
     })
     .replace(/\b[0-9a-f]{8}…/gi, "<id>…")
-    .replace(/\b\d{1,2}:\d{2}:\d{2}\s(?:AM|PM)\b/g, "<time>");
+    .replace(/\b\d{1,2}:\d{2}:\d{2}\s(?:AM|PM)\b/g, "<time>")
+    .replace(/\b(?:just now|\d+\s*[smhdw] ago|\d+\s+(?:second|minute|hour|day|week|month|year)s?\s+ago)\b/gi, "<relative-time>");
 }
 
 export function normalizeComparableSnapshot(content) {
@@ -283,6 +284,12 @@ export async function captureSnapshot({
     await page.waitForSelector(waitFor.value, { timeout: effectiveTimeout });
   } else if (waitFor.strategy === "text" && waitFor.value) {
     await page.getByText(waitFor.value, { exact: false }).first().waitFor({ timeout: effectiveTimeout });
+  } else if (waitFor.strategy === "text-absent" && waitFor.value) {
+    await page.waitForFunction(
+      (text) => !globalThis.document.body?.innerText?.includes(text),
+      waitFor.value,
+      { timeout: effectiveTimeout }
+    );
   } else {
     await page.waitForLoadState("networkidle", { timeout: effectiveTimeout }).catch(() => {});
   }
@@ -294,8 +301,10 @@ export async function captureSnapshot({
   const title = await page.title();
   const finalUrl = page.url();
   
+  const snapshotRoot = target.snapshotSelector ? page.locator(target.snapshotSelector) : page.locator("body");
+
   // Use the newer ariaSnapshot() API which returns YAML directly
-  const snapshotYaml = await page.locator('body').ariaSnapshot();
+  const snapshotYaml = await snapshotRoot.ariaSnapshot();
 
   if (!snapshotYaml) {
     throw new Error(`Failed to capture accessibility snapshot for ${target.id}`);

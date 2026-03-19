@@ -1627,7 +1627,7 @@ export function KanbanTab({
       </div>
       <div className="flex-1 min-h-0 flex gap-4">
         <div className={`${agentPanelOpen && agentSessionId ? "min-w-0 flex-1" : "w-full"} flex min-h-0 flex-col`}>
-          <div className="flex-1 min-h-0 overflow-auto pb-2">
+          <div className="flex-1 min-h-0 overflow-auto pb-2" data-testid="kanban-board-content">
             <div className="flex min-h-full items-start gap-3" style={{ minWidth: `${visibleColumns.length * 18}rem` }}>
               {board.columns
                 .slice()

@@ -490,7 +490,7 @@ export function ChatPanel({
         /* ── Active Chat State ── */
         <>
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto min-h-0">
+          <div className="flex-1 overflow-y-auto min-h-0" data-testid="chat-panel-message-shell">
             <div className="max-w-3xl mx-auto px-5 py-5 space-y-2">
               {visibleMessages.length === 0 && activeSessionId && (
                 <div className="text-center py-20 text-sm text-gray-400 dark:text-gray-500">

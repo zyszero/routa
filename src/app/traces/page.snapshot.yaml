@@ -1,9 +1,9 @@
 # page-id: traces
 # route: /traces
 # source-page: src/app/traces/page.tsx
-# url: http://localhost:3000/traces
+# url: http://127.0.0.1:3000/traces
 # title: Routa - Multi-Agent Coordinator
-# generated-at: 2026-03-19T11:54:43.631Z
+# generated-at: 2026-03-19T13:00:32.745Z
 # generator: playwright
 # playwright-version: 1.58.2
 - banner:
@@ -48,7 +48,17 @@
   - button "Trace(AG-UI)"
   - complementary:
     - heading "Sessions" [level=2]
-    - paragraph: 492 sessions found
+    - paragraph: 498 sessions found
+    - button "创建 js 的 hello world · opencode 1 Mar 19, 08:07 PM CRAFTER opencode"
+    - button "创建 js 的 hello world · opencode 1 Mar 19, 08:06 PM CRAFTER opencode"
+    - button "<id>… 1 Mar 19, 08:06 PM CRAFTER codex":
+      - code: <id>…
+      - text: 1 Mar 19, 08:06 PM CRAFTER codex
+    - button "创建 js 的 hello world · opencode 1 Mar 19, 08:00 PM CRAFTER opencode"
+    - button "创建 js 的 hello world · opencode 1 Mar 19, 07:59 PM CRAFTER opencode"
+    - button "<id>… 1 Mar 19, 07:59 PM CRAFTER claude":
+      - code: <id>…
+      - text: 1 Mar 19, 07:59 PM CRAFTER claude
     - button "Python Hello World · opencode 1 Mar 19, 04:15 PM CRAFTER opencode"
     - button "<id>… 2 Mar 19, 04:15 PM CRAFTER opencode":
       - code: <id>…
@@ -1141,4 +1151,5 @@
     - button "Agent"
     - button "Tools"
     - button "Thoughts"
+    - text: "Kanban Story done 5ba22305 创建 js 的 hello world Current lane session: Todo • Todo Orchestrator • opencode • CRAFTER · transitioned Previous lane session: Backlog • Backlog Refiner • CRAFTER"
 - alert
