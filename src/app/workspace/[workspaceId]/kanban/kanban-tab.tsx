@@ -932,6 +932,7 @@ export function KanbanTab({
       undefined,
       undefined,
       undefined,
+      undefined,
       "full",
       [],
     );

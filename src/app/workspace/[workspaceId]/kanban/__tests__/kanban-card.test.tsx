@@ -45,6 +45,7 @@ describe("KanbanCard artifact gate status", () => {
       <KanbanCard
         task={buildTask()}
         boardColumns={boardColumns}
+        specialistLanguage="en"
         availableProviders={[]}
         specialists={[]}
         codebases={[]}
@@ -75,6 +76,7 @@ describe("KanbanCard artifact gate status", () => {
           },
         })}
         boardColumns={boardColumns}
+        specialistLanguage="en"
         availableProviders={[]}
         specialists={[]}
         codebases={[]}
@@ -99,6 +101,7 @@ describe("KanbanCard artifact gate status", () => {
         task={buildTask()}
         boardColumns={boardColumns}
         liveMessageTail="Updated parser; now handling edge-case whitespace and retry flow."
+        specialistLanguage="en"
         availableProviders={[]}
         specialists={[]}
         codebases={[]}

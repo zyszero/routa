@@ -794,6 +794,7 @@ describe("KanbanCardDetail repository health", () => {
         boardColumns={board.columns}
         availableProviders={[]}
         specialists={[]}
+        specialistLanguage="en"
         codebases={[
           {
             id: "repo-a",
