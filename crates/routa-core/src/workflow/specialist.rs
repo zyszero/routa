@@ -97,6 +97,24 @@ fn default_model_tier() -> String {
     "smart".to_string()
 }
 
+fn is_locale_directory_name(name: &str) -> bool {
+    if name == "locales" {
+        return true;
+    }
+
+    let mut parts = name.split('-');
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(lang), None, None) => lang.len() == 2 && lang.chars().all(|c| c.is_ascii_lowercase()),
+        (Some(lang), Some(region), None) => {
+            lang.len() == 2
+                && lang.chars().all(|c| c.is_ascii_lowercase())
+                && region.len() == 2
+                && region.chars().all(|c| c.is_ascii_uppercase())
+        }
+        _ => false,
+    }
+}
+
 impl SpecialistDef {
     fn normalize_execution(mut self) -> Self {
         if let Some(role) = self.execution.role.clone() {
@@ -235,20 +253,66 @@ impl SpecialistLoader {
         }
     }
 
+    fn collect_specialist_paths(
+        dir: &Path,
+        include_locale_directories: bool,
+        files: &mut Vec<PathBuf>,
+    ) -> Result<(), String> {
+        for entry in std::fs::read_dir(dir)
+            .map_err(|e| format!("Failed to read directory '{}': {}", dir.display(), e))?
+        {
+            let entry = entry.map_err(|e| format!("Directory entry error: {}", e))?;
+            let path = entry.path();
+
+            if path.is_dir() {
+                let should_skip = path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .map(|name| !include_locale_directories && is_locale_directory_name(name))
+                    .unwrap_or(false);
+                if should_skip {
+                    continue;
+                }
+                Self::collect_specialist_paths(&path, include_locale_directories, files)?;
+                continue;
+            }
+
+            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+            if matches!(ext, "yaml" | "yml" | "md") {
+                files.push(path);
+            }
+        }
+
+        Ok(())
+    }
+
     /// Load all specialists from a directory.
     /// Supports both `.yaml`/`.yml` and `.md` (markdown with frontmatter) files.
+    /// Markdown is loaded after YAML for deterministic compatibility precedence.
     pub fn load_dir(&mut self, dir: &str) -> Result<usize, String> {
         let dir_path = Path::new(dir);
         if !dir_path.is_dir() {
             return Err(format!("Specialist directory '{}' does not exist", dir));
         }
 
+        let mut paths = Vec::new();
+        Self::collect_specialist_paths(dir_path, false, &mut paths)?;
+        paths.sort_by(|a, b| {
+            let a_ext = a.extension().and_then(|e| e.to_str()).unwrap_or("");
+            let b_ext = b.extension().and_then(|e| e.to_str()).unwrap_or("");
+            let ext_rank = |ext: &str| match ext {
+                "yaml" | "yml" => 0,
+                "md" => 1,
+                _ => 2,
+            };
+
+            ext_rank(a_ext)
+                .cmp(&ext_rank(b_ext))
+                .then_with(|| a.cmp(b))
+        });
+
         let mut count = 0;
-        for entry in std::fs::read_dir(dir_path)
-            .map_err(|e| format!("Failed to read directory '{}': {}", dir, e))?
-        {
-            let entry = entry.map_err(|e| format!("Directory entry error: {}", e))?;
-            let path = entry.path();
+        for path in paths {
             let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
             let specialist = match ext {
@@ -492,5 +556,95 @@ You are a markdown specialist.
         assert!(search_paths
             .iter()
             .any(|path| path == Path::new("resources/specialists")));
+    }
+
+    #[test]
+    fn test_load_dir_recurses_and_skips_locale_directories() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root = temp_dir.path();
+
+        std::fs::create_dir_all(root.join("core")).unwrap();
+        std::fs::create_dir_all(root.join("review")).unwrap();
+        std::fs::create_dir_all(root.join("zh-CN")).unwrap();
+        std::fs::create_dir_all(root.join("locales").join("zh-CN")).unwrap();
+
+        std::fs::write(
+            root.join("core").join("developer.md"),
+            r#"---
+name: "Developer"
+---
+
+Developer prompt
+"#,
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("review").join("gate.yaml"),
+            r#"id: "gate"
+name: "Gate"
+system_prompt: "Gate prompt"
+"#,
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("zh-CN").join("developer.md"),
+            r#"---
+name: "开发者"
+---
+
+中文 prompt
+"#,
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("locales").join("zh-CN").join("gate.md"),
+            r#"---
+name: "验证者"
+---
+
+中文 gate
+"#,
+        )
+        .unwrap();
+
+        let mut loader = SpecialistLoader::new();
+        loader.load_dir(root.to_str().unwrap()).unwrap();
+
+        assert!(loader.get("developer").is_some());
+        assert!(loader.get("gate").is_some());
+        assert_eq!(loader.all().len(), 2);
+    }
+
+    #[test]
+    fn test_load_dir_prefers_markdown_over_yaml_for_same_id() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root = temp_dir.path();
+
+        std::fs::write(
+            root.join("developer.yaml"),
+            r#"id: "developer"
+name: "Developer YAML"
+system_prompt: "yaml prompt"
+"#,
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("developer.md"),
+            r#"---
+name: "Developer Markdown"
+role: "DEVELOPER"
+---
+
+markdown prompt
+"#,
+        )
+        .unwrap();
+
+        let mut loader = SpecialistLoader::new();
+        loader.load_dir(root.to_str().unwrap()).unwrap();
+
+        let developer = loader.get("developer").unwrap();
+        assert_eq!(developer.name, "Developer Markdown");
+        assert!(developer.system_prompt.contains("markdown prompt"));
     }
 }

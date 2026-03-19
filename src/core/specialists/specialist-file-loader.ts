@@ -1,11 +1,19 @@
 /**
  * Specialist File Loader
  *
- * Loads specialist configurations from Markdown files with YAML frontmatter.
+ * Loads specialist prompt content from Markdown files with YAML frontmatter.
  * Supports a loading priority hierarchy:
  *   1. User-defined specialists (~/.routa/specialists/) — highest priority
  *   2. Bundled specialists (resources/specialists/) — default
  *   3. Hardcoded fallback (specialist-prompts.ts) — lowest priority
+ *
+ * Directory layout rules during the staged migration:
+ *   - Runtime Markdown prompts may live in nested taxonomy directories
+ *     (for example `team/`, `review/`, `workflows/kanban/`)
+ *   - Locale overlays are loaded only from `locales/<locale>/` or the legacy
+ *     `<locale>/` directory and do not participate in the base scan
+ *   - TypeScript currently reads Markdown prompt files only; YAML runtime
+ *     convergence is handled separately on the Rust side
  *
  * File format:
  *   ---
@@ -55,6 +63,64 @@ export interface ParsedSpecialist {
 }
 
 const VALID_MODEL_TIERS = ["fast", "balanced", "smart"];
+const SPECIALIST_ROOT_DIRNAME = "specialists";
+const SPECIALIST_LOCALES_DIRNAME = "locales";
+const DEFAULT_LOCALE = "en";
+
+function isLocaleDirectoryName(name: string): boolean {
+  return name === SPECIALIST_LOCALES_DIRNAME || /^[a-z]{2}(?:-[A-Z]{2})?$/.test(name);
+}
+
+function collectMarkdownFiles(dirPath: string, includeLocaleDirectories: boolean): string[] {
+  if (!fs.existsSync(dirPath)) {
+    return [];
+  }
+
+  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  const files: string[] = [];
+
+  for (const entry of entries) {
+    const entryPath = path.join(dirPath, entry.name);
+
+    if (entry.isDirectory()) {
+      if (!includeLocaleDirectories && isLocaleDirectoryName(entry.name)) {
+        continue;
+      }
+      files.push(...collectMarkdownFiles(entryPath, includeLocaleDirectories));
+      continue;
+    }
+
+    if (entry.isFile() && entry.name.endsWith(".md")) {
+      files.push(entryPath);
+    }
+  }
+
+  return files.sort((a, b) => a.localeCompare(b));
+}
+
+function uniqueExistingDirs(dirPaths: string[]): string[] {
+  return Array.from(new Set(dirPaths)).filter((dirPath) => fs.existsSync(dirPath));
+}
+
+export function getBundledSpecialistsRootDir(): string {
+  return path.join(process.cwd(), "resources", SPECIALIST_ROOT_DIRNAME);
+}
+
+export function getUserSpecialistsRootDir(): string {
+  const home = process.env.HOME ?? process.env.USERPROFILE ?? "/tmp";
+  return path.join(home, ".routa", SPECIALIST_ROOT_DIRNAME);
+}
+
+export function getLocaleOverlayDirs(rootDir: string, locale: string): string[] {
+  if (!locale || locale === DEFAULT_LOCALE) {
+    return [];
+  }
+
+  return uniqueExistingDirs([
+    path.join(rootDir, SPECIALIST_LOCALES_DIRNAME, locale),
+    path.join(rootDir, locale),
+  ]);
+}
 
 /**
  * Map a modelTier string to a ModelTier enum value.
@@ -148,15 +214,11 @@ export function loadSpecialistsFromDirectory(
   source: "user" | "bundled",
   locale?: string,
 ): ParsedSpecialist[] {
-  if (!fs.existsSync(dirPath)) {
-    return [];
-  }
-
-  const files = fs.readdirSync(dirPath).filter((f) => f.endsWith(".md"));
   const specialists: ParsedSpecialist[] = [];
+  const files = collectMarkdownFiles(dirPath, locale !== undefined);
 
   for (const file of files) {
-    const parsed = parseSpecialistFile(path.join(dirPath, file), source, locale);
+    const parsed = parseSpecialistFile(file, source, locale);
     if (parsed) {
       specialists.push(parsed);
     }
@@ -170,35 +232,44 @@ export function loadSpecialistsFromDirectory(
  * Resolves relative to the project root.
  */
 export function getBundledSpecialistsDir(locale?: string): string {
-  // In Next.js, process.cwd() is the project root
-  return locale
-    ? path.join(process.cwd(), "resources", "specialists", locale)
-    : path.join(process.cwd(), "resources", "specialists");
+  const rootDir = getBundledSpecialistsRootDir();
+  return locale && locale !== DEFAULT_LOCALE
+    ? path.join(rootDir, SPECIALIST_LOCALES_DIRNAME, locale)
+    : rootDir;
 }
 
 /**
  * Get the path to user-defined specialists directory.
  */
 export function getUserSpecialistsDir(locale?: string): string {
-  const home =
-    process.env.HOME ?? process.env.USERPROFILE ?? "/tmp";
-  return locale
-    ? path.join(home, ".routa", "specialists", locale)
-    : path.join(home, ".routa", "specialists");
+  const rootDir = getUserSpecialistsRootDir();
+  return locale && locale !== DEFAULT_LOCALE
+    ? path.join(rootDir, SPECIALIST_LOCALES_DIRNAME, locale)
+    : rootDir;
 }
 
 /**
  * Load bundled specialists from resources/specialists/.
  */
 export function loadBundledSpecialists(locale?: string): ParsedSpecialist[] {
-  return loadSpecialistsFromDirectory(getBundledSpecialistsDir(locale), "bundled", locale);
+  if (locale && locale !== DEFAULT_LOCALE) {
+    return getLocaleOverlayDirs(getBundledSpecialistsRootDir(), locale).flatMap((dirPath) =>
+      loadSpecialistsFromDirectory(dirPath, "bundled", locale)
+    );
+  }
+  return loadSpecialistsFromDirectory(getBundledSpecialistsRootDir(), "bundled");
 }
 
 /**
  * Load user-defined specialists from ~/.routa/specialists/.
  */
 export function loadUserSpecialists(locale?: string): ParsedSpecialist[] {
-  return loadSpecialistsFromDirectory(getUserSpecialistsDir(locale), "user", locale);
+  if (locale && locale !== DEFAULT_LOCALE) {
+    return getLocaleOverlayDirs(getUserSpecialistsRootDir(), locale).flatMap((dirPath) =>
+      loadSpecialistsFromDirectory(dirPath, "user", locale)
+    );
+  }
+  return loadSpecialistsFromDirectory(getUserSpecialistsRootDir(), "user");
 }
 
 /**
