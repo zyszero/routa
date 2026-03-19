@@ -289,6 +289,130 @@ describe("KanbanTab card detail manual runs", () => {
     expect(screen.getByRole("button", { name: "关闭 session 面板" })).toBeTruthy();
   });
 
+  it("recovers when the trigger session appears after the detail view is already open", async () => {
+    vi.stubGlobal("scrollIntoView", vi.fn());
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+
+    const automatedBoard: KanbanBoardInfo = {
+      ...board,
+      columns: [
+        {
+          id: "backlog",
+          name: "Backlog",
+          position: 0,
+          stage: "backlog",
+          automation: {
+            enabled: true,
+            providerId: "claude",
+            role: "ROUTA",
+            specialistId: "backlog-refiner",
+            specialistName: "Backlog Refiner",
+            transitionType: "exit",
+          },
+        },
+      ],
+    };
+
+    const acp = {
+      connected: true,
+      sessionId: null,
+      updates: [],
+      providers: [{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }],
+      selectedProvider: "claude",
+      loading: false,
+      error: null,
+      authError: null,
+      dockerConfigError: null,
+      connect: vi.fn(),
+      createSession: vi.fn(),
+      selectSession: vi.fn(),
+      setProvider: vi.fn(),
+      setMode: vi.fn(),
+      prompt: vi.fn(),
+      promptSession: vi.fn(),
+      respondToUserInput: vi.fn(),
+      writeTerminal: vi.fn(),
+      resizeTerminal: vi.fn(),
+      cancel: vi.fn(),
+      disconnect: vi.fn(),
+      clearAuthError: vi.fn(),
+      clearDockerConfigError: vi.fn(),
+      listProviderModels: vi.fn(),
+    } satisfies Partial<UseAcpState & UseAcpActions> as UseAcpState & UseAcpActions;
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/sessions/session-123") {
+        return {
+          ok: true,
+          json: async () => ({
+            session: {
+              sessionId: "session-123",
+              workspaceId: "workspace-1",
+              cwd: "/tmp/recovered-repo",
+              provider: "claude",
+              role: "ROUTA",
+              createdAt: "2025-01-01T00:00:00.000Z",
+              name: "Recovered run",
+            },
+          }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({}),
+      } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <KanbanTab
+        workspaceId="workspace-1"
+        boards={[automatedBoard]}
+        tasks={[createTask("task-1", "Story One")]}
+        sessions={[]}
+        providers={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
+        specialists={[{ id: "backlog-refiner", name: "Backlog Refiner", role: "ROUTA" }]}
+        codebases={[]}
+        onRefresh={vi.fn()}
+        acp={acp}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Story One" }));
+
+    expect(await screen.findByText("No session has started yet")).toBeTruthy();
+
+    rerender(
+      <KanbanTab
+        workspaceId="workspace-1"
+        boards={[automatedBoard]}
+        tasks={[{
+          ...createTask("task-1", "Story One"),
+          triggerSessionId: "session-123",
+        }]}
+        sessions={[]}
+        providers={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
+        specialists={[{ id: "backlog-refiner", name: "Backlog Refiner", role: "ROUTA" }]}
+        codebases={[]}
+        onRefresh={vi.fn()}
+        acp={acp}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input]) => String(input) === "/api/sessions/session-123"),
+      ).toBe(true);
+      expect(screen.queryByText("No session has started yet")).toBeNull();
+    });
+
+    fireEvent.click(screen.getByText("Repo").closest("summary")!);
+
+    expect(await screen.findByText("Repo Health")).toBeTruthy();
+    expect(screen.getByText("/tmp/recovered-repo")).toBeTruthy();
+  });
+
   it("shows the next transition artifact gate in card detail", async () => {
     const gatedBoard: KanbanBoardInfo = {
       ...board,
