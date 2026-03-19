@@ -1,21 +1,20 @@
 /**
  * Specialist File Loader
  *
- * Loads specialist prompt content from Markdown files with YAML frontmatter.
+ * Loads specialist prompt content from Markdown files with YAML frontmatter
+ * and YAML specialist definitions.
  * Supports a loading priority hierarchy:
  *   1. User-defined specialists (~/.routa/specialists/) — highest priority
  *   2. Bundled specialists (resources/specialists/) — default
  *   3. Hardcoded fallback (specialist-prompts.ts) — lowest priority
  *
- * Directory layout rules during the staged migration:
- *   - Runtime Markdown prompts may live in nested taxonomy directories
+ * Directory layout rules:
+ *   - Runtime specialist definitions may live in nested taxonomy directories
  *     (for example `team/`, `review/`, `workflows/kanban/`)
  *   - Locale overlays are loaded only from `locales/<locale>/` or the legacy
  *     `<locale>/` directory and do not participate in the base scan
- *   - TypeScript currently reads Markdown prompt files only; YAML runtime
- *     convergence is handled separately on the Rust side
  *
- * File format:
+ * Markdown frontmatter format:
  *   ---
  *   name: "Coordinator"
  *   description: "Plans work, breaks down tasks, coordinates sub-agents"
@@ -26,6 +25,16 @@
  *
  *   ## Coordinator
  *   You plan, delegate, and verify...
+ *
+ * YAML runtime format:
+ *   id: "coordinator"
+ *   name: "Coordinator"
+ *   description: "Plans work, breaks down tasks, coordinates sub-agents"
+ *   role: "ROUTA"
+ *   model_tier: "smart"
+ *   system_prompt: |
+ *     ## Coordinator
+ *     You plan, delegate, and verify...
  */
 
 import * as fs from "fs";

@@ -162,4 +162,30 @@ describe("specialist-file-loader", () => {
     );
     warn.mockRestore();
   });
+
+  it("keeps bundled locale overlays in taxonomy paths and aligned with runtime specialists", () => {
+    const bundledRoot = path.join(process.cwd(), "resources", "specialists");
+    const runtimeIds = loadSpecialistsFromDirectory(bundledRoot, "bundled")
+      .map((entry) => entry.id)
+      .sort();
+    const englishOverlayIds = loadSpecialistsFromDirectory(
+      path.join(bundledRoot, "locales", "en"),
+      "bundled",
+      "en"
+    )
+      .map((entry) => entry.id)
+      .sort();
+    const chineseOverlayIds = loadSpecialistsFromDirectory(
+      path.join(bundledRoot, "locales", "zh-CN"),
+      "bundled",
+      "zh-CN"
+    )
+      .map((entry) => entry.id)
+      .sort();
+
+    expect(fs.existsSync(path.join(bundledRoot, "zh-CN"))).toBe(false);
+    expect(englishOverlayIds).toEqual(runtimeIds);
+    expect(chineseOverlayIds.length).toBeGreaterThan(0);
+    expect(chineseOverlayIds.every((id) => runtimeIds.includes(id))).toBe(true);
+  });
 });
