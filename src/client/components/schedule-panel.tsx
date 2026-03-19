@@ -105,7 +105,7 @@ const EMPTY_FORM: FormState = {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function SchedulePanel({ workspaceId = "default" }: { workspaceId?: string }) {
+export function SchedulePanel({ workspaceId }: { workspaceId?: string }) {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -139,6 +139,11 @@ export function SchedulePanel({ workspaceId = "default" }: { workspaceId?: strin
   }, [form.cronExpr]);
 
   const loadSchedules = useCallback(async () => {
+    if (!workspaceId) {
+      setSchedules([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const res = await fetch(`/api/schedules?workspaceId=${workspaceId}`);
@@ -170,6 +175,7 @@ export function SchedulePanel({ workspaceId = "default" }: { workspaceId?: strin
   }, []);
 
   function openCreate() {
+    if (!workspaceId) return;
     setForm(EMPTY_FORM);
     setEditId(null);
     setShowForm(true);
@@ -194,6 +200,10 @@ export function SchedulePanel({ workspaceId = "default" }: { workspaceId?: strin
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!workspaceId) {
+      setError("Select a workspace before creating schedules.");
+      return;
+    }
     if (!form.name || !form.cronExpr || !form.taskPrompt || !form.agentId) {
       setError("Please fill in all required fields.");
       return;
@@ -299,6 +309,11 @@ export function SchedulePanel({ workspaceId = "default" }: { workspaceId?: strin
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      {!workspaceId && (
+        <div className="mx-4 mt-3 rounded-lg border border-dashed border-gray-200 px-4 py-6 text-sm text-gray-500 dark:border-[#1c1f2e] dark:text-gray-400">
+          Select a workspace to manage schedules.
+        </div>
+      )}
       {/* Alerts */}
       {error && (
         <div className="mx-4 mt-3 px-4 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 text-sm flex items-start gap-2">

@@ -12,12 +12,21 @@ import { getNextRunTime } from "@/core/scheduling/cron-utils";
 
 export const dynamic = "force-dynamic";
 
+function requireWorkspaceId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
 // ─── GET ─────────────────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = request.nextUrl;
-    const workspaceId = searchParams.get("workspaceId") ?? "default";
+    const workspaceId = requireWorkspaceId(searchParams.get("workspaceId"));
+    if (!workspaceId) {
+      return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
+    }
 
     const system = getRoutaSystem();
     const schedules = await system.scheduleStore.listByWorkspace(workspaceId);
@@ -46,14 +55,15 @@ export async function POST(request: NextRequest) {
       cronExpr,
       taskPrompt,
       agentId,
-      workspaceId = "default",
+      workspaceId,
       enabled = true,
       promptTemplate,
     } = body;
+    const normalizedWorkspaceId = requireWorkspaceId(workspaceId);
 
-    if (!name || !cronExpr || !taskPrompt || !agentId) {
+    if (!name || !cronExpr || !taskPrompt || !agentId || !normalizedWorkspaceId) {
       return NextResponse.json(
-        { error: "Required: name, cronExpr, taskPrompt, agentId" },
+        { error: "Required: name, cronExpr, taskPrompt, agentId, workspaceId" },
         { status: 400 }
       );
     }
@@ -74,7 +84,7 @@ export async function POST(request: NextRequest) {
       cronExpr,
       taskPrompt,
       agentId,
-      workspaceId,
+      workspaceId: normalizedWorkspaceId,
       enabled,
       promptTemplate,
     });

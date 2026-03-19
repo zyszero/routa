@@ -10,8 +10,17 @@ import { getKanbanSessionQueue } from "@/core/kanban/workflow-orchestrator-singl
 
 export const dynamic = "force-dynamic";
 
+function requireWorkspaceId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
 export async function GET(request: NextRequest) {
-  const workspaceId = request.nextUrl.searchParams.get("workspaceId") ?? "default";
+  const workspaceId = requireWorkspaceId(request.nextUrl.searchParams.get("workspaceId"));
+  if (!workspaceId) {
+    return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
+  }
   const system = getRoutaSystem();
   await ensureDefaultBoard(system, workspaceId);
   const boards = await system.kanbanBoardStore.listByWorkspace(workspaceId);

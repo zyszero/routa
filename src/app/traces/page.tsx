@@ -41,7 +41,7 @@ function TracePageContent() {
   const router = useRouter();
   const { workspaces, loading: workspacesLoading, createWorkspace } = useWorkspaces();
 
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState("default");
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState("");
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
