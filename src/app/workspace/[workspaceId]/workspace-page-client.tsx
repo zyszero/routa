@@ -292,6 +292,8 @@ export function WorkspacePageClient({
                 providers={acp.providers}
                 specialists={specialists}
                 codebases={codebases}
+                specialistLanguage="en"
+                onSpecialistLanguageChange={() => {}}
                 onRefresh={handleRefresh}
               />
             )}
