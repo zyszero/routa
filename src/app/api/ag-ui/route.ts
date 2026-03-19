@@ -60,6 +60,12 @@ interface RunAgentInput {
   forwardedProps?: Record<string, unknown>;
 }
 
+function requireWorkspaceId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
 // ─── Session mapping ───────────────────────────────────────────────────────
 // Maps AG-UI threadId → ACP sessionId for session reuse
 const threadSessionMap = new Map<string, string>();
@@ -138,12 +144,26 @@ export async function POST(request: NextRequest) {
   const provider =
     (input.forwardedProps?.provider as string) ??
     (isServerlessEnvironment() ? "claude-code-sdk" : "opencode");
-  const workspaceId =
-    (input.forwardedProps?.workspaceId as string) ?? "default";
+  const workspaceId = requireWorkspaceId(input.forwardedProps?.workspaceId);
   const cwd =
     (input.forwardedProps?.cwd as string) ?? process.cwd();
   const branch =
     (input.forwardedProps?.branch as string) || undefined;
+
+  if (!workspaceId) {
+    return new Response(
+      encodeSSE({
+        type: "RUN_ERROR",
+        message: "workspaceId is required",
+        code: "MISSING_WORKSPACE",
+        timestamp: Date.now(),
+      }),
+      {
+        status: 400,
+        headers: { "Content-Type": "text/event-stream" },
+      },
+    );
+  }
 
   const manager = getAcpProcessManager();
   const store = getHttpSessionStore();

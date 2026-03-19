@@ -256,6 +256,10 @@ export default function AGUIPage() {
   // ── AG-UI Protocol send ──
   const sendViaAGUI = useCallback(
     async (text: string) => {
+      if (!selectedWorkspaceId) {
+        throw new Error("Select a workspace before using AG-UI mode");
+      }
+
       const runId = uuidv4();
       const userMsgId = uuidv4();
 
@@ -276,7 +280,9 @@ export default function AGUIPage() {
         ],
         tools: [],
         context: [],
-        forwardedProps: {},
+        forwardedProps: {
+          workspaceId: selectedWorkspaceId,
+        },
       };
 
       const controller = new AbortController();
@@ -476,7 +482,7 @@ export default function AGUIPage() {
         }
       }
     },
-    [threadId],
+    [selectedWorkspaceId, threadId],
   );
 
   // ── ACP Protocol send (for comparison) ──

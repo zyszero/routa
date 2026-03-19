@@ -10,9 +10,19 @@ import { Task } from "@/core/models/task";
 
 export const dynamic = "force-dynamic";
 
+function requireWorkspaceId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
-  const workspaceId = searchParams.get("workspaceId") ?? "default";
+  const workspaceId = requireWorkspaceId(searchParams.get("workspaceId"));
+
+  if (!workspaceId) {
+    return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
+  }
 
   const system = getRoutaSystem();
   const tasks = await system.taskStore.findReadyTasks(workspaceId);
