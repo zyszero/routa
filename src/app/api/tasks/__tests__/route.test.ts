@@ -21,7 +21,7 @@ vi.mock("@/core/routa-system", () => ({
   getRoutaSystem: () => system,
 }));
 
-import { GET } from "../route";
+import { GET, POST } from "../route";
 
 describe("/api/tasks GET", () => {
   beforeEach(async () => {
@@ -74,5 +74,20 @@ describe("/api/tasks GET", () => {
         },
       },
     });
+  });
+
+  it("rejects task creation without workspaceId", async () => {
+    const response = await POST(new NextRequest("http://localhost/api/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        title: "Task title",
+        objective: "Task objective",
+      }),
+      headers: { "Content-Type": "application/json" },
+    }));
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data).toEqual({ error: "workspaceId is required" });
   });
 });

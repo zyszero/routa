@@ -23,6 +23,12 @@ import type { ArtifactType } from "@/core/models/artifact";
 
 export const dynamic = "force-dynamic";
 
+function requireWorkspaceId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
 function sanitizeLabels(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
 
@@ -89,7 +95,7 @@ export async function POST(request: NextRequest) {
   const {
     title,
     objective,
-    workspaceId = "default",
+    workspaceId,
     sessionId,
     scope,
     acceptanceCriteria,
@@ -115,7 +121,7 @@ export async function POST(request: NextRequest) {
 
   const normalizedTitle = typeof title === "string" ? title : "";
   const normalizedObjective = typeof objective === "string" ? objective : "";
-  const normalizedWorkspaceId = typeof workspaceId === "string" && workspaceId.trim() ? workspaceId : "default";
+  const normalizedWorkspaceId = requireWorkspaceId(workspaceId);
   const normalizedSessionId = typeof sessionId === "string" ? sessionId : undefined;
   const normalizedScope = typeof scope === "string" ? scope : undefined;
   const normalizedAcceptanceCriteria = Array.isArray(acceptanceCriteria)
@@ -153,6 +159,9 @@ export async function POST(request: NextRequest) {
   }
   if (!normalizedObjective) {
     return NextResponse.json({ error: "objective is required" }, { status: 400 });
+  }
+  if (!normalizedWorkspaceId) {
+    return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
   }
 
   const normalizedPriority = parsePriority(priority);

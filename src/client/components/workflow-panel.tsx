@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useWorkspaces } from "@/client/hooks/use-workspaces";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -414,27 +415,32 @@ interface ExecuteModalProps {
 }
 
 function ExecuteModal({ workflow, onClose }: ExecuteModalProps) {
+  const workspacesHook = useWorkspaces();
   const [payload, setPayload] = useState("");
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState("");
   const [executing, setExecuting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (selectedWorkspaceId || workspacesHook.workspaces.length === 0) return;
+    setSelectedWorkspaceId(workspacesHook.workspaces[0].id);
+  }, [selectedWorkspaceId, workspacesHook.workspaces]);
+
   const handleExecute = async () => {
+    if (!selectedWorkspaceId) {
+      setError("Select a workspace before running this workflow");
+      return;
+    }
     setExecuting(true);
     setError(null);
     setResult(null);
     try {
-      // Trigger a background task via the tasks API
-      const res = await fetch("/api/tasks", {
+      const res = await fetch(`/api/workflows/${encodeURIComponent(workflow.id)}/trigger`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: payload || `Execute workflow: ${workflow.name}`,
-          title: `[Workflow] ${workflow.name}`,
-          triggerSource: "workflow",
-          triggeredBy: workflow.id,
-          workflowId: workflow.id,
-          workflowName: workflow.name,
+          workspaceId: selectedWorkspaceId,
           triggerPayload: payload,
         }),
       });
@@ -444,7 +450,7 @@ function ExecuteModal({ workflow, onClose }: ExecuteModalProps) {
         return;
       }
       const data = await res.json();
-      setResult(`Task created: ${data.task?.id ?? data.id ?? "unknown"}`);
+      setResult(`Workflow run started: ${data.workflowRunId ?? "unknown"} (${data.taskIds?.length ?? 0} tasks)`);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -471,6 +477,28 @@ function ExecuteModal({ workflow, onClose }: ExecuteModalProps) {
         </div>
 
         <div className="px-4 py-4 space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Workspace
+            </label>
+            <select
+              value={selectedWorkspaceId}
+              onChange={(e) => setSelectedWorkspaceId(e.target.value)}
+              disabled={executing || workspacesHook.loading || workspacesHook.workspaces.length === 0}
+              className="w-full text-xs px-2 py-1.5 rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-[#0f1117] text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+            >
+              {workspacesHook.workspaces.length === 0 ? (
+                <option value="">No active workspace</option>
+              ) : (
+                workspacesHook.workspaces.map((workspace) => (
+                  <option key={workspace.id} value={workspace.id}>
+                    {workspace.title}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
               Trigger Payload (optional)
@@ -502,7 +530,7 @@ function ExecuteModal({ workflow, onClose }: ExecuteModalProps) {
           {!result && (
             <button
               onClick={handleExecute}
-              disabled={executing}
+              disabled={executing || workspacesHook.loading || !selectedWorkspaceId}
               className="px-3 py-1.5 text-xs font-medium rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {executing ? "Running…" : "▶ Run"}
