@@ -3,6 +3,8 @@
 pub mod analyze;
 pub mod acp_runner;
 pub mod aggregator;
+pub mod candidate_collector;
+pub mod dispatch;
 pub mod errors;
 pub mod output;
 pub mod security;
