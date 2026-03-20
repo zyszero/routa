@@ -25,6 +25,21 @@ metrics:
     tier: fast
     description: "本次变更的代码文件必须满足行数预算；默认 ≤1000 行，Rust(.rs) ≤800 行，历史超标文件按 HEAD 基线冻结"
 
+  - name: graph_blast_radius_probe
+    command: graph:impact
+    tier: normal
+    execution_scope: ci
+    gate: advisory
+    kind: holistic
+    analysis: static
+    evidence_type: probe
+    scope: [web, rust]
+    run_when_changed:
+      - src/**
+      - apps/**
+      - crates/**
+    description: "通过代码图估算本次变更的 blast radius；图后端缺失时跳过不计分"
+
   - name: function_line_limit
     command: |
       # TypeScript: 检测超过 100 行的函数

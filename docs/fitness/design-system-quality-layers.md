@@ -28,13 +28,6 @@ metrics:
     hard_gate: false
     tier: deep
     description: "页面层与体验层：关键桌面路由的 aria 结构快照与可访问性 smoke"
-
-  - name: design_system_page_performance
-    command: npm run test:performance 2>&1
-    pattern: "✅"
-    hard_gate: false
-    tier: deep
-    description: "性能层：关键桌面路由的导航、FCP、CSS 成本与 long task smoke"
 ---
 
 # Design System Quality Layers
@@ -49,6 +42,7 @@ metrics:
 - 页面层：workspace / kanban / traces / session detail 维持稳定结构快照
 - 体验层：关键路由保留 main landmark、heading 与可命名交互元素
 - 性能层：关键路由在可接受的导航 / FCP / CSS 成本阈值内
+  - 这部分已经迁移到 `runtime/performance.md`，避免把运行时预算继续塞进 design system 维度
 
 ## 当前门禁
 
@@ -103,16 +97,6 @@ metrics:
   - 页面必须至少包含一个 `h1` 或 `h2`
   - 关键可交互元素不得缺失 accessible name
 
-### 6. 性能层
-
-- 命令：`npm run test:performance`
-- 阈值：
-  - `domContentLoaded <= 5000ms`
-  - `load <= 10000ms`
-  - `first-contentful-paint <= 4000ms`
-  - `stylesheet transfer <= 400KB`
-  - `long tasks <= 8`
-
 ## 使用方式
 
 关键 shell 相关改动后，至少执行：
@@ -121,7 +105,6 @@ metrics:
 npm run lint:css
 npm run test:e2e:desktop-shell
 npm run test:accessibility
-npm run test:performance
 routa-fitness run --dry-run
 ```
 
@@ -129,4 +112,4 @@ routa-fitness run --dry-run
 
 - 这不是全仓 CSS lint，只聚焦 desktop shell 共享组件。
 - `ariaSnapshot` 验证的是结构稳定性，不等于完整 WCAG 审计。
-- performance smoke 以本地开发环境为目标，作用是发现明显回退，不是产线 Lighthouse 替代物。
+- performance smoke 已迁移到 `runtime/performance.md`；这里不再把运行时预算冒充成 design system 自身的质量门。

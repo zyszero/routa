@@ -182,11 +182,27 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Install routa-fitness
         run: pip install -e tools/routa-fitness
 
-      - name: Run fitness check (dry-run)
-        run: routa-fitness run --dry-run
+      - name: Run fitness check
+        id: fitness
+        continue-on-error: true
+        run: |
+          mkdir -p .artifacts
+          routa-fitness run --tier normal --scope ci --output .artifacts/fitness-report.json
 
       - name: Summary
         run: |
@@ -198,6 +214,31 @@ jobs:
           echo "| TS Tests | ${{ needs.test-ts.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Rust Tests | ${{ needs.test-rust.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| API Contract | ${{ needs.api-contract.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Fitness Engine | ${{ steps.fitness.outcome == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          if [ -f .artifacts/fitness-report.json ]; then
+            python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+import json
+from pathlib import Path
+
+payload = json.loads(Path(".artifacts/fitness-report.json").read_text(encoding="utf-8"))
+print("")
+print(f"- Final score: {payload.get('final_score', 0):.1f}")
+print(f"- Hard gate blocked: {payload.get('hard_gate_blocked', False)}")
+print(f"- Score blocked: {payload.get('score_blocked', False)}")
+for dimension in payload.get("dimensions", []):
+    print(
+        f"- {dimension['name']}: score={dimension['score']:.1f} "
+        f"passed={dimension['passed']}/{dimension['total']}"
+    )
+PY
+          fi
+
+      - name: Upload fitness artifact
+        if: always() && hashFiles('.artifacts/fitness-report.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: fitness-report
+          path: .artifacts/fitness-report.json
 
   # ══════════════════════════════════════════════════════════════
   # SECURITY DIMENSION: 依赖漏洞扫描

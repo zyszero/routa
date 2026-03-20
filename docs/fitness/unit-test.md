@@ -19,6 +19,21 @@ metrics:
     pattern: "test result: ok"
     hard_gate: true
     tier: normal
+
+  - name: graph_test_radius_probe
+    command: graph:test-radius
+    tier: normal
+    execution_scope: ci
+    gate: advisory
+    kind: holistic
+    analysis: static
+    evidence_type: probe
+    scope: [web, rust]
+    run_when_changed:
+      - src/**
+      - apps/**
+      - crates/**
+    description: "通过代码图估算 changed targets 的测试半径；图后端缺失时跳过不计分"
 ---
 
 # 单元测试与集成测试证据
