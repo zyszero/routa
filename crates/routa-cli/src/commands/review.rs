@@ -648,18 +648,23 @@ async fn call_security_specialist_via_acp(
         .await
         .map_err(|error| format!("Failed to send prompt: {}", error))?;
 
-    if let Some(mut rx) = maybe_rx.take() {
-        wait_for_turn_complete_with_updates(state, &session_id, &mut rx, verbose).await?;
+    let streamed_output = if let Some(mut rx) = maybe_rx.take() {
+        wait_for_turn_complete_with_updates(state, &session_id, &mut rx, verbose).await?
     } else {
         wait_for_turn_complete_without_updates(state, &session_id).await?;
-    }
+        String::new()
+    };
 
     let history = state
         .acp_manager
         .get_session_history(&session_id)
         .await
         .unwrap_or_default();
-    let output = extract_agent_output_from_history(&history);
+    let output = if streamed_output.trim().is_empty() {
+        extract_agent_output_from_history(&history)
+    } else {
+        streamed_output
+    };
 
     state.acp_manager.kill_session(&session_id).await;
 
@@ -693,21 +698,32 @@ async fn wait_for_turn_complete_with_updates(
     session_id: &str,
     rx: &mut tokio::sync::broadcast::Receiver<serde_json::Value>,
     verbose: bool,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let mut renderer = if verbose {
         Some(super::tui::TuiRenderer::new())
     } else {
         None
     };
 
+    let mut collected_output = String::new();
     let mut idle_count = 0u32;
     let max_idle = 600;
+    let idle_with_output_threshold = 15;
 
     loop {
         match tokio::time::timeout(Duration::from_secs(1), rx.recv()).await {
             Ok(Ok(update)) => {
                 if let Some(renderer) = renderer.as_mut() {
                     renderer.handle_update(&update);
+                }
+
+                if let Some(text) = update
+                    .get("params")
+                    .and_then(|params| params.get("update"))
+                    .and_then(|value| value.as_object())
+                    .and_then(extract_update_text)
+                {
+                    collected_output.push_str(&text);
                 }
                 idle_count = 0;
 
@@ -721,29 +737,35 @@ async fn wait_for_turn_complete_with_updates(
                     if let Some(renderer) = renderer.as_mut() {
                         renderer.finish();
                     }
-                    return Ok(());
+                    return Ok(collected_output);
                 }
             }
             Ok(Err(_)) => {
                 if let Some(renderer) = renderer.as_mut() {
                     renderer.finish();
                 }
-                return Ok(());
+                return Ok(collected_output);
             }
             Err(_) => {
                 idle_count += 1;
+                if idle_count >= idle_with_output_threshold && !collected_output.trim().is_empty() {
+                    if let Some(renderer) = renderer.as_mut() {
+                        renderer.finish();
+                    }
+                    return Ok(collected_output);
+                }
                 if idle_count >= max_idle {
                     if let Some(renderer) = renderer.as_mut() {
                         renderer.finish();
                     }
-                    return Ok(());
+                    return Ok(collected_output);
                 }
 
                 if !state.acp_manager.is_alive(session_id).await {
                     if let Some(renderer) = renderer.as_mut() {
                         renderer.finish();
                     }
-                    return Ok(());
+                    return Ok(collected_output);
                 }
             }
         }
@@ -753,13 +775,16 @@ async fn wait_for_turn_complete_with_updates(
                 if let Some(renderer) = renderer.as_mut() {
                     renderer.finish();
                 }
-                return Ok(());
+                if collected_output.trim().is_empty() {
+                    return Ok(extract_agent_output_from_history(&history));
+                }
+                return Ok(collected_output);
             }
         } else if !state.acp_manager.is_alive(session_id).await {
             if let Some(renderer) = renderer.as_mut() {
                 renderer.finish();
             }
-            return Ok(());
+            return Ok(collected_output);
         }
     }
 }
