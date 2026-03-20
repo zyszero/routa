@@ -671,13 +671,6 @@ async fn call_security_specialist_via_acp(
     Ok(output)
 }
 
-fn resolve_security_specialist_provider(specialist: &SpecialistDef) -> String {
-    std::env::var("ROUTA_REVIEW_PROVIDER")
-        .ok()
-        .or_else(|| specialist.default_provider.clone())
-        .unwrap_or_else(|| "opencode".to_string())
-}
-
 fn build_security_final_prompt(specialist: &SpecialistDef, user_request: &str) -> String {
     let mut prompt = specialist.system_prompt.clone();
     if let Some(reminder) = &specialist.role_reminder {
@@ -953,7 +946,7 @@ async fn dispatch_security_specialists(
     let mut reports = Vec::new();
     for workload in workloads {
         let specialist = load_specialist_by_id(&workload.specialist_id, specialist_dir)?;
-        let provider = resolve_security_specialist_provider(&specialist);
+        let provider = resolve_security_provider(&specialist);
         let task = SecurityDispatchInput {
             specialist_id: specialist.id.clone(),
             categories: workload.categories.clone(),
