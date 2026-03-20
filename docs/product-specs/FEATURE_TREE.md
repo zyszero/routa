@@ -1,3 +1,14 @@
+---
+status: generated
+purpose: Auto-generated route and API surface index for Routa.js.
+sources:
+  - src/app/**/page.tsx
+  - api-contract.yaml
+update_policy:
+  - Regenerate with `python3 scripts/feature-tree-generator.py --save`.
+  - Do not hand-edit generated endpoint or route tables.
+---
+
 # Routa.js — Product Feature Specification
 
 Multi-agent coordination platform. This document is auto-generated from:
@@ -10,18 +21,21 @@ Multi-agent coordination platform. This document is auto-generated from:
 
 | Page | Route | Description |
 |------|-------|-------------|
-| Home | `/` | Task input first |
-| A2A Protocol | `/a2a` | A2A protocol testing |
-| AG-UI Protocol | `/ag-ui` | AG-UI protocol testing |
-| MCP Tools | `/mcp-tools` | Browse and execute MCP tools |
-| Messages | `/messages` | Notifications and PR history |
-| Settings | `/settings` | Providers, specialists, models |
-| Agent Installation | `/settings/agents` | Manage ACP agents |
-| Scheduled Triggers | `/settings/schedules` | Cron-based agent triggers |
-| GitHub Webhooks | `/settings/webhooks` | GitHub event triggers |
-| Traces | `/traces` | Browse agent execution traces |
-| Workspace | `/workspace/:workspaceId` | Workspace session management |
-| Session Detail | `/workspace/:workspaceId/sessions/:sessionId` | Individual session view |
+| Home | `/` |  |
+| A2A Protocol Test Page | `/a2a` | Interactive testing interface for the Agent-to-Agent (A2A) protocol |
+| AG-UI Protocol Test Page | `/ag-ui` | Standalone page for testing AG-UI protocol integration |
+| MCP Tools Explorer | `/mcp-tools` | Browse and test Model Context Protocol (MCP) tools |
+| Messages Page - Notification & PR Agent Execution History | `/messages` | Shows: - All notifications with filtering - PR Agent execution history from back |
+| Settings Page | `/settings` | Provides a full-page UI for all Routa settings: - Providers (default agent provi |
+| Agent Installation Settings Page | `/settings/agents` | Provides a full-page UI for managing ACP agent installations |
+| Scheduled Triggers Settings Page | `/settings/schedules` | Provides a full-page UI for configuring cron-based scheduled agent triggers |
+| GitHub Webhook Trigger Settings Page | `/settings/webhooks` | Provides a full-page UI for configuring GitHub webhook event-driven triggers |
+| Trace Page | `/traces` | Full-page view for browsing and analyzing Agent Trace records |
+| Workspace Page (Server Component Wrapper) | `/workspace/:workspaceId` | This server component provides generateStaticParams for static export and render |
+| Workspace / Kanban | `/workspace/:workspaceId/kanban` |  |
+| Workspace Session Page (Server Component Wrapper) | `/workspace/:workspaceId/sessions/:sessionId` | This server component provides generateStaticParams for static export and render |
+| Workspace / Team | `/workspace/:workspaceId/team` |  |
+| Workspace / Team | `/workspace/:workspaceId/team/:sessionId` |  |
 
 ---
 
@@ -144,6 +158,19 @@ Multi-agent coordination platform. This document is auto-generated from:
 |--------|----------|-------------|
 | GET | `/api/health` | Health check — returns service status |
 
+### Kanban (8)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/kanban/boards` | List Kanban boards for a workspace |
+| POST | `/api/kanban/boards` | Create a Kanban board |
+| GET | `/api/kanban/boards/{boardId}` | Get a Kanban board by ID |
+| PATCH | `/api/kanban/boards/{boardId}` | Update a Kanban board |
+| POST | `/api/kanban/decompose` | Decompose natural language input into multiple Kanban tasks |
+| GET | `/api/kanban/export` | Export kanban boards as YAML |
+| POST | `/api/kanban/import` | Import kanban boards from YAML |
+| GET | `/api/kanban/events` | Stream kanban workspace events over SSE |
+
 ### MCP (6)
 
 | Method | Endpoint | Description |
@@ -207,12 +234,31 @@ Multi-agent coordination platform. This document is auto-generated from:
 | GET | `/api/providers` | List configured LLM providers |
 | GET | `/api/providers/models` | List available models for configured providers |
 
+### Review (1)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/review/analyze` | Analyze a git diff with the single public PR Reviewer specialist |
+
 ### Rpc (2)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/rpc` | Generic JSON-RPC endpoint |
 | GET | `/api/rpc/methods` | List available RPC methods |
+
+### Sandboxes (8)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/sandboxes` | List all active sandbox containers |
+| POST | `/api/sandboxes` | Create a new sandbox container |
+| POST | `/api/sandboxes/explain` | Resolve and explain an effective sandbox policy without creating a sandbox |
+| GET | `/api/sandboxes/{id}` | Get sandbox info by ID |
+| DELETE | `/api/sandboxes/{id}` | Stop and remove a sandbox container |
+| POST | `/api/sandboxes/{id}/permissions/explain` | Preview the effective sandbox policy after applying permission constraints |
+| POST | `/api/sandboxes/{id}/permissions/apply` | Recreate a sandbox with permission constraints applied to its policy |
+| POST | `/api/sandboxes/{id}/execute` | Execute code in a sandbox and stream results as NDJSON |
 
 ### Schedules (8)
 
@@ -239,6 +285,23 @@ Multi-agent coordination platform. This document is auto-generated from:
 | GET | `/api/sessions/{id}/history` | Get message history for a session |
 | POST | `/api/sessions/{id}/disconnect` | Disconnect and kill an active session process |
 
+### Shared-Sessions (12)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/shared-sessions` | List shared sessions |
+| POST | `/api/shared-sessions` | Create a shared session |
+| GET | `/api/shared-sessions/{sharedSessionId}` | Get a shared session with participants and approvals |
+| DELETE | `/api/shared-sessions/{sharedSessionId}` | Close a shared session |
+| POST | `/api/shared-sessions/{sharedSessionId}/join` | Join a shared session |
+| POST | `/api/shared-sessions/{sharedSessionId}/leave` | Leave a shared session |
+| GET | `/api/shared-sessions/{sharedSessionId}/participants` | List shared session participants |
+| GET | `/api/shared-sessions/{sharedSessionId}/messages` | List shared session messages |
+| POST | `/api/shared-sessions/{sharedSessionId}/messages` | Send a shared session message |
+| POST | `/api/shared-sessions/{sharedSessionId}/prompts` | Send a shared session prompt |
+| POST | `/api/shared-sessions/{sharedSessionId}/approvals/{approvalId}` | Approve or reject a pending shared session prompt |
+| GET | `/api/shared-sessions/{sharedSessionId}/stream` | Stream shared session events over SSE |
+
 ### Skills (7)
 
 | Method | Endpoint | Description |
@@ -260,7 +323,7 @@ Multi-agent coordination platform. This document is auto-generated from:
 | PUT | `/api/specialists` | Update an existing specialist |
 | DELETE | `/api/specialists` | Delete a specialist |
 
-### Tasks (7)
+### Tasks (10)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -268,9 +331,12 @@ Multi-agent coordination platform. This document is auto-generated from:
 | POST | `/api/tasks` | Create a task |
 | DELETE | `/api/tasks` | Delete all tasks for a workspace |
 | GET | `/api/tasks/{id}` | Get task by ID |
+| PATCH | `/api/tasks/{id}` | Update a task |
 | DELETE | `/api/tasks/{id}` | Delete a task |
 | POST | `/api/tasks/{id}/status` | Update task status |
 | GET | `/api/tasks/ready` | Find tasks with all dependencies satisfied |
+| GET | `/api/tasks/{id}/artifacts` | List all artifacts for a task |
+| POST | `/api/tasks/{id}/artifacts` | Attach an artifact to a task |
 
 ### Test-Mcp (1)
 
@@ -301,6 +367,17 @@ Multi-agent coordination platform. This document is auto-generated from:
 | POST | `/api/webhooks/register` | Register a new webhook |
 | DELETE | `/api/webhooks/register` | Unregister a webhook |
 | GET | `/api/webhooks/webhook-logs` | List webhook delivery logs |
+
+### Workflows (6)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/workflows` | List all workflow YAML definitions from resources/flows/ |
+| POST | `/api/workflows` | Create a new workflow YAML file |
+| GET | `/api/workflows/{id}` | Get a specific workflow by ID |
+| PUT | `/api/workflows/{id}` | Update a workflow YAML file |
+| DELETE | `/api/workflows/{id}` | Delete a workflow YAML file |
+| POST | `/api/workflows/{id}/trigger` | Trigger a workflow run inside a workspace |
 
 ### Workspaces (10)
 

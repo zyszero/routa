@@ -62,9 +62,24 @@ def parse_page_comment(content):
 
     # Rest is description (join bullet points)
     desc_lines = lines[1:] if len(lines) > 1 else []
-    description = ' '.join(desc_lines)[:200]  # Limit length
+    description = ' '.join(desc_lines)
+    description = re.sub(r'\s+', ' ', description).strip()[:100]
 
     return title, description
+
+
+def format_route_segment(segment):
+    """Convert a route segment into a readable fallback title token."""
+    segment = segment.strip()
+    if not segment:
+        return ""
+    if segment.startswith(":"):
+        segment = segment[1:]
+    if segment.startswith("[") and segment.endswith("]"):
+        inner = segment[1:-1]
+        inner = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', inner)
+        return inner.replace("-", " ").replace("_", " ").title()
+    return segment.replace("-", " ").replace("_", " ").title()
 
 
 def scan_frontend_routes():
@@ -90,11 +105,21 @@ def scan_frontend_routes():
         title, description = parse_page_comment(content)
 
         # Fallback title from path
-        if not title:
-            if rel_path.name == ".":
+        if not title or not title.strip():
+            if route == "/" or str(rel_path) == ".":
                 title = "Home"
             else:
-                title = rel_path.name.replace("-", " ").replace("_", " ").title()
+                path_segments = list(rel_path.parts)
+                static_segments = [
+                    format_route_segment(segment)
+                    for segment in path_segments
+                    if not (segment.startswith("[") and segment.endswith("]"))
+                ]
+                title = " / ".join(segment for segment in static_segments[-2:] if segment).strip()
+                if not title and path_segments:
+                    title = format_route_segment(path_segments[-1]).strip()
+                if not title:
+                    title = "Page"
 
         routes.append({
             "route": route,
@@ -202,6 +227,17 @@ def render_markdown(tree, level=0):
     lines = []
 
     # Header
+    lines.append("---")
+    lines.append("status: generated")
+    lines.append("purpose: Auto-generated route and API surface index for Routa.js.")
+    lines.append("sources:")
+    lines.append("  - src/app/**/page.tsx")
+    lines.append("  - api-contract.yaml")
+    lines.append("update_policy:")
+    lines.append("  - Regenerate with `python3 scripts/feature-tree-generator.py --save`.")
+    lines.append("  - Do not hand-edit generated endpoint or route tables.")
+    lines.append("---")
+    lines.append("")
     lines.append(f"# {tree['name']} — Product Feature Specification")
     lines.append("")
     lines.append(f"{tree.get('description', '')}. This document is auto-generated from:")
@@ -350,4 +386,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
