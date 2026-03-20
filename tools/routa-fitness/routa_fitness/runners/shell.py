@@ -51,12 +51,13 @@ class ShellRunner:
             )
 
         start = time.monotonic()
+        timeout = metric.timeout_seconds or self.timeout
         try:
             result = subprocess.run(
                 ["/bin/bash", "-lc", metric.command],
                 capture_output=True,
                 text=True,
-                timeout=self.timeout,
+                timeout=timeout,
                 cwd=self.project_root,
                 env={**environ, **self.env_overrides},
             )
@@ -81,7 +82,7 @@ class ShellRunner:
             return MetricResult(
                 metric_name=metric.name,
                 passed=False,
-                output=f"TIMEOUT ({self.timeout}s)",
+                output=f"TIMEOUT ({timeout}s)",
                 tier=metric.tier,
                 hard_gate=metric.gate == Gate.HARD,
                 duration_ms=elapsed,

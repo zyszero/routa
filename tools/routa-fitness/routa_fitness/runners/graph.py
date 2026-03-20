@@ -6,7 +6,7 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Any
 
-from routa_fitness.model import MetricResult, Tier
+from routa_fitness.model import MetricResult, ResultState, Tier
 from routa_fitness.structure.adapter import try_create_adapter
 from routa_fitness.structure.impact import (
     classify_test_file,
@@ -453,6 +453,7 @@ class GraphRunner:
 
     def probe_impact(
         self,
+        changed_files: list[str] | None = None,
         *,
         base: str = "HEAD",
         max_depth: int = 2,
@@ -462,6 +463,7 @@ class GraphRunner:
     ) -> MetricResult:
         """Run blast-radius analysis and return a structured MetricResult."""
         impact = self.analyze_impact(
+            changed_files,
             base=base,
             max_depth=max_depth,
             max_impacted_files=max_impacted_files,
@@ -477,9 +479,10 @@ class GraphRunner:
                 )
             return MetricResult(
                 metric_name="graph_probe",
-                passed=True,
+                passed=False,
                 output="graph_probe_status: skipped reason=import_error",
                 tier=Tier.NORMAL,
+                state=ResultState.SKIPPED,
             )
 
         lines = [
@@ -507,9 +510,10 @@ class GraphRunner:
         if radius.get("status") == "unavailable":
             return MetricResult(
                 metric_name="graph_test_coverage",
-                passed=True,
+                passed=False,
                 output="graph_test_coverage: skipped (graph unavailable)",
                 tier=Tier.NORMAL,
+                state=ResultState.SKIPPED,
             )
 
         test_files = radius.get("test_files", [])

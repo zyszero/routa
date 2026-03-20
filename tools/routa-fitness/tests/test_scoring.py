@@ -115,3 +115,22 @@ def test_score_dimension_counts_waived_as_pass():
     assert ds.passed == 1
     assert ds.total == 2
     assert ds.score == 50.0
+
+
+def test_score_report_does_not_block_when_no_scorable_weight():
+    ds = score_dimension(
+        [
+            MetricResult(
+                metric_name="graph_probe",
+                passed=False,
+                output="skipped",
+                tier=Tier.NORMAL,
+                state=ResultState.SKIPPED,
+            )
+        ],
+        "observability",
+        0,
+    )
+    report = score_report([ds], min_score=80.0)
+    assert report.final_score == 0.0
+    assert report.score_blocked is False

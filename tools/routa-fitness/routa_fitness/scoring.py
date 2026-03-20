@@ -59,5 +59,5 @@ def score_report(
         dimensions=dimension_scores,
         final_score=final_score,
         hard_gate_blocked=len(all_hard_gate_failures) > 0,
-        score_blocked=final_score < min_score,
+        score_blocked=total_weight > 0 and final_score < min_score,
     )

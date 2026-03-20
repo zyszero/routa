@@ -55,6 +55,7 @@ class TerminalReporter:
 
     def print_footer(self, report: FitnessReport) -> None:
         print("\n" + "=" * 60)
+        scored_dimensions = [ds for ds in report.dimensions if ds.weight > 0 and ds.total > 0]
 
         if report.hard_gate_blocked:
             failures = []
@@ -62,14 +63,19 @@ class TerminalReporter:
                 failures.extend(ds.hard_gate_failures)
             print(f"\u274c HARD GATES FAILED: {', '.join(failures)}")
             print("   Cannot proceed until hard gates pass.")
+        elif report.dimensions and not scored_dimensions:
+            print("FINAL SCORE: n/a")
+            print("\u2705 PASS - No weighted metrics were scored in this run")
         elif report.dimensions:
             print(f"FINAL SCORE: {report.final_score:.1f}%")
-            if report.final_score >= 90:
+            if report.score_blocked:
+                print("\u274c BLOCK - Score too low")
+            elif report.final_score >= 90:
                 print("\u2705 PASS")
             elif report.final_score >= 80:
                 print("\u26a0\ufe0f  WARN - Consider improvements")
             else:
-                print("\u274c BLOCK - Score too low")
+                print("\u2705 PASS")
 
         print("=" * 60)
 

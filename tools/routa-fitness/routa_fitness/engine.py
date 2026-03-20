@@ -8,8 +8,9 @@ from pathlib import Path
 
 from routa_fitness.governance import GovernancePolicy, filter_dimensions
 from routa_fitness.loaders import load_dimensions
-from routa_fitness.model import Dimension, FitnessReport, Metric
+from routa_fitness.model import Dimension, EvidenceType, FitnessReport, Gate, Metric, MetricResult, ResultState
 from routa_fitness.presets.base import ProjectPreset
+from routa_fitness.runners.graph import GraphRunner
 from routa_fitness.runners.shell import ShellRunner
 from routa_fitness.scoring import score_dimension, score_report
 
@@ -128,14 +129,120 @@ def run_fitness_report(
             "ROUTA_FITNESS_CHANGED_FILES": "\n".join(effective_changed_files),
         }
 
-    runner = ShellRunner(project_root, env_overrides=runner_env)
+    shell_runner = ShellRunner(project_root, env_overrides=runner_env)
+    graph_runner = GraphRunner(project_root)
     dimension_scores = []
     for dim in dimensions:
-        results = runner.run_batch(
+        results = _run_metric_batch(
             dim.metrics,
-            parallel=policy.parallel,
+            shell_runner=shell_runner,
+            graph_runner=graph_runner,
             dry_run=policy.dry_run,
+            parallel=policy.parallel,
+            changed_files=effective_changed_files,
+            base=base,
         )
         dimension_scores.append(score_dimension(results, dim.name, dim.weight))
 
     return score_report(dimension_scores, min_score=policy.min_score), dimensions
+
+
+def _run_metric_batch(
+    metrics: list[Metric],
+    *,
+    shell_runner: ShellRunner,
+    graph_runner: GraphRunner,
+    dry_run: bool,
+    parallel: bool,
+    changed_files: list[str],
+    base: str,
+) -> list[MetricResult]:
+    """Execute a mixed batch of shell and probe metrics while preserving order."""
+    results: list[MetricResult] = []
+    shell_batch: list[Metric] = []
+    shell_indexes: list[int] = []
+
+    for index, metric in enumerate(metrics):
+        if metric.evidence_type == EvidenceType.PROBE:
+            results.append(
+                _run_probe_metric(
+                    metric,
+                    graph_runner=graph_runner,
+                    dry_run=dry_run,
+                    changed_files=changed_files,
+                    base=base,
+                )
+            )
+            continue
+
+        results.append(
+            MetricResult(
+                metric_name=metric.name,
+                passed=False,
+                output="",
+                tier=metric.tier,
+                hard_gate=metric.gate == Gate.HARD,
+                state=ResultState.UNKNOWN,
+            )
+        )
+        shell_batch.append(metric)
+        shell_indexes.append(index)
+
+    if shell_batch:
+        shell_results = shell_runner.run_batch(
+            shell_batch,
+            parallel=parallel,
+            dry_run=dry_run,
+        )
+        for index, result in zip(shell_indexes, shell_results, strict=False):
+            results[index] = result
+
+    return results
+
+
+def _run_probe_metric(
+    metric: Metric,
+    *,
+    graph_runner: GraphRunner,
+    dry_run: bool,
+    changed_files: list[str],
+    base: str,
+) -> MetricResult:
+    """Execute a graph-backed probe metric."""
+    if metric.waiver and metric.waiver.is_active():
+        return MetricResult(
+            metric_name=metric.name,
+            passed=True,
+            output=f"[WAIVED] {metric.waiver.reason}",
+            tier=metric.tier,
+            hard_gate=metric.gate == Gate.HARD,
+            state=ResultState.WAIVED,
+        )
+
+    if dry_run:
+        return MetricResult(
+            metric_name=metric.name,
+            passed=True,
+            output=f"[DRY-RUN] Would run probe: {metric.command}",
+            tier=metric.tier,
+            hard_gate=metric.gate == Gate.HARD,
+        )
+
+    if metric.command == "graph:impact":
+        result = graph_runner.probe_impact(changed_files or None, base=base)
+    elif metric.command in {"graph:test-radius", "graph:test-coverage"}:
+        result = graph_runner.probe_test_coverage(changed_files or None, base=base)
+    else:
+        return MetricResult(
+            metric_name=metric.name,
+            passed=False,
+            output=f"Unsupported probe command: {metric.command}",
+            tier=metric.tier,
+            hard_gate=metric.gate == Gate.HARD,
+            state=ResultState.UNKNOWN,
+        )
+
+    result.metric_name = metric.name
+    result.tier = metric.tier
+    result.hard_gate = metric.gate == Gate.HARD
+    return result

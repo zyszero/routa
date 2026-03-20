@@ -53,6 +53,14 @@ def test_run_timeout():
     assert "TIMEOUT" in result.output
 
 
+def test_run_metric_specific_timeout():
+    runner = ShellRunner(Path("/tmp"), timeout=5)
+    m = Metric(name="slow", command="sleep 2", timeout_seconds=1)
+    result = runner.run(m)
+    assert result.passed is False
+    assert "TIMEOUT (1s)" in result.output
+
+
 def test_run_hard_gate_preserved():
     runner = ShellRunner(Path("/tmp"))
     m = Metric(name="gate", command="echo ok", hard_gate=True)
