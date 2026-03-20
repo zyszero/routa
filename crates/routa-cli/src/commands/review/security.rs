@@ -9,209 +9,26 @@ use std::process::Command;
 use routa_core::state::AppState;
 use routa_core::workflow::agent_caller::{AcpAgentCaller, AgentCallConfig};
 use routa_core::workflow::specialist::{SpecialistDef, SpecialistLoader};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::acp_runner::{wait_for_turn_complete_with_updates, wait_for_turn_complete_without_updates};
 use super::output::{
     print_pretty_json, print_review_result, print_security_acp_runtime_diagnostics, truncate,
 };
+use super::shared::{
+    find_command_in_path, git_lines, git_output, load_config_snippets, load_dotenv,
+    load_review_rules, provider_runtime_binary, resolve_repo_root, ReviewAnalyzeOptions,
+    ReviewInputPayload, ReviewWorkerType, SecurityCandidate,
+    SecurityCandidateBucket, SecurityCandidateWorkload, SecurityDispatchInput, SecurityEvidencePack,
+    SecurityReviewPayload, SecurityRootFinding, SecuritySpecialistDispatch,
+    SecuritySpecialistOutput, SecuritySpecialistReport, ToolTrace,
+    SECURITY_DISPATCH_MAX_SPECIALISTS, SECURITY_DISPATCH_OUTPUT_PREVIEW_CHARS,
+    SECURITY_REVIEW_HOME_DIR, SECURITY_REVIEW_VENV_DIR, SECURITY_SEMGREP_RULES_PATH,
+};
 use super::stream_parser::{
     extract_agent_output_from_history, extract_agent_output_from_process_output,
     extract_text_from_prompt_result,
 };
-
-const CONFIG_CANDIDATES: &[&str] = &[
-    "AGENTS.md",
-    "package.json",
-    "tsconfig.json",
-    "eslint.config.mjs",
-    "next.config.ts",
-    "Cargo.toml",
-    ".routa/review-rules.md",
-];
-const SECURITY_REVIEW_VENV_DIR: &str = ".venv-security-review";
-const SECURITY_REVIEW_HOME_DIR: &str = ".tmp-home";
-const SECURITY_SEMGREP_RULES_PATH: &str = "resources/review/semgrep-security-v1.yaml";
-const SECURITY_DISPATCH_MAX_SPECIALISTS: usize = 3;
-const SECURITY_DISPATCH_OUTPUT_PREVIEW_CHARS: usize = 6_000;
-
-pub struct ReviewAnalyzeOptions<'a> {
-    pub base: &'a str,
-    pub head: &'a str,
-    pub repo_path: Option<&'a str>,
-    pub rules_file: Option<&'a str>,
-    pub verbose: bool,
-    pub as_json: bool,
-    pub payload_only: bool,
-    pub specialist_dir: Option<&'a str>,
-}
-
-#[derive(Clone, Copy)]
-enum ReviewWorkerType {
-    Context,
-    Candidates,
-    Validator,
-}
-
-impl ReviewWorkerType {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Self::Context => "context",
-            Self::Candidates => "candidates",
-            Self::Validator => "validator",
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-struct ReviewInputPayload {
-    repo_path: String,
-    repo_root: String,
-    base: String,
-    head: String,
-    changed_files: Vec<String>,
-    diff_stat: String,
-    diff: String,
-    config_snippets: Vec<ConfigSnippet>,
-    review_rules: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct ConfigSnippet {
-    path: String,
-    content: String,
-}
-
-#[derive(Debug, Serialize, Clone)]
-struct SecurityEvidencePack {
-    total_candidates: usize,
-    buckets: Vec<SecurityCandidateBucket>,
-}
-
-#[derive(Debug, Serialize)]
-struct SecurityReviewPayload {
-    repo_path: String,
-    repo_root: String,
-    base: String,
-    head: String,
-    changed_files: Vec<String>,
-    diff_stat: String,
-    diff: String,
-    config_snippets: Vec<ConfigSnippet>,
-    review_rules: Option<String>,
-    security_guidance: Option<String>,
-    evidence_pack: SecurityEvidencePack,
-    specialist_dispatch_plan: Vec<SecuritySpecialistDispatch>,
-    specialist_reports: Vec<SecuritySpecialistReport>,
-    pre_merged_findings: Vec<SecurityRootFinding>,
-    tool_trace: Vec<ToolTrace>,
-    heuristic_candidates: Vec<SecurityCandidate>,
-    semgrep_candidates: Vec<SecurityCandidate>,
-    fitness_review_context: Option<Value>,
-}
-
-#[derive(Debug, Serialize, Clone)]
-struct SecurityCandidateBucket {
-    category: String,
-    candidate_count: usize,
-    candidates: Vec<SecurityCandidate>,
-}
-
-#[derive(Debug, Serialize, Clone)]
-struct ToolTrace {
-    tool: String,
-    status: String,
-    details: String,
-}
-
-#[derive(Debug, Serialize, Clone)]
-struct SecurityCandidate {
-    rule_id: String,
-    category: String,
-    severity: String,
-    summary: String,
-    locations: Vec<String>,
-    evidence: Vec<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct SecurityRootFinding {
-    #[serde(default)]
-    title: String,
-    #[serde(default)]
-    severity: String,
-    #[serde(default)]
-    root_cause: String,
-    #[serde(default)]
-    affected_locations: Vec<String>,
-    #[serde(default)]
-    attack_path: String,
-    #[serde(default)]
-    why_it_matters: String,
-    #[serde(default)]
-    guardrails_present: Vec<String>,
-    #[serde(default)]
-    recommended_fix: String,
-    #[serde(default)]
-    related_variants: Vec<String>,
-    #[serde(default)]
-    confidence: Option<String>,
-}
-
-#[derive(Debug, Serialize, Clone)]
-struct SecuritySpecialistDispatch {
-    specialist_id: String,
-    categories: Vec<String>,
-    candidate_count: usize,
-    reason: String,
-}
-
-#[derive(Debug, Serialize, Clone)]
-struct SecuritySpecialistReport {
-    specialist_id: String,
-    status: String,
-    categories: Vec<String>,
-    findings: Vec<SecurityRootFinding>,
-    trace: Vec<String>,
-    parse_error: Option<String>,
-    output_preview: String,
-}
-
-#[derive(Debug, Serialize)]
-struct SecurityDispatchInput {
-    specialist_id: String,
-    categories: Vec<String>,
-    evidence_pack: SecurityEvidencePack,
-    repo_path: String,
-    base: String,
-    head: String,
-    diff: String,
-    changed_files: Vec<String>,
-    tool_trace: Vec<ToolTrace>,
-    security_guidance: Option<String>,
-    candidates: Vec<SecurityCandidate>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct SecuritySpecialistOutput {
-    #[serde(default)]
-    specialist_id: String,
-    #[serde(default)]
-    category: Option<String>,
-    #[serde(default)]
-    findings: Vec<SecurityRootFinding>,
-    #[serde(default)]
-    notes: Option<String>,
-}
-
-struct SecurityCandidateWorkload {
-    specialist_id: String,
-    categories: Vec<String>,
-    candidates: Vec<SecurityCandidate>,
-    max_candidates: Option<usize>,
-    reason: String,
-}
 
 pub async fn analyze(_state: &AppState, options: ReviewAnalyzeOptions<'_>) -> Result<(), String> {
     load_dotenv();
@@ -826,14 +643,6 @@ fn build_worker_prompt(
     };
 
     Ok(prompt)
-}
-
-fn provider_runtime_binary(provider: &str) -> String {
-    let normalized = provider.to_lowercase();
-    match normalized.as_str() {
-        "codex" => "codex-acp".to_string(),
-        _ => normalized,
-    }
 }
 
 fn build_security_specialist_prompt(payload: &SecurityReviewPayload) -> Result<String, String> {
@@ -1791,17 +1600,6 @@ fn collect_semgrep_candidates(
     candidates
 }
 
-fn find_command_in_path(command: &str) -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    for dir in std::env::split_paths(&path) {
-        let candidate = dir.join(command);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    None
-}
-
 fn preferred_semgrep_command(repo_root: &Path) -> Option<PathBuf> {
     preferred_tool_command(repo_root, &["pysemgrep", "semgrep"])
 }
@@ -2154,111 +1952,6 @@ fn is_security_review_tooling_file(path: &str) -> bool {
             | "crates/routa-cli/src/main.rs"
             | "resources/specialists/review/security-reviewer.yaml"
     ) || path.starts_with("resources/specialists/review/")
-}
-
-fn resolve_repo_root(repo_path: Option<&str>) -> Result<PathBuf, String> {
-    let root = if let Some(path) = repo_path {
-        PathBuf::from(path)
-    } else {
-        std::env::current_dir()
-            .map_err(|err| format!("Failed to read current directory: {}", err))?
-    };
-
-    let resolved = git_output(&root, &["rev-parse", "--show-toplevel"])?;
-    Ok(PathBuf::from(resolved.trim()))
-}
-
-fn load_config_snippets(repo_root: &Path) -> Vec<ConfigSnippet> {
-    CONFIG_CANDIDATES
-        .iter()
-        .filter_map(|relative_path| {
-            let file_path = repo_root.join(relative_path);
-            if !file_path.exists() {
-                return None;
-            }
-
-            let content = std::fs::read_to_string(&file_path).ok()?;
-            Some(ConfigSnippet {
-                path: relative_path.to_string(),
-                content: truncate(&content, 4_000),
-            })
-        })
-        .collect()
-}
-
-fn load_review_rules(repo_root: &Path, rules_file: Option<&str>) -> Result<Option<String>, String> {
-    let path = if let Some(file) = rules_file {
-        PathBuf::from(file)
-    } else {
-        repo_root.join(".routa").join("review-rules.md")
-    };
-
-    if !path.exists() {
-        return Ok(None);
-    }
-
-    let content = std::fs::read_to_string(&path)
-        .map_err(|err| format!("Failed to read review rules '{}': {}", path.display(), err))?;
-    Ok(Some(truncate(&content, 8_000)))
-}
-
-fn git_output(repo_root: &Path, args: &[&str]) -> Result<String, String> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(repo_root)
-        .output()
-        .map_err(|err| format!("Failed to run git {}: {}", args.join(" "), err))?;
-
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-    } else {
-        Err(format!(
-            "git {} failed: {}",
-            args.join(" "),
-            String::from_utf8_lossy(&output.stderr).trim()
-        ))
-    }
-}
-
-fn git_lines(repo_root: &Path, args: &[&str]) -> Result<Vec<String>, String> {
-    Ok(git_output(repo_root, args)?
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(str::to_string)
-        .collect())
-}
-
-fn load_dotenv() {
-    for filename in &[".env.local", ".env"] {
-        let path = std::path::Path::new(filename);
-        if !path.exists() {
-            continue;
-        }
-
-        if let Ok(content) = std::fs::read_to_string(path) {
-            for line in content.lines() {
-                let line = line.trim();
-                if line.is_empty() || line.starts_with('#') {
-                    continue;
-                }
-
-                if let Some(eq_idx) = line.find('=') {
-                    let key = line[..eq_idx].trim();
-                    let mut value = line[eq_idx + 1..].trim().to_string();
-                    if (value.starts_with('"') && value.ends_with('"'))
-                        || (value.starts_with('\'') && value.ends_with('\''))
-                    {
-                        value = value[1..value.len() - 1].to_string();
-                    }
-
-                    if std::env::var(key).is_err() {
-                        std::env::set_var(key, &value);
-                    }
-                }
-            }
-        }
-    }
 }
 
 #[cfg(test)]
