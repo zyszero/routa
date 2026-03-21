@@ -17,13 +17,16 @@
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::collections::HashSet;
 
 use crate::error::ServerError;
 use crate::events::{AgentEvent, AgentEventType};
 use crate::kanban::{set_task_column, sync_task_status_from_column, task_to_card, KanbanCard};
-use crate::models::kanban::{default_kanban_board, KanbanBoard, KanbanColumn};
-use crate::models::task::{Task, TaskPriority};
+use crate::models::kanban::{
+    default_kanban_board, KanbanAutomationStep, KanbanBoard, KanbanColumn, KanbanTransport,
+};
+use crate::models::task::{Task, TaskLaneSession, TaskLaneSessionStatus, TaskPriority};
 use crate::rpc::error::RpcError;
 use crate::state::AppState;
 
@@ -605,8 +608,7 @@ async fn maybe_trigger_lane_automation(
     }
 
     match trigger_assigned_task_agent(state, task).await {
-        Ok(session_id) => {
-            task.trigger_session_id = Some(session_id);
+        Ok(()) => {
             task.last_sync_error = None;
         }
         Err(error) => {
@@ -712,7 +714,22 @@ fn build_task_prompt(
     .join("\n")
 }
 
-async fn trigger_assigned_task_agent(state: &AppState, task: &Task) -> Result<String, String> {
+async fn trigger_assigned_task_agent(state: &AppState, task: &mut Task) -> Result<(), String> {
+    let board = load_task_board(state, task).await?;
+    let step = resolve_task_automation_step(board.as_ref(), task);
+    if is_a2a_step(step.as_ref()) {
+        return trigger_assigned_task_a2a_agent(task, board.as_ref(), step.as_ref()).await;
+    }
+
+    trigger_assigned_task_acp_agent(state, task, board.as_ref(), step.as_ref()).await
+}
+
+async fn trigger_assigned_task_acp_agent(
+    state: &AppState,
+    task: &mut Task,
+    board: Option<&KanbanBoard>,
+    step: Option<&KanbanAutomationStep>,
+) -> Result<(), String> {
     let provider = task
         .assigned_provider
         .clone()
@@ -765,19 +782,7 @@ async fn trigger_assigned_task_agent(state: &AppState, task: &Task) -> Result<St
         .await
         .map_err(|error| format!("Failed to persist ACP session: {}", error))?;
 
-    let board = if let Some(board_id) = task.board_id.as_deref() {
-        state
-            .kanban_store
-            .get(board_id)
-            .await
-            .map_err(|error| format!("Failed to load Kanban board for prompt: {}", error))?
-    } else {
-        None
-    };
-    let mut ordered_columns = board
-        .as_ref()
-        .map(|value| value.columns.clone())
-        .unwrap_or_default();
+    let mut ordered_columns = board.map(|value| value.columns.clone()).unwrap_or_default();
     ordered_columns.sort_by_key(|column| column.position);
     let next_column_id = ordered_columns
         .iter()
@@ -800,7 +805,7 @@ async fn trigger_assigned_task_agent(state: &AppState, task: &Task) -> Result<St
     };
     let prompt = build_task_prompt(
         task,
-        board.as_ref()
+        board
             .map(|value| value.id.as_str())
             .or(task.board_id.as_deref()),
         next_column_id.as_deref(),
@@ -902,7 +907,279 @@ async fn trigger_assigned_task_agent(state: &AppState, task: &Task) -> Result<St
         }
     });
 
-    Ok(session_id)
+    apply_trigger_result(
+        task,
+        board,
+        step,
+        AgentTriggerResult {
+            session_id,
+            transport: "acp".to_string(),
+            external_task_id: None,
+            context_id: None,
+        },
+    );
+
+    Ok(())
+}
+
+async fn trigger_assigned_task_a2a_agent(
+    task: &mut Task,
+    board: Option<&KanbanBoard>,
+    step: Option<&KanbanAutomationStep>,
+) -> Result<(), String> {
+    let step = step.ok_or_else(|| "A2A automation requires a resolved column step".to_string())?;
+    let agent_card_url = step
+        .agent_card_url
+        .as_deref()
+        .ok_or_else(|| "A2A automation requires agentCardUrl".to_string())?;
+
+    let mut ordered_columns = board.map(|value| value.columns.clone()).unwrap_or_default();
+    ordered_columns.sort_by_key(|column| column.position);
+    let next_column_id = ordered_columns
+        .iter()
+        .position(|column| Some(column.id.as_str()) == task.column_id.as_deref())
+        .and_then(|index| ordered_columns.get(index + 1))
+        .map(|column| column.id.clone());
+    let available_columns = if ordered_columns.is_empty() {
+        "- unavailable".to_string()
+    } else {
+        ordered_columns
+            .iter()
+            .map(|column| {
+                format!(
+                    "- {} ({}) stage={} position={}",
+                    column.id, column.name, column.stage, column.position
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let prompt = build_task_prompt(
+        task,
+        board
+            .map(|value| value.id.as_str())
+            .or(task.board_id.as_deref()),
+        next_column_id.as_deref(),
+        &available_columns,
+    );
+
+    let client = reqwest::Client::new();
+    let rpc_endpoint = resolve_a2a_rpc_endpoint(&client, agent_card_url).await?;
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let message_id = uuid::Uuid::new_v4().to_string();
+    let response = client
+        .post(&rpc_endpoint)
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": "SendMessage",
+            "params": {
+                "message": {
+                    "messageId": message_id,
+                    "role": "user",
+                    "parts": [{ "text": prompt }]
+                },
+                "metadata": {
+                    "workspaceId": task.workspace_id,
+                    "taskId": task.id,
+                    "boardId": task.board_id,
+                    "columnId": task.column_id,
+                    "stepId": step.id,
+                    "skillId": step.skill_id,
+                    "authConfigId": step.auth_config_id,
+                    "role": task.assigned_role,
+                }
+            }
+        }))
+        .send()
+        .await
+        .map_err(|error| format!("Failed to send A2A request: {}", error))?;
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "A2A request failed with HTTP {}",
+            response.status().as_u16()
+        ));
+    }
+
+    let payload: Value = response
+        .json()
+        .await
+        .map_err(|error| format!("Failed to decode A2A response: {}", error))?;
+    if let Some(error) = payload.get("error") {
+        let message = error
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown A2A error");
+        return Err(format!("A2A JSON-RPC error: {}", message));
+    }
+
+    let task_result = payload
+        .get("result")
+        .and_then(|value| value.get("task"))
+        .ok_or_else(|| "A2A response missing result.task".to_string())?;
+    let external_task_id = task_result
+        .get("id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "A2A response missing task.id".to_string())?
+        .to_string();
+    let context_id = task_result
+        .get("contextId")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned);
+    let session_id = format!("a2a-{}", uuid::Uuid::new_v4());
+
+    apply_trigger_result(
+        task,
+        board,
+        Some(step),
+        AgentTriggerResult {
+            session_id,
+            transport: "a2a".to_string(),
+            external_task_id: Some(external_task_id),
+            context_id,
+        },
+    );
+
+    Ok(())
+}
+
+#[derive(Debug)]
+struct AgentTriggerResult {
+    session_id: String,
+    transport: String,
+    external_task_id: Option<String>,
+    context_id: Option<String>,
+}
+
+fn apply_trigger_result(
+    task: &mut Task,
+    board: Option<&KanbanBoard>,
+    step: Option<&KanbanAutomationStep>,
+    result: AgentTriggerResult,
+) {
+    task.trigger_session_id = Some(result.session_id.clone());
+    if !task.session_ids.iter().any(|id| id == &result.session_id) {
+        task.session_ids.push(result.session_id.clone());
+    }
+
+    let column_name = board.and_then(|value| {
+        value.columns.iter().find_map(|column| {
+            (Some(column.id.as_str()) == task.column_id.as_deref()).then(|| column.name.clone())
+        })
+    });
+    let now = Utc::now().to_rfc3339();
+    let lane_session = TaskLaneSession {
+        session_id: result.session_id.clone(),
+        routa_agent_id: None,
+        column_id: task.column_id.clone(),
+        column_name,
+        step_id: step.map(|value| value.id.clone()),
+        step_index: None,
+        step_name: step
+            .and_then(|value| value.specialist_name.clone())
+            .or_else(|| task.assigned_specialist_name.clone()),
+        provider: task.assigned_provider.clone(),
+        role: task.assigned_role.clone(),
+        specialist_id: task.assigned_specialist_id.clone(),
+        specialist_name: task.assigned_specialist_name.clone(),
+        transport: Some(result.transport),
+        external_task_id: result.external_task_id,
+        context_id: result.context_id,
+        attempt: Some(1),
+        loop_mode: None,
+        completion_requirement: None,
+        objective: Some(task.objective.clone()),
+        last_activity_at: Some(now.clone()),
+        recovered_from_session_id: None,
+        recovery_reason: None,
+        status: TaskLaneSessionStatus::Running,
+        started_at: now,
+        completed_at: None,
+    };
+
+    if let Some(existing) = task
+        .lane_sessions
+        .iter_mut()
+        .find(|existing| existing.session_id == result.session_id)
+    {
+        *existing = lane_session;
+    } else {
+        task.lane_sessions.push(lane_session);
+    }
+}
+
+async fn load_task_board(state: &AppState, task: &Task) -> Result<Option<KanbanBoard>, String> {
+    if let Some(board_id) = task.board_id.as_deref() {
+        state
+            .kanban_store
+            .get(board_id)
+            .await
+            .map_err(|error| format!("Failed to load Kanban board for automation: {}", error))
+    } else {
+        Ok(None)
+    }
+}
+
+fn resolve_task_automation_step(
+    board: Option<&KanbanBoard>,
+    task: &Task,
+) -> Option<KanbanAutomationStep> {
+    board
+        .and_then(|value| {
+            value
+                .columns
+                .iter()
+                .find(|column| Some(column.id.as_str()) == task.column_id.as_deref())
+        })
+        .and_then(|column| column.automation.as_ref())
+        .filter(|automation| automation.enabled)
+        .and_then(|automation| automation.primary_step())
+}
+
+fn is_a2a_step(step: Option<&KanbanAutomationStep>) -> bool {
+    step.is_some_and(|value| {
+        matches!(value.transport, Some(KanbanTransport::A2a)) || value.agent_card_url.is_some()
+    })
+}
+
+async fn resolve_a2a_rpc_endpoint(client: &reqwest::Client, url: &str) -> Result<String, String> {
+    if url.ends_with(".json") || url.ends_with("/agent-card") || url.ends_with("/card") {
+        let response = client
+            .get(url)
+            .send()
+            .await
+            .map_err(|error| format!("Failed to fetch A2A agent card: {}", error))?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "A2A agent card fetch failed with HTTP {}",
+                response.status().as_u16()
+            ));
+        }
+        let card: Value = response
+            .json()
+            .await
+            .map_err(|error| format!("Failed to decode A2A agent card: {}", error))?;
+        let rpc_url = card
+            .get("url")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "A2A agent card missing url".to_string())?;
+        absolutize_url(url, rpc_url)
+    } else {
+        Ok(url.to_string())
+    }
+}
+
+fn absolutize_url(base_url: &str, maybe_relative: &str) -> Result<String, String> {
+    if maybe_relative.starts_with("http://") || maybe_relative.starts_with("https://") {
+        return Ok(maybe_relative.to_string());
+    }
+
+    let base = reqwest::Url::parse(base_url)
+        .map_err(|error| format!("Invalid base A2A URL {}: {}", base_url, error))?;
+    base.join(maybe_relative)
+        .map(|url| url.to_string())
+        .map_err(|error| format!("Invalid relative A2A URL {}: {}", maybe_relative, error))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1750,6 +2027,99 @@ mod tests {
             task.trigger_session_id.is_some() || task.last_sync_error.is_some(),
             "lane automation should either start a session or record why it could not"
         );
+    }
+
+    #[tokio::test]
+    async fn move_card_routes_a2a_lane_automation_without_falling_back_to_acp() {
+        let state = setup_state().await;
+        let boards = list_boards(
+            &state,
+            ListBoardsParams {
+                workspace_id: "default".to_string(),
+            },
+        )
+        .await
+        .expect("list boards should succeed");
+        let board_id = boards.boards[0].id.clone();
+
+        let mut board = state
+            .kanban_store
+            .get(&board_id)
+            .await
+            .expect("board load should succeed")
+            .expect("default board should exist");
+        let todo = board
+            .columns
+            .iter_mut()
+            .find(|column| column.id == "todo")
+            .expect("todo column should exist");
+        todo.automation = Some(crate::models::kanban::KanbanColumnAutomation {
+            enabled: true,
+            steps: Some(vec![crate::models::kanban::KanbanAutomationStep {
+                id: "todo-a2a".to_string(),
+                transport: Some(crate::models::kanban::KanbanTransport::A2a),
+                provider_id: None,
+                role: Some("CRAFTER".to_string()),
+                specialist_id: None,
+                specialist_name: Some("Todo Remote Worker".to_string()),
+                agent_card_url: Some("http://127.0.0.1:9/card".to_string()),
+                skill_id: Some("remote-skill".to_string()),
+                auth_config_id: None,
+            }]),
+            transition_type: Some("entry".to_string()),
+            ..Default::default()
+        });
+        state
+            .kanban_store
+            .update(&board)
+            .await
+            .expect("board update should succeed");
+
+        let created = create_card(
+            &state,
+            CreateCardParams {
+                workspace_id: "default".to_string(),
+                board_id: Some(board_id.clone()),
+                column_id: Some("backlog".to_string()),
+                title: "Automate remotely".to_string(),
+                description: None,
+                priority: None,
+                labels: None,
+            },
+        )
+        .await
+        .expect("create card should succeed");
+
+        move_card(
+            &state,
+            MoveCardParams {
+                card_id: created.card.id.clone(),
+                target_column_id: "todo".to_string(),
+                position: None,
+            },
+        )
+        .await
+        .expect("move card should succeed");
+
+        let task = state
+            .task_store
+            .get(&created.card.id)
+            .await
+            .expect("task lookup should succeed")
+            .expect("task should exist");
+        assert!(
+            task.trigger_session_id.is_none(),
+            "failed A2A triggers must not silently create ACP sessions"
+        );
+        assert!(
+            task.last_sync_error
+                .as_deref()
+                .is_some_and(|message| message.contains("A2A") || message.contains("a2a")),
+            "expected a2a-specific error, got {:?}",
+            task.last_sync_error
+        );
+        assert!(task.session_ids.is_empty());
+        assert!(task.lane_sessions.is_empty());
     }
 
     #[tokio::test]
