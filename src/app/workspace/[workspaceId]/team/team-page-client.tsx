@@ -7,6 +7,7 @@ import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
 import { HomeInput } from "@/client/components/home-input";
 import { useWorkspaces } from "@/client/hooks/use-workspaces";
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
+import { filterSpecialistsByCategory } from "@/client/utils/specialist-categories";
 import { formatRelativeTime } from "../ui-components";
 import type { SessionInfo } from "../types";
 
@@ -121,7 +122,7 @@ export function TeamPageClient() {
   }, []);
 
   const teamSpecialists = useMemo(
-    () => specialists.filter((specialist) => specialist.id.startsWith("team-")).sort(compareTeamSpecialists),
+    () => filterSpecialistsByCategory(specialists, "team").sort(compareTeamSpecialists),
     [specialists],
   );
 

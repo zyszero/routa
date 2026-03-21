@@ -12,6 +12,7 @@ import { type NoteData, useNotes } from "@/client/hooks/use-notes";
 import { consumePendingPrompt } from "@/client/utils/pending-prompt";
 import { useWorkspaces } from "@/client/hooks/use-workspaces";
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
+import { filterSpecialistsByCategory } from "@/client/utils/specialist-categories";
 import { formatRelativeTime, OverlayModal } from "../../ui-components";
 import type { SessionInfo } from "../../types";
 
@@ -931,8 +932,7 @@ export function TeamRunPageClient() {
   }, [sessionStreams]);
 
   const teamMembers = useMemo<TeamMemberItem[]>(() => {
-    const teamSpecialists = specialists
-      .filter((specialist) => specialist.id.startsWith("team-"))
+    const teamSpecialists = filterSpecialistsByCategory(specialists, "team")
       .sort((a, b) => {
         if (a.id === TEAM_LEAD_SPECIALIST_ID) return -1;
         if (b.id === TEAM_LEAD_SPECIALIST_ID) return 1;

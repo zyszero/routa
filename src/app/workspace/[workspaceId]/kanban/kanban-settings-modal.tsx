@@ -2,12 +2,18 @@
 
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { AcpProviderInfo } from "@/client/acp-client";
+import { AcpProviderDropdown } from "@/client/components/acp-provider-dropdown";
 import {
   getKanbanAutomationSteps,
   type KanbanAutomationStep,
   type KanbanColumnAutomation,
-  type KanbanColumnStage,
 } from "@/core/models/kanban";
+import {
+  SPECIALIST_CATEGORY_OPTIONS,
+  filterSpecialistsByCategory,
+  getSpecialistCategory,
+  type SpecialistCategory,
+} from "@/client/utils/specialist-categories";
 import {
   findSpecialistById,
   getSpecialistDisplayName,
@@ -23,6 +29,7 @@ interface SpecialistOption {
   name: string;
   role: string;
   displayName?: string;
+  defaultProvider?: string;
 }
 
 export type ColumnAutomationConfig = KanbanColumnAutomation;
@@ -69,7 +76,7 @@ function createEmptyAutomationStep(index: number): KanbanAutomationStep {
 }
 
 function getDefaultAutomationForStage(stage: string): ColumnAutomationConfig {
-  switch (stage as KanbanColumnStage) {
+  switch (stage) {
     case "backlog":
       return syncAutomationPrimaryStep({
         enabled: true,
@@ -116,6 +123,67 @@ function getDefaultAutomationForStage(stage: string): ColumnAutomationConfig {
         steps: [{ id: "step-1", role: "DEVELOPER" }],
       });
   }
+}
+
+function ProviderField({
+  providers,
+  value,
+  ariaLabel,
+  dataTestId,
+  onChange,
+}: {
+  providers: AcpProviderInfo[];
+  value: string | undefined;
+  ariaLabel: string;
+  dataTestId: string;
+  onChange: (providerId: string | undefined) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <AcpProviderDropdown
+        providers={providers}
+        selectedProvider={value ?? ""}
+        onProviderChange={(providerId) => onChange(providerId || undefined)}
+        allowAuto={true}
+        autoLabel="Auto"
+        showStatusDot={false}
+        ariaLabel={ariaLabel}
+        dataTestId={dataTestId}
+        buttonClassName="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1119] dark:text-slate-200 dark:hover:bg-[#111722]"
+        labelClassName="truncate text-left"
+      />
+      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+        Auto follows the global provider preference or specialist default.
+      </p>
+    </div>
+  );
+}
+
+function SpecialistCategoryTabs({
+  category,
+  onChange,
+}: {
+  category: SpecialistCategory;
+  onChange: (category: SpecialistCategory) => void;
+}) {
+  return (
+    <div className="flex flex-nowrap gap-2 overflow-x-auto pb-1">
+      {SPECIALIST_CATEGORY_OPTIONS.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          onClick={() => onChange(option.id)}
+          className={`shrink-0 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
+            category === option.id
+              ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
+              : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-slate-700 dark:bg-[#0b1119] dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function getEditableAutomationSteps(automation: ColumnAutomationConfig): KanbanAutomationStep[] {
@@ -186,6 +254,7 @@ export function KanbanSettingsModal({
   const [selectedColumnId, setSelectedColumnId] = useState<string>(board.columns[0]?.id ?? "");
   const [saving, setSaving] = useState(false);
   const [showRuntimeSettings, setShowRuntimeSettings] = useState(false);
+  const [specialistCategory, setSpecialistCategory] = useState<SpecialistCategory>("kanban");
 
   const sortedColumns = useMemo(
     () => board.columns.slice().sort((a, b) => a.position - b.position),
@@ -225,6 +294,14 @@ export function KanbanSettingsModal({
   const selectedColumn = sortedColumns.find((column) => column.id === selectedColumnId) ?? sortedColumns[0] ?? null;
   const automationEnabledCount = sortedColumns.filter((column) => columnAutomation[column.id]?.enabled).length;
   const visibleColumnCount = sortedColumns.filter((column) => visibleColumns.includes(column.id)).length;
+
+  useEffect(() => {
+    const selectedSpecialistId = selectedColumn
+      ? getEditableAutomationSteps(columnAutomation[selectedColumn.id] ?? { enabled: false })[0]?.specialistId
+      : undefined;
+    if (!selectedSpecialistId) return;
+    setSpecialistCategory(getSpecialistCategory(selectedSpecialistId));
+  }, [columnAutomation, selectedColumn]);
 
   const toggleColumnAutomation = (column: KanbanBoardInfo["columns"][0], enabled: boolean) => {
     setColumnAutomation((current) => {
@@ -504,7 +581,9 @@ export function KanbanSettingsModal({
                   automation={columnAutomation[selectedColumn.id] ?? { enabled: false }}
                   availableProviders={availableProviders}
                   specialists={specialists}
+                  specialistCategory={specialistCategory}
                   specialistLanguage={specialistLanguage}
+                  onSpecialistCategoryChange={setSpecialistCategory}
                   onUpdate={(updated) => {
                     setColumnAutomation((current) => ({
                       ...current,
@@ -552,20 +631,33 @@ function ColumnAutomationWorkspace({
   automation,
   availableProviders,
   specialists,
+  specialistCategory,
   specialistLanguage,
+  onSpecialistCategoryChange,
   onUpdate,
 }: {
   column: KanbanBoardInfo["columns"][0];
   automation: ColumnAutomationConfig;
   availableProviders: AcpProviderInfo[];
   specialists: SpecialistOption[];
+  specialistCategory: SpecialistCategory;
   specialistLanguage: KanbanSpecialistLanguage;
+  onSpecialistCategoryChange: (category: SpecialistCategory) => void;
   onUpdate: (automation: ColumnAutomationConfig) => void;
 }) {
   const automationSteps = useMemo(
     () => getEditableAutomationSteps(automation),
     [automation],
   );
+  const filteredSpecialists = useMemo(() => {
+    const categorySpecialists = filterSpecialistsByCategory(specialists, specialistCategory);
+    const baseSpecialists = categorySpecialists.length > 0 ? categorySpecialists : specialists;
+    const fallbackSpecialists = automationSteps
+      .map((step) => findSpecialistById(specialists, step.specialistId))
+      .filter((specialist): specialist is SpecialistOption => Boolean(specialist))
+      .filter((specialist) => !baseSpecialists.some((item) => item.id === specialist.id));
+    return [...baseSpecialists, ...fallbackSpecialists];
+  }, [automationSteps, specialistCategory, specialists]);
   const firstStep = automationSteps[0];
   const showAdvancedByDefault = true;
   const [_showAdvanced, setShowAdvanced] = useState(showAdvancedByDefault);
@@ -601,23 +693,17 @@ function ColumnAutomationWorkspace({
 
               <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
                 <ConfigField label="Provider">
-                  <select
-                    aria-label="Provider"
-                    value={firstStep?.providerId ?? ""}
-                    onChange={(event) => onUpdate(updateAutomationSteps(automation, (steps) => steps.map((currentStep, stepIndex) => (
+                  <ProviderField
+                    providers={availableProviders}
+                    value={firstStep?.providerId}
+                    ariaLabel="Provider"
+                    dataTestId="kanban-settings-provider"
+                    onChange={(providerId) => onUpdate(updateAutomationSteps(automation, (steps) => steps.map((currentStep, stepIndex) => (
                       stepIndex === 0
-                        ? { ...currentStep, providerId: event.target.value || undefined }
+                        ? { ...currentStep, providerId }
                         : currentStep
                     ))))}
-                    className={SELECT_CLASS}
-                  >
-                    <option value="">Default provider</option>
-                    {availableProviders.map((provider) => (
-                      <option key={`${provider.id}-${provider.name}`} value={provider.id}>
-                        {provider.name}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </ConfigField>
 
                 <ConfigField label="Role">
@@ -640,32 +726,38 @@ function ColumnAutomationWorkspace({
                 </ConfigField>
 
                 <ConfigField label="Specialist">
-                  <select
-                    aria-label="Specialist"
-                    value={getLanguageSpecificSpecialistId(firstStep?.specialistId, specialistLanguage) ?? ""}
-                    onChange={(event) => {
-                      const specialist = findSpecialistById(specialists, event.target.value);
-                      onUpdate(updateAutomationSteps(automation, (steps) => steps.map((currentStep, stepIndex) => (
-                        stepIndex === 0
-                          ? {
-                            ...currentStep,
-                            specialistId: event.target.value || undefined,
-                            specialistName: specialist?.name,
-                            specialistLocale: event.target.value ? specialistLanguage : undefined,
-                            role: specialist?.role ?? currentStep.role,
-                          }
-                          : currentStep
-                      ))));
-                    }}
-                    className={SELECT_CLASS}
-                  >
-                    <option value="">{KANBAN_SPECIALIST_LANGUAGE_LABELS[specialistLanguage].noSpecialist}</option>
-                    {specialists.map((specialist) => (
-                      <option key={specialist.id} value={specialist.id}>
-                        {getSpecialistDisplayName(specialist)}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="space-y-2">
+                    <select
+                      aria-label="Specialist"
+                      value={getLanguageSpecificSpecialistId(firstStep?.specialistId, specialistLanguage) ?? ""}
+                      onChange={(event) => {
+                        const specialist = findSpecialistById(specialists, event.target.value);
+                        onUpdate(updateAutomationSteps(automation, (steps) => steps.map((currentStep, stepIndex) => (
+                          stepIndex === 0
+                            ? {
+                              ...currentStep,
+                              specialistId: event.target.value || undefined,
+                              specialistName: specialist?.name,
+                              specialistLocale: event.target.value ? specialistLanguage : undefined,
+                              role: specialist?.role ?? currentStep.role,
+                            }
+                            : currentStep
+                        ))));
+                      }}
+                      className={SELECT_CLASS}
+                    >
+                      <option value="">{KANBAN_SPECIALIST_LANGUAGE_LABELS[specialistLanguage].noSpecialist}</option>
+                      {filteredSpecialists.map((specialist) => (
+                        <option key={specialist.id} value={specialist.id}>
+                          {getSpecialistDisplayName(specialist)}
+                        </option>
+                        ))}
+                      </select>
+                    <SpecialistCategoryTabs
+                      category={specialistCategory}
+                      onChange={onSpecialistCategoryChange}
+                    />
+                  </div>
                 </ConfigField>
 
                 <ConfigField label="Trigger">
@@ -747,23 +839,17 @@ function ColumnAutomationWorkspace({
 
                           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                             <ConfigField label={`Provider ${index + 1}`}>
-                              <select
-                                aria-label={index === 0 ? "Provider" : `Provider ${index + 1}`}
-                                value={step.providerId ?? ""}
-                                onChange={(event) => onUpdate(updateAutomationSteps(automation, (steps) => steps.map((currentStep, stepIndex) => (
+                              <ProviderField
+                                providers={availableProviders}
+                                value={step.providerId}
+                                ariaLabel={index === 0 ? "Provider" : `Provider ${index + 1}`}
+                                dataTestId={`kanban-settings-provider-${index + 1}`}
+                                onChange={(providerId) => onUpdate(updateAutomationSteps(automation, (steps) => steps.map((currentStep, stepIndex) => (
                                   stepIndex === index
-                                    ? { ...currentStep, providerId: event.target.value || undefined }
+                                    ? { ...currentStep, providerId }
                                     : currentStep
                                 ))))}
-                                className={SELECT_CLASS}
-                              >
-                                <option value="">Default provider</option>
-                                {availableProviders.map((provider) => (
-                                  <option key={`${provider.id}-${provider.name}`} value={provider.id}>
-                                    {provider.name}
-                                  </option>
-                                ))}
-                              </select>
+                              />
                             </ConfigField>
 
                             <ConfigField label={`Role ${index + 1}`}>
@@ -806,7 +892,7 @@ function ColumnAutomationWorkspace({
                                 className={SELECT_CLASS}
                               >
                                 <option value="">{KANBAN_SPECIALIST_LANGUAGE_LABELS[specialistLanguage].noSpecialist}</option>
-                                {specialists.map((specialist) => (
+                                {filteredSpecialists.map((specialist) => (
                                   <option key={specialist.id} value={specialist.id}>
                                     {getSpecialistDisplayName(specialist)}
                                   </option>

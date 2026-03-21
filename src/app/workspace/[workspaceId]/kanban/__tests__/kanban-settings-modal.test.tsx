@@ -34,41 +34,40 @@ const board: KanbanBoardInfo = {
 describe("KanbanSettingsModal", () => {
   it("applies recommended defaults and saves updated automation", async () => {
     const onSave = vi.fn(async () => {});
+    const reviewBoard: KanbanBoardInfo = {
+      ...board,
+      columns: [board.columns[1]],
+    };
 
     render(
       <KanbanSettingsModal
-        board={board}
-        visibleColumns={["todo", "review"]}
+        board={reviewBoard}
+        visibleColumns={["review"]}
         columnAutomation={{}}
         availableProviders={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
-        specialists={[{ id: "verify", name: "Verifier", role: "GATE" }]}
+        specialists={[{ id: "kanban-review-guard", name: "Review Guard", role: "GATE" }]}
         specialistLanguage="en"
         onClose={vi.fn()}
         onSave={onSave}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /review/i }));
     fireEvent.click(screen.getByRole("checkbox", { name: /toggle automation for review/i }));
-    fireEvent.change(screen.getAllByLabelText("Provider")[0], { target: { value: "claude" } });
-    fireEvent.change(screen.getAllByLabelText("Specialist")[0], { target: { value: "verify" } });
+    fireEvent.click(screen.getByTestId("kanban-settings-provider"));
+    fireEvent.click(screen.getByRole("button", { name: /claude code/i }));
     fireEvent.click(screen.getByRole("button", { name: /save board settings/i }));
 
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledWith(
-        ["todo", "review"],
+        ["review"],
         {
           review: expect.objectContaining({
             enabled: true,
             steps: [expect.objectContaining({
               providerId: "claude",
-              specialistId: "verify",
-              specialistName: "Verifier",
               role: "GATE",
             })],
             providerId: "claude",
-            specialistId: "verify",
-            specialistName: "Verifier",
             role: "GATE",
             transitionType: "exit",
             requiredArtifacts: ["screenshot", "test_results"],
@@ -102,5 +101,32 @@ describe("KanbanSettingsModal", () => {
     expect(screen.queryByLabelText("Dev supervision mode")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /runtime/i }));
     expect(screen.getByLabelText("Dev supervision mode")).not.toBeNull();
+  });
+
+  it("defaults specialist filtering to kanban in board settings", () => {
+    const reviewBoard: KanbanBoardInfo = {
+      ...board,
+      columns: [board.columns[1]],
+    };
+
+    render(
+      <KanbanSettingsModal
+        board={reviewBoard}
+        visibleColumns={["review"]}
+        columnAutomation={{ review: { enabled: true, steps: [{ id: "step-1", role: "GATE", specialistId: "kanban-review-guard" }] } }}
+        availableProviders={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
+        specialists={[
+          { id: "kanban-review-guard", name: "Review Guard", role: "GATE" },
+          { id: "team-qa", name: "Team QA", role: "GATE" },
+        ]}
+        specialistLanguage="en"
+        onClose={vi.fn()}
+        onSave={vi.fn(async () => {})}
+      />,
+    );
+
+    expect(screen.getAllByRole("button").some((button) => button.textContent?.trim() === "Kanban")).toBe(true);
+    expect(screen.getAllByRole("option", { name: "Review Guard" }).length).toBeGreaterThan(0);
+    expect(screen.queryAllByRole("option", { name: "Team QA" })).toHaveLength(0);
   });
 });
