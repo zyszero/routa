@@ -22,7 +22,7 @@ use std::path::PathBuf;
 /// ```
 /// use routa_core::storage::to_folder_slug;
 /// assert_eq!(to_folder_slug("/Users/john/my-project"), "Users-john-my-project");
-/// assert_eq!(to_folder_slug("C:\\Users\\john\\project"), "C:-Users-john-project");
+/// assert_eq!(to_folder_slug("C:\\Users\\john\\project"), "C-Users-john-project");
 /// assert_eq!(to_folder_slug("/Users//john///project"), "Users-john-project");
 /// assert_eq!(to_folder_slug("/Users/john/project/"), "Users-john-project");
 /// ```
@@ -135,11 +135,14 @@ mod tests {
         assert!(dir.to_string_lossy().contains("Users-john-my-project"));
         assert!(dir.to_string_lossy().contains(".routa/projects"));
     }
-    
+
     #[test]
     fn test_windows_drive_letter_colon_stripped() {
         assert_eq!(to_folder_slug("E:\\routa"), "E-routa");
-        assert_eq!(to_folder_slug("D:\\my-workspace\\app"), "D-my-workspace-app");
+        assert_eq!(
+            to_folder_slug("D:\\my-workspace\\app"),
+            "D-my-workspace-app"
+        );
     }
 
     #[test]

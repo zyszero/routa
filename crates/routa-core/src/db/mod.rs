@@ -206,6 +206,9 @@ impl Database {
                     parallel_group          TEXT,
                     workspace_id            TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
                     session_id              TEXT,
+                    session_ids             TEXT NOT NULL DEFAULT '[]',
+                    lane_sessions           TEXT NOT NULL DEFAULT '[]',
+                    lane_handoffs           TEXT NOT NULL DEFAULT '[]',
                     completion_summary      TEXT,
                     verification_verdict    TEXT,
                     verification_report     TEXT,
@@ -369,6 +372,9 @@ impl Database {
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN test_cases TEXT", []))?;
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN codebase_ids TEXT NOT NULL DEFAULT '[]'", []))?;
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN worktree_id TEXT", []))?;
+            Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN session_ids TEXT NOT NULL DEFAULT '[]'", []))?;
+            Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN lane_sessions TEXT NOT NULL DEFAULT '[]'", []))?;
+            Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN lane_handoffs TEXT NOT NULL DEFAULT '[]'", []))?;
             // Add session_id to notes if it doesn't exist yet (ignore error if already present)
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE notes ADD COLUMN session_id TEXT", []))?;
             // Add parent_session_id to acp_sessions for CRAFTER child session tracking

@@ -1,9 +1,12 @@
 use chrono::Utc;
 use rusqlite::OptionalExtension;
+use serde::de::DeserializeOwned;
 
 use crate::db::Database;
 use crate::error::ServerError;
-use crate::models::task::{Task, TaskPriority, TaskStatus, VerificationVerdict};
+use crate::models::task::{
+    Task, TaskLaneHandoff, TaskLaneSession, TaskPriority, TaskStatus, VerificationVerdict,
+};
 
 #[derive(Clone)]
 pub struct TaskStore {
@@ -37,11 +40,11 @@ impl TaskStore {
                                          assigned_provider, assigned_role, assigned_specialist_id, assigned_specialist_name,
                                          trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
                                          github_synced_at, last_sync_error, dependencies, parallel_group, workspace_id, session_id,
-                                         completion_summary, verification_verdict, verification_report, codebase_ids, worktree_id,
-                                         version, created_at, updated_at)
+                                         session_ids, lane_sessions, lane_handoffs, completion_summary, verification_verdict,
+                                         verification_report, codebase_ids, worktree_id, version, created_at, updated_at)
                                          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18,
                                          ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36,
-                                         1, ?37, ?38)
+                                         ?37, ?38, ?39, 1, ?40, ?41)
                      ON CONFLICT(id) DO UPDATE SET
                        title = excluded.title,
                        objective = excluded.objective,
@@ -73,6 +76,9 @@ impl TaskStore {
                        parallel_group = excluded.parallel_group,
                                              workspace_id = excluded.workspace_id,
                        session_id = excluded.session_id,
+                       session_ids = excluded.session_ids,
+                       lane_sessions = excluded.lane_sessions,
+                       lane_handoffs = excluded.lane_handoffs,
                        completion_summary = excluded.completion_summary,
                        verification_verdict = excluded.verification_verdict,
                        verification_report = excluded.verification_report,
@@ -111,6 +117,9 @@ impl TaskStore {
                         t.parallel_group,
                         t.workspace_id,
                         t.session_id,
+                        serde_json::to_string(&t.session_ids).unwrap_or_default(),
+                        serde_json::to_string(&t.lane_sessions).unwrap_or_default(),
+                        serde_json::to_string(&t.lane_handoffs).unwrap_or_default(),
                         t.completion_summary,
                         t.verification_verdict.as_ref().map(|v| v.as_str()),
                         t.verification_report,
@@ -135,7 +144,8 @@ impl TaskStore {
                      assigned_provider, assigned_role, assigned_specialist_id, assigned_specialist_name,
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
                      github_synced_at, last_sync_error, dependencies, parallel_group, workspace_id, session_id,
-                     completion_summary, verification_verdict, verification_report, codebase_ids, worktree_id, created_at, updated_at
+                     session_ids, lane_sessions, lane_handoffs, completion_summary, verification_verdict,
+                     verification_report, codebase_ids, worktree_id, created_at, updated_at
                      FROM tasks WHERE id = ?1",
                 )?;
                 stmt.query_row(rusqlite::params![id], |row| Ok(row_to_task(row)))
@@ -154,7 +164,8 @@ impl TaskStore {
                      assigned_provider, assigned_role, assigned_specialist_id, assigned_specialist_name,
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
                      github_synced_at, last_sync_error, dependencies, parallel_group, workspace_id, session_id,
-                     completion_summary, verification_verdict, verification_report, codebase_ids, worktree_id, created_at, updated_at
+                     session_ids, lane_sessions, lane_handoffs, completion_summary, verification_verdict,
+                     verification_report, codebase_ids, worktree_id, created_at, updated_at
                      FROM tasks WHERE workspace_id = ?1 ORDER BY created_at DESC",
                 )?;
                 let rows = stmt
@@ -175,7 +186,8 @@ impl TaskStore {
                      assigned_provider, assigned_role, assigned_specialist_id, assigned_specialist_name,
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
                      github_synced_at, last_sync_error, dependencies, parallel_group, workspace_id, session_id,
-                     completion_summary, verification_verdict, verification_report, codebase_ids, worktree_id, created_at, updated_at
+                     session_ids, lane_sessions, lane_handoffs, completion_summary, verification_verdict,
+                     verification_report, codebase_ids, worktree_id, created_at, updated_at
                      FROM tasks WHERE session_id = ?1 ORDER BY created_at DESC",
                 )?;
                 let rows = stmt
@@ -201,7 +213,8 @@ impl TaskStore {
                      assigned_provider, assigned_role, assigned_specialist_id, assigned_specialist_name,
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
                      github_synced_at, last_sync_error, dependencies, parallel_group, workspace_id, session_id,
-                     completion_summary, verification_verdict, verification_report, codebase_ids, worktree_id, created_at, updated_at
+                     session_ids, lane_sessions, lane_handoffs, completion_summary, verification_verdict,
+                     verification_report, codebase_ids, worktree_id, created_at, updated_at
                      FROM tasks WHERE workspace_id = ?1 AND status = ?2 ORDER BY created_at DESC",
                 )?;
                 let rows = stmt
@@ -224,7 +237,8 @@ impl TaskStore {
                      assigned_provider, assigned_role, assigned_specialist_id, assigned_specialist_name,
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
                      github_synced_at, last_sync_error, dependencies, parallel_group, workspace_id, session_id,
-                     completion_summary, verification_verdict, verification_report, codebase_ids, worktree_id, created_at, updated_at
+                     session_ids, lane_sessions, lane_handoffs, completion_summary, verification_verdict,
+                     verification_report, codebase_ids, worktree_id, created_at, updated_at
                      FROM tasks WHERE assigned_to = ?1 ORDER BY created_at DESC",
                 )?;
                 let rows = stmt
@@ -285,8 +299,8 @@ impl TaskStore {
 use rusqlite::Row;
 
 fn row_to_task(row: &Row<'_>) -> Task {
-    let created_ms: i64 = row.get(36).unwrap_or(0);
-    let updated_ms: i64 = row.get(37).unwrap_or(0);
+    let created_ms: i64 = row.get(39).unwrap_or(0);
+    let updated_ms: i64 = row.get(40).unwrap_or(0);
 
     let acceptance_criteria: Option<Vec<String>> = row
         .get::<_, Option<String>>(4)
@@ -310,6 +324,9 @@ fn row_to_task(row: &Row<'_>) -> Task {
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default();
+    let session_ids: Vec<String> = parse_json_column(row, 31);
+    let lane_sessions: Vec<TaskLaneSession> = parse_json_column(row, 32);
+    let lane_handoffs: Vec<TaskLaneHandoff> = parse_json_column(row, 33);
 
     Task {
         id: row.get(0).unwrap_or_default(),
@@ -350,19 +367,128 @@ fn row_to_task(row: &Row<'_>) -> Task {
         parallel_group: row.get(28).unwrap_or(None),
         workspace_id: row.get(29).unwrap_or_default(),
         session_id: row.get(30).unwrap_or(None),
-        completion_summary: row.get(31).unwrap_or(None),
+        session_ids,
+        lane_sessions,
+        lane_handoffs,
+        completion_summary: row.get(34).unwrap_or(None),
         verification_verdict: row
-            .get::<_, Option<String>>(32)
+            .get::<_, Option<String>>(35)
             .unwrap_or(None)
             .and_then(|s| VerificationVerdict::from_str(&s)),
-        verification_report: row.get(33).unwrap_or(None),
+        verification_report: row.get(36).unwrap_or(None),
         codebase_ids: row
-            .get::<_, String>(34)
+            .get::<_, String>(37)
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default(),
-        worktree_id: row.get(35).unwrap_or(None),
+        worktree_id: row.get(38).unwrap_or(None),
         created_at: chrono::DateTime::from_timestamp_millis(created_ms).unwrap_or_else(Utc::now),
         updated_at: chrono::DateTime::from_timestamp_millis(updated_ms).unwrap_or_else(Utc::now),
+    }
+}
+
+fn parse_json_column<T>(row: &Row<'_>, idx: usize) -> Vec<T>
+where
+    T: DeserializeOwned,
+{
+    row.get::<_, String>(idx)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::Database;
+    use crate::models::task::{
+        TaskLaneHandoffRequestType, TaskLaneHandoffStatus, TaskLaneSessionCompletionRequirement,
+        TaskLaneSessionLoopMode, TaskLaneSessionRecoveryReason, TaskLaneSessionStatus,
+    };
+    use crate::models::workspace::Workspace;
+    use crate::store::WorkspaceStore;
+
+    async fn setup() -> TaskStore {
+        let db = Database::open_in_memory().expect("in-memory db should open");
+        let workspace_store = WorkspaceStore::new(db.clone());
+        workspace_store
+            .save(&Workspace::new(
+                "default".to_string(),
+                "Default".to_string(),
+                None,
+            ))
+            .await
+            .expect("workspace save should succeed");
+        TaskStore::new(db)
+    }
+
+    #[tokio::test]
+    async fn save_and_get_roundtrip_persists_lane_history_fields() {
+        let store = setup().await;
+        let mut task = Task::new(
+            "task-1".to_string(),
+            "Lane history".to_string(),
+            "Persist lane history".to_string(),
+            "default".to_string(),
+            Some("origin-session".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        task.session_ids = vec!["origin-session".to_string(), "a2a-run-1".to_string()];
+        task.lane_sessions = vec![TaskLaneSession {
+            session_id: "a2a-run-1".to_string(),
+            routa_agent_id: Some("agent-1".to_string()),
+            column_id: Some("todo".to_string()),
+            column_name: Some("Todo".to_string()),
+            step_id: Some("step-a2a".to_string()),
+            step_index: Some(0),
+            step_name: Some("Todo A2A".to_string()),
+            provider: None,
+            role: Some("CRAFTER".to_string()),
+            specialist_id: Some("todo-worker".to_string()),
+            specialist_name: Some("Todo Worker".to_string()),
+            transport: Some("a2a".to_string()),
+            external_task_id: Some("remote-task-123".to_string()),
+            context_id: Some("ctx-456".to_string()),
+            attempt: Some(1),
+            loop_mode: Some(TaskLaneSessionLoopMode::WatchdogRetry),
+            completion_requirement: Some(TaskLaneSessionCompletionRequirement::CompletionSummary),
+            objective: Some("Implement feature".to_string()),
+            last_activity_at: Some("2026-03-21T00:00:00Z".to_string()),
+            recovered_from_session_id: Some("old-session".to_string()),
+            recovery_reason: Some(TaskLaneSessionRecoveryReason::AgentFailed),
+            status: TaskLaneSessionStatus::Completed,
+            started_at: "2026-03-21T00:00:00Z".to_string(),
+            completed_at: Some("2026-03-21T00:05:00Z".to_string()),
+        }];
+        task.lane_handoffs = vec![TaskLaneHandoff {
+            id: "handoff-1".to_string(),
+            from_session_id: "a2a-run-1".to_string(),
+            to_session_id: "review-run-1".to_string(),
+            from_column_id: Some("todo".to_string()),
+            to_column_id: Some("review".to_string()),
+            request_type: TaskLaneHandoffRequestType::RuntimeContext,
+            request: "Share current findings".to_string(),
+            status: TaskLaneHandoffStatus::Delivered,
+            requested_at: "2026-03-21T00:04:00Z".to_string(),
+            responded_at: Some("2026-03-21T00:04:30Z".to_string()),
+            response_summary: Some("Context handed off".to_string()),
+        }];
+
+        store.save(&task).await.expect("save should succeed");
+
+        let loaded = store
+            .get("task-1")
+            .await
+            .expect("get should succeed")
+            .expect("task should exist");
+
+        assert_eq!(loaded.session_ids, task.session_ids);
+        assert_eq!(loaded.lane_sessions, task.lane_sessions);
+        assert_eq!(loaded.lane_handoffs, task.lane_handoffs);
     }
 }

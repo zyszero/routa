@@ -3,12 +3,31 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::task::TaskStatus;
 
+/// Transport protocol for Kanban automation
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum KanbanTransport {
+    /// Agent Chat Protocol (default)
+    Acp,
+    /// Agent-to-Agent protocol
+    A2a,
+}
+
+impl Default for KanbanTransport {
+    fn default() -> Self {
+        KanbanTransport::Acp
+    }
+}
+
 /// Automation configuration for a Kanban column.
 /// When a card is moved to this column, the automation can trigger an agent session.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct KanbanAutomationStep {
     pub id: String,
+    /// Transport protocol for this automation step
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport: Option<KanbanTransport>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -17,6 +36,15 @@ pub struct KanbanAutomationStep {
     pub specialist_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub specialist_name: Option<String>,
+    /// A2A-specific: URL of the agent card to invoke
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_card_url: Option<String>,
+    /// A2A-specific: Skill ID to invoke on the agent
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skill_id: Option<String>,
+    /// A2A-specific: Auth configuration ID for the request
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth_config_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -59,10 +87,14 @@ impl KanbanColumnAutomation {
 
         if let Some(step) = self.steps.as_ref().and_then(|steps| {
             steps.iter().find(|step| {
-                step.provider_id.is_some()
+                matches!(step.transport, Some(KanbanTransport::A2a))
+                    || step.provider_id.is_some()
                     || step.role.is_some()
                     || step.specialist_id.is_some()
                     || step.specialist_name.is_some()
+                    || step.agent_card_url.is_some()
+                    || step.skill_id.is_some()
+                    || step.auth_config_id.is_some()
             })
         }) {
             return Some(step.clone());
@@ -70,11 +102,51 @@ impl KanbanColumnAutomation {
 
         Some(KanbanAutomationStep {
             id: "step-1".to_string(),
+            transport: None, // defaults to Acp
             provider_id: self.provider_id.clone(),
             role: self.role.clone(),
             specialist_id: self.specialist_id.clone(),
             specialist_name: self.specialist_name.clone(),
+            agent_card_url: None,
+            skill_id: None,
+            auth_config_id: None,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{KanbanAutomationStep, KanbanColumnAutomation, KanbanTransport};
+
+    #[test]
+    fn primary_step_keeps_a2a_only_steps() {
+        let automation = KanbanColumnAutomation {
+            enabled: true,
+            steps: Some(vec![KanbanAutomationStep {
+                id: "step-a2a".to_string(),
+                transport: Some(KanbanTransport::A2a),
+                provider_id: None,
+                role: None,
+                specialist_id: None,
+                specialist_name: None,
+                agent_card_url: Some("https://example.com/agent-card.json".to_string()),
+                skill_id: Some("skill-1".to_string()),
+                auth_config_id: Some("auth-1".to_string()),
+            }]),
+            ..Default::default()
+        };
+
+        let step = automation
+            .primary_step()
+            .expect("a2a step should be preserved");
+        assert_eq!(step.id, "step-a2a");
+        assert_eq!(step.transport, Some(KanbanTransport::A2a));
+        assert_eq!(
+            step.agent_card_url.as_deref(),
+            Some("https://example.com/agent-card.json")
+        );
+        assert_eq!(step.skill_id.as_deref(), Some("skill-1"));
+        assert_eq!(step.auth_config_id.as_deref(), Some("auth-1"));
     }
 }
 

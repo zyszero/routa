@@ -1,6 +1,149 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+/// Transport protocol for task sessions
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum TaskSessionTransport {
+    /// Agent Chat Protocol
+    Acp,
+    /// Agent-to-Agent protocol
+    A2a,
+}
+
+/// Status of a task lane session
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskLaneSessionStatus {
+    Running,
+    Completed,
+    Failed,
+    TimedOut,
+    Transitioned,
+}
+
+/// Loop mode for task lane session recovery
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskLaneSessionLoopMode {
+    WatchdogRetry,
+    RalphLoop,
+}
+
+/// Completion requirement for task lane session
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskLaneSessionCompletionRequirement {
+    TurnComplete,
+    CompletionSummary,
+    VerificationReport,
+}
+
+/// Recovery reason for task lane session
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskLaneSessionRecoveryReason {
+    WatchdogInactivity,
+    AgentFailed,
+    CompletionCriteriaNotMet,
+}
+
+/// Session associated with a task lane transition
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskLaneSession {
+    pub session_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub routa_agent_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub column_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub column_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step_index: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub specialist_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub specialist_name: Option<String>,
+    /// Transport protocol used for this session
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport: Option<String>,
+    /// A2A-specific: External task ID from the agent system
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_task_id: Option<String>,
+    /// A2A-specific: Context ID for tracking the conversation
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attempt: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub loop_mode: Option<TaskLaneSessionLoopMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completion_requirement: Option<TaskLaneSessionCompletionRequirement>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub objective: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_activity_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovered_from_session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovery_reason: Option<TaskLaneSessionRecoveryReason>,
+    pub status: TaskLaneSessionStatus,
+    pub started_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<String>,
+}
+
+/// Handoff request type for task lane transitions
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskLaneHandoffRequestType {
+    EnvironmentPreparation,
+    RuntimeContext,
+    Clarification,
+    RerunCommand,
+}
+
+/// Handoff status for task lane transitions
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskLaneHandoffStatus {
+    Requested,
+    Delivered,
+    Completed,
+    Blocked,
+    Failed,
+}
+
+/// Handoff between adjacent lane sessions
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskLaneHandoff {
+    pub id: String,
+    pub from_session_id: String,
+    pub to_session_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_column_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to_column_id: Option<String>,
+    pub request_type: TaskLaneHandoffRequestType,
+    pub request: String,
+    pub status: TaskLaneHandoffStatus,
+    pub requested_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub responded_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_summary: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TaskPriority {
     #[serde(rename = "low")]
@@ -178,6 +321,15 @@ pub struct Task {
     /// Worktree ID assigned to this task
     #[serde(skip_serializing_if = "Option::is_none")]
     pub worktree_id: Option<String>,
+    /// All session IDs that have been associated with this task (history)
+    #[serde(default)]
+    pub session_ids: Vec<String>,
+    /// Durable per-lane session history for Kanban workflow handoff
+    #[serde(default)]
+    pub lane_sessions: Vec<TaskLaneSession>,
+    /// Adjacent-lane handoff requests and responses
+    #[serde(default)]
+    pub lane_handoffs: Vec<TaskLaneHandoff>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -238,6 +390,9 @@ impl Task {
             session_id,
             codebase_ids: Vec::new(),
             worktree_id: None,
+            session_ids: Vec::new(),
+            lane_sessions: Vec::new(),
+            lane_handoffs: Vec::new(),
             created_at: now,
             updated_at: now,
             completion_summary: None,
