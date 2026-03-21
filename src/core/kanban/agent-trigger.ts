@@ -4,10 +4,12 @@ import { getNextHappyPathColumnId, type KanbanColumn } from "../models/kanban";
 import { AgentEventType, type EventBus } from "../events/event-bus";
 import { isClaudeCodeSdkConfigured } from "../acp/claude-code-sdk-adapter";
 import { consumeAcpPromptResponse } from "../acp/prompt-response";
+import { getA2AOutboundClient } from "../a2a";
 import { formatArtifactSummary, resolveKanbanTransitionArtifacts } from "./transition-artifacts";
 import type { TaskLaneSession } from "../models/task";
 import { resolveCurrentLaneAutomationState } from "./lane-automation-state";
 import { getLatestLaneSessionForColumn, getPreviousLaneRun } from "./task-lane-history";
+import type { KanbanAutomationStep, KanbanTransport } from "../models/kanban";
 
 function formatHandoffRequestType(
   value: "environment_preparation" | "runtime_context" | "clarification" | "rerun_command",
@@ -255,21 +257,70 @@ export function resolveKanbanAutomationProvider(provider?: string): string {
   return provider ?? "opencode";
 }
 
-export async function triggerAssignedTaskAgent(params: {
+export interface AutomationRunHandle {
+  transport: KanbanTransport;
+  localSessionId?: string;
+  externalTaskId?: string;
+  contextId?: string;
+  displayTarget?: string;
+}
+
+function emitAutomationEvent(params: {
+  eventBus?: EventBus;
+  type: AgentEventType;
+  workspaceId: string;
+  sessionId: string;
+  transport: KanbanTransport;
+  success: boolean;
+  externalTaskId?: string;
+  contextId?: string;
+  error?: string;
+}): void {
+  if (!params.eventBus) {
+    return;
+  }
+
+  params.eventBus.emit({
+    type: params.type,
+    agentId: params.sessionId,
+    workspaceId: params.workspaceId,
+    data: {
+      sessionId: params.sessionId,
+      success: params.success,
+      transport: params.transport,
+      externalTaskId: params.externalTaskId,
+      contextId: params.contextId,
+      error: params.error,
+    },
+    timestamp: new Date(),
+  });
+}
+
+function getStepTransport(step?: KanbanAutomationStep): KanbanTransport {
+  return step?.transport ?? "acp";
+}
+
+function getA2AFailureMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+async function triggerAcpTaskAgent(params: {
   origin: string;
   workspaceId: string;
   cwd: string;
   branch?: string;
   task: Task;
   specialistLocale?: string;
-  boardColumns?: KanbanColumn[];
+  boardColumns: KanbanColumn[];
   eventBus?: EventBus;
-}): Promise<{ sessionId?: string; error?: string }> {
-  const { origin, workspaceId, cwd, branch, task, specialistLocale, boardColumns = [], eventBus } = params;
-  const provider = resolveKanbanAutomationProvider(task.assignedProvider);
-  const role = task.assignedRole ?? "CRAFTER";
+}): Promise<AutomationRunHandle | { error: string }> {
+  const provider = resolveKanbanAutomationProvider(params.task.assignedProvider);
+  const role = params.task.assignedRole ?? "CRAFTER";
 
-  const newSessionResponse = await fetch(`${origin}/api/acp`, {
+  const newSessionResponse = await fetch(`${params.origin}/api/acp`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -277,15 +328,15 @@ export async function triggerAssignedTaskAgent(params: {
       id: uuidv4(),
       method: "session/new",
       params: {
-        cwd,
-        branch,
+        cwd: params.cwd,
+        branch: params.branch,
         provider,
         role,
         toolMode: "full",
-        workspaceId,
-        specialistId: task.assignedSpecialistId,
-        specialistLocale,
-        name: `${task.title} · ${provider}`,
+        workspaceId: params.workspaceId,
+        specialistId: params.task.assignedSpecialistId,
+        specialistLocale: params.specialistLocale,
+        name: `${params.task.title} · ${provider}`,
       },
     }),
   });
@@ -297,7 +348,7 @@ export async function triggerAssignedTaskAgent(params: {
   }
 
   void (async () => {
-    const response = await fetch(`${origin}/api/acp`, {
+    const response = await fetch(`${params.origin}/api/acp`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -306,44 +357,163 @@ export async function triggerAssignedTaskAgent(params: {
         method: "session/prompt",
         params: {
           sessionId,
-          workspaceId,
+          workspaceId: params.workspaceId,
           provider,
-          cwd,
-          prompt: [{ type: "text", text: buildTaskPrompt(task, boardColumns, { currentSessionId: sessionId }) }],
+          cwd: params.cwd,
+          prompt: [{ type: "text", text: buildTaskPrompt(params.task, params.boardColumns, { currentSessionId: sessionId }) }],
         },
       }),
     });
 
     await consumeAcpPromptResponse(response);
-
-    if (eventBus) {
-      eventBus.emit({
-        type: AgentEventType.AGENT_COMPLETED,
-        agentId: sessionId,
-        workspaceId,
-        data: {
-          sessionId,
-          success: true,
-        },
-        timestamp: new Date(),
-      });
-    }
+    emitAutomationEvent({
+      eventBus: params.eventBus,
+      type: AgentEventType.AGENT_COMPLETED,
+      workspaceId: params.workspaceId,
+      sessionId,
+      transport: "acp",
+      success: true,
+    });
   })().catch((error) => {
     console.error("[kanban] Failed to auto-prompt ACP task session:", error);
-    if (eventBus) {
-      eventBus.emit({
-        type: AgentEventType.AGENT_FAILED,
-        agentId: sessionId,
-        workspaceId,
-        data: {
-          sessionId,
-          success: false,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        timestamp: new Date(),
-      });
-    }
+    emitAutomationEvent({
+      eventBus: params.eventBus,
+      type: AgentEventType.AGENT_FAILED,
+      workspaceId: params.workspaceId,
+      sessionId,
+      transport: "acp",
+      success: false,
+      error: getA2AFailureMessage(error),
+    });
   });
 
-  return { sessionId };
+  return {
+    transport: "acp",
+    localSessionId: sessionId,
+    displayTarget: provider,
+  };
+}
+
+async function triggerA2ATaskAgent(params: {
+  workspaceId: string;
+  task: Task;
+  boardColumns: KanbanColumn[];
+  step?: KanbanAutomationStep;
+  eventBus?: EventBus;
+}): Promise<AutomationRunHandle | { error: string }> {
+  const agentCardUrl = params.step?.agentCardUrl?.trim();
+  if (!agentCardUrl) {
+    return { error: "A2A automation requires agentCardUrl." };
+  }
+
+  const localSessionId = `a2a-${uuidv4()}`;
+  const client = getA2AOutboundClient();
+  const metadata: Record<string, unknown> = {
+    workspaceId: params.workspaceId,
+    cardId: params.task.id,
+    boardId: params.task.boardId,
+    columnId: params.task.columnId,
+    specialistId: params.step?.specialistId ?? params.task.assignedSpecialistId,
+    specialistName: params.step?.specialistName ?? params.task.assignedSpecialistName,
+    role: params.step?.role ?? params.task.assignedRole,
+    localSessionId,
+  };
+
+  if (params.step?.skillId) {
+    metadata.skillId = params.step.skillId;
+  }
+  if (params.step?.authConfigId) {
+    metadata.authConfigId = params.step.authConfigId;
+  }
+
+  const taskHandle = await client.sendMessage(
+    agentCardUrl,
+    buildTaskPrompt(params.task, params.boardColumns, { currentSessionId: localSessionId }),
+    metadata,
+  );
+
+  void (async () => {
+    try {
+      const completedTask = await client.waitForCompletion(agentCardUrl, taskHandle.id);
+      const state = completedTask.status.state;
+      const isSuccess = state === "completed";
+      emitAutomationEvent({
+        eventBus: params.eventBus,
+        type: isSuccess ? AgentEventType.AGENT_COMPLETED : AgentEventType.AGENT_FAILED,
+        workspaceId: params.workspaceId,
+        sessionId: localSessionId,
+        transport: "a2a",
+        success: isSuccess,
+        externalTaskId: completedTask.id,
+        contextId: completedTask.contextId,
+        error: isSuccess ? undefined : `A2A task ended in state: ${state}`,
+      });
+    } catch (error) {
+      console.error("[kanban] Failed to monitor A2A task session:", error);
+      emitAutomationEvent({
+        eventBus: params.eventBus,
+        type: AgentEventType.AGENT_FAILED,
+        workspaceId: params.workspaceId,
+        sessionId: localSessionId,
+        transport: "a2a",
+        success: false,
+        externalTaskId: taskHandle.id,
+        contextId: taskHandle.contextId,
+        error: getA2AFailureMessage(error),
+      });
+    }
+  })();
+
+  return {
+    transport: "a2a",
+    localSessionId,
+    externalTaskId: taskHandle.id,
+    contextId: taskHandle.contextId,
+    displayTarget: agentCardUrl,
+  };
+}
+
+export async function triggerAssignedTaskAgent(params: {
+  origin: string;
+  workspaceId: string;
+  cwd: string;
+  branch?: string;
+  task: Task;
+  step?: KanbanAutomationStep;
+  specialistLocale?: string;
+  boardColumns?: KanbanColumn[];
+  eventBus?: EventBus;
+}): Promise<{ sessionId?: string; error?: string; transport?: KanbanTransport; externalTaskId?: string; contextId?: string; displayTarget?: string }> {
+  const { origin, workspaceId, cwd, branch, task, step, specialistLocale, boardColumns = [], eventBus } = params;
+  const transport = getStepTransport(step);
+  const runHandle = transport === "a2a"
+    ? await triggerA2ATaskAgent({
+        workspaceId,
+        task,
+        boardColumns,
+        step,
+        eventBus,
+      })
+    : await triggerAcpTaskAgent({
+        origin,
+        workspaceId,
+        cwd,
+        branch,
+        task,
+        specialistLocale,
+        boardColumns,
+        eventBus,
+      });
+
+  if ("error" in runHandle) {
+    return { error: runHandle.error, transport };
+  }
+
+  return {
+    sessionId: runHandle.localSessionId,
+    transport: runHandle.transport,
+    externalTaskId: runHandle.externalTaskId,
+    contextId: runHandle.contextId,
+    displayTarget: runHandle.displayTarget,
+  };
 }

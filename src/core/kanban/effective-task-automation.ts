@@ -1,5 +1,6 @@
 import {
   getKanbanAutomationSteps,
+  type KanbanTransport,
   type KanbanAutomationStep,
   type KanbanColumnAutomation,
 } from "../models/kanban";
@@ -35,10 +36,14 @@ export interface EffectiveTaskAutomation {
   steps: KanbanAutomationStep[];
   stepIndex?: number;
   step?: KanbanAutomationStep;
+  transport?: KanbanTransport;
   providerId?: string;
   role?: string;
   specialistId?: string;
   specialistName?: string;
+  agentCardUrl?: string;
+  skillId?: string;
+  authConfigId?: string;
 }
 
 export function resolveKanbanAutomationStep(
@@ -52,6 +57,7 @@ export function resolveKanbanAutomationStep(
 
   return {
     ...step,
+    transport: step.transport ?? "acp",
     providerId: step.providerId ?? specialist?.defaultProvider,
     role: step.role ?? specialist?.role,
     specialistName: step.specialistName ?? specialist?.name,
@@ -94,9 +100,13 @@ export function resolveEffectiveTaskAutomation(
     steps,
     stepIndex: step ? 0 : undefined,
     step,
+    transport: step?.transport ?? (canRun ? "acp" : undefined),
     providerId: task.assignedProvider ?? step?.providerId,
     role: task.assignedRole ?? step?.role ?? (canRun ? "DEVELOPER" : undefined),
     specialistId: task.assignedSpecialistId ?? step?.specialistId,
     specialistName: task.assignedSpecialistName ?? step?.specialistName,
+    agentCardUrl: step?.agentCardUrl,
+    skillId: step?.skillId,
+    authConfigId: step?.authConfigId,
   };
 }

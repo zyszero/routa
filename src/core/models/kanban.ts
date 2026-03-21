@@ -7,13 +7,23 @@ export type KanbanDevSessionCompletionRequirement =
   | "completion_summary"
   | "verification_report";
 
+export type KanbanTransport = "acp" | "a2a";
+
 export interface KanbanAutomationStep {
   id: string;
+  /** Transport protocol for this automation step */
+  transport?: KanbanTransport;
   providerId?: string;
   role?: string;
   specialistId?: string;
   specialistName?: string;
   specialistLocale?: string;
+  /** A2A-specific: URL of the agent card to invoke */
+  agentCardUrl?: string;
+  /** A2A-specific: Skill ID to invoke on the agent */
+  skillId?: string;
+  /** A2A-specific: Auth configuration ID for the request */
+  authConfigId?: string;
 }
 
 export interface KanbanDevSessionSupervision {
@@ -161,10 +171,14 @@ export function getKanbanAutomationSteps(automation?: KanbanColumnAutomation): K
       id: step.id?.trim() || `step-${index + 1}`,
     }))
     .filter((step) => (
-      Boolean(step.providerId)
+      step.transport === "a2a"
+      || Boolean(step.providerId)
       || Boolean(step.role)
       || Boolean(step.specialistId)
       || Boolean(step.specialistName)
+      || Boolean(step.agentCardUrl)
+      || Boolean(step.skillId)
+      || Boolean(step.authConfigId)
     ));
 
   if (normalizedSteps.length > 0) {

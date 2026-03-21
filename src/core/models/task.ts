@@ -69,6 +69,12 @@ export interface TaskLaneSession {
   role?: string;
   specialistId?: string;
   specialistName?: string;
+  /** Transport protocol used for this session */
+  transport?: string;
+  /** A2A-specific: External task ID from the agent system */
+  externalTaskId?: string;
+  /** A2A-specific: Context ID for tracking the conversation */
+  contextId?: string;
   attempt?: number;
   loopMode?: TaskLaneSessionLoopMode;
   completionRequirement?: TaskLaneSessionCompletionRequirement;

@@ -149,4 +149,35 @@ describe("resolveEffectiveTaskAutomation", () => {
       providerId: "codex",
     });
   });
+
+  it("keeps A2A-only lane steps instead of dropping them during normalization", () => {
+    const resolved = resolveEffectiveTaskAutomation(
+      {
+        columnId: "review",
+      },
+      [
+        {
+          id: "review",
+          automation: {
+            enabled: true,
+            steps: [{
+              id: "remote-review",
+              transport: "a2a",
+              agentCardUrl: "https://agents.example.com/reviewer/agent-card.json",
+              skillId: "review",
+            }],
+          },
+        },
+      ],
+    );
+
+    expect(resolved.canRun).toBe(true);
+    expect(resolved.transport).toBe("a2a");
+    expect(resolved.step).toMatchObject({
+      id: "remote-review",
+      transport: "a2a",
+      agentCardUrl: "https://agents.example.com/reviewer/agent-card.json",
+      skillId: "review",
+    });
+  });
 });

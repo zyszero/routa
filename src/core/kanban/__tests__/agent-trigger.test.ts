@@ -7,6 +7,16 @@ vi.mock("../../acp/claude-code-sdk-adapter", () => ({
   isClaudeCodeSdkConfigured: vi.fn(),
 }));
 
+const sendMessageMock = vi.fn();
+const waitForCompletionMock = vi.fn();
+
+vi.mock("../../a2a", () => ({
+  getA2AOutboundClient: vi.fn(() => ({
+    sendMessage: sendMessageMock,
+    waitForCompletion: waitForCompletionMock,
+  })),
+}));
+
 import { isClaudeCodeSdkConfigured } from "../../acp/claude-code-sdk-adapter";
 
 describe("buildTaskPrompt", () => {
@@ -262,6 +272,8 @@ describe("buildTaskPrompt", () => {
 describe("triggerAssignedTaskAgent", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    sendMessageMock.mockReset();
+    waitForCompletionMock.mockReset();
   });
 
   it("emits AGENT_FAILED when session/prompt returns a JSON-RPC error payload", async () => {
@@ -303,11 +315,86 @@ describe("triggerAssignedTaskAgent", () => {
       eventBus: eventBus as unknown as EventBus,
     });
 
-    expect(result).toEqual({ sessionId: "sess-1" });
+    expect(result).toMatchObject({
+      sessionId: "sess-1",
+      transport: "acp",
+      displayTarget: "auggie",
+    });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
       type: AgentEventType.AGENT_FAILED,
       agentId: "sess-1",
+    }));
+  });
+
+  it("uses A2A transport for A2A-configured automation steps", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    sendMessageMock.mockResolvedValue({
+      id: "remote-task-1",
+      contextId: "ctx-1",
+      status: { state: "submitted", timestamp: "2026-03-21T00:00:00Z" },
+      history: [],
+    });
+    waitForCompletionMock.mockResolvedValue({
+      id: "remote-task-1",
+      contextId: "ctx-1",
+      status: { state: "completed", timestamp: "2026-03-21T00:00:10Z" },
+      history: [],
+    });
+
+    const eventBus = { emit: vi.fn() };
+    const task = createTask({
+      id: "task-a2a",
+      title: "Run remote review",
+      objective: "Send this card to a remote A2A reviewer",
+      workspaceId: "default",
+      boardId: "board-1",
+      columnId: "review",
+      assignedRole: "GATE",
+    });
+
+    const result = await triggerAssignedTaskAgent({
+      origin: "http://127.0.0.1:3000",
+      workspaceId: "default",
+      cwd: "/tmp/project",
+      task,
+      step: {
+        id: "remote-review",
+        transport: "a2a",
+        agentCardUrl: "https://agents.example.com/reviewer/agent-card.json",
+        skillId: "review",
+      },
+      eventBus: eventBus as unknown as EventBus,
+    });
+
+    expect(result.transport).toBe("a2a");
+    expect(result.sessionId).toMatch(/^a2a-/);
+    expect(result.externalTaskId).toBe("remote-task-1");
+    expect(result.contextId).toBe("ctx-1");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      "https://agents.example.com/reviewer/agent-card.json",
+      expect.stringContaining("You are assigned to Kanban task: Run remote review"),
+      expect.objectContaining({
+        workspaceId: "default",
+        cardId: "task-a2a",
+        skillId: "review",
+      }),
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(waitForCompletionMock).toHaveBeenCalledWith(
+      "https://agents.example.com/reviewer/agent-card.json",
+      "remote-task-1",
+    );
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      type: AgentEventType.AGENT_COMPLETED,
+      data: expect.objectContaining({
+        transport: "a2a",
+        externalTaskId: "remote-task-1",
+        contextId: "ctx-1",
+      }),
     }));
   });
 });
