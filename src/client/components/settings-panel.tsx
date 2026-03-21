@@ -1097,19 +1097,17 @@ interface ProviderCatalogSectionProps {
 }
 
 function ProviderCatalogSection({ allProviders }: ProviderCatalogSectionProps) {
-  const [disabledIds, setDisabledIds] = useState<string[]>(() => loadDisabledProviders());
+  const [hiddenProviderIds, setHiddenProviderIds] = useState<string[]>(() => loadDisabledProviders());
 
   const handleToggle = (providerId: string) => {
-    const newDisabledIds = disabledIds.includes(providerId)
-      ? disabledIds.filter((id) => id !== providerId)
-      : [...disabledIds, providerId];
+    const nextHiddenProviderIds = hiddenProviderIds.includes(providerId)
+      ? hiddenProviderIds.filter((id) => id !== providerId)
+      : [...hiddenProviderIds, providerId];
 
-    setDisabledIds(newDisabledIds);
-    saveDisabledProviders(newDisabledIds);
+    setHiddenProviderIds(nextHiddenProviderIds);
+    saveDisabledProviders(nextHiddenProviderIds);
 
-    // Notify user to refresh the page to see changes
     if (typeof window !== "undefined") {
-      // Trigger a custom event that the useAcp hook can listen to
       window.dispatchEvent(new CustomEvent("routa:providers-changed"));
     }
   };
@@ -1119,7 +1117,7 @@ function ProviderCatalogSection({ allProviders }: ProviderCatalogSectionProps) {
       <div>
         <p className={sectionHeadCls}>Provider Catalog</p>
         <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-3">
-          Built-in, ACP Registry, and custom providers are listed together here. Hide a provider to remove it from selection lists.
+          Built-in, ACP Registry, and custom providers are listed together here. Hide a provider to remove it from app pickers without deleting its configuration.
         </p>
       </div>
 
@@ -1128,7 +1126,7 @@ function ProviderCatalogSection({ allProviders }: ProviderCatalogSectionProps) {
       ) : (
         <div className="space-y-2">
           {allProviders.map((provider) => {
-            const isDisabled = disabledIds.includes(provider.id);
+            const isHidden = hiddenProviderIds.includes(provider.id);
             return (
               <div
                 key={provider.id}
@@ -1137,7 +1135,7 @@ function ProviderCatalogSection({ allProviders }: ProviderCatalogSectionProps) {
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <input
                     type="checkbox"
-                    checked={!isDisabled}
+                    checked={!isHidden}
                     onChange={() => handleToggle(provider.id)}
                     className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
                   />
@@ -1157,7 +1155,7 @@ function ProviderCatalogSection({ allProviders }: ProviderCatalogSectionProps) {
                 </div>
                 <div className="ml-2 flex items-center gap-2 shrink-0">
                   <span className="text-[10px] text-gray-400 dark:text-gray-500">
-                    {isDisabled ? "hidden" : "visible"}
+                    {isHidden ? "Hidden" : "Shown"}
                   </span>
                   {provider.status && (
                     <span
@@ -1179,14 +1177,14 @@ function ProviderCatalogSection({ allProviders }: ProviderCatalogSectionProps) {
         </div>
       )}
 
-      {disabledIds.length > 0 && (
+      {hiddenProviderIds.length > 0 && (
         <div className="mt-3 p-2.5 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
           <div className="flex items-start gap-2">
             <svg className="w-3.5 h-3.5 text-yellow-600 dark:text-yellow-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
             <span className="text-[11px] text-yellow-700 dark:text-yellow-300">
-              {disabledIds.length} provider{disabledIds.length > 1 ? "s" : ""} hidden. Refresh the page to apply changes.
+              {hiddenProviderIds.length} provider{hiddenProviderIds.length > 1 ? "s are" : " is"} hidden from provider pickers.
             </span>
           </div>
         </div>
@@ -1660,7 +1658,7 @@ const EXAMPLE_AUTH_JSON = `{
 }`;
 
 // ─── Docker OpenCode Config Section ───────────────────────────────────────────
-function DockerOpenCodeSection() {
+function DockerOpenCodeSection({ embedded = false }: { embedded?: boolean }) {
   const [authJson, setAuthJson] = useState(() => loadDockerOpencodeAuthJson());
   const [error, setError] = useState<string | null>(null);
 
@@ -1680,14 +1678,16 @@ function DockerOpenCodeSection() {
   }, []);
 
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
-      <div className="flex items-center gap-2">
-        <svg className="w-4 h-4 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 10V7" />
-        </svg>
-        <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">Docker OpenCode</span>
-        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">auth.json</span>
-      </div>
+    <div className={`space-y-2 ${embedded ? "" : "rounded-lg border border-gray-200 p-3 dark:border-gray-700"}`}>
+      {!embedded && (
+        <div className="flex items-center gap-2">
+          <svg className="w-4 h-4 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 10V7" />
+          </svg>
+          <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">Docker OpenCode</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">auth.json</span>
+        </div>
+      )}
       <p className="text-[11px] text-gray-500 dark:text-gray-400">
         Paste your <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">~/.local/share/opencode/auth.json</code> here.
         This config will be mounted into the Docker container.
@@ -2069,7 +2069,7 @@ function SettingsPanelContent({ onClose, providers, initialTab }: Omit<SettingsP
 
               <div className={settingsCardCls}>
                 <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Provider Credentials</p>
-                <DockerOpenCodeSection />
+                <DockerOpenCodeSection embedded={true} />
               </div>
 
               <CustomAcpProvidersSection />
@@ -2081,7 +2081,7 @@ function SettingsPanelContent({ onClose, providers, initialTab }: Omit<SettingsP
                     Browse and install ACP agents from the registry.
                   </p>
                 </div>
-                <AgentInstallPanel />
+                <AgentInstallPanel embedded={true} />
               </div>
             </div>
           )}
