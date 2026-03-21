@@ -1145,6 +1145,17 @@ export class RoutaOrchestrator {
           `[Orchestrator] Claude process not available for session ${sessionId}`
         );
       }
+    } else if (manager.isClaudeCodeSdkSession(sessionId)) {
+      const sdkAdapter = manager.getClaudeCodeSdkAdapter(sessionId);
+      if (sdkAdapter && sdkAdapter.alive) {
+        for await (const _ of sdkAdapter.promptStream(prompt, sessionId)) {
+          // notifications are forwarded by the adapter
+        }
+      } else {
+        console.error(
+          `[Orchestrator] Claude Code SDK adapter not available for session ${sessionId}`
+        );
+      }
     } else if (manager.isOpencodeAdapterSession(sessionId)) {
       const adapter = manager.getOpencodeAdapter(sessionId);
       if (adapter && adapter.alive) {
@@ -1156,6 +1167,26 @@ export class RoutaOrchestrator {
             prompt
           );
         }
+      }
+    } else if (manager.isDockerAdapterSession(sessionId)) {
+      const adapter = manager.getDockerAdapter(sessionId);
+      if (adapter && adapter.alive) {
+        await adapter.prompt(prompt);
+      } else {
+        console.error(
+          `[Orchestrator] Docker adapter not available for session ${sessionId}`
+        );
+      }
+    } else if (manager.getWorkspaceAgent(sessionId)) {
+      const workspaceAgent = manager.getWorkspaceAgent(sessionId);
+      if (workspaceAgent) {
+        for await (const _ of workspaceAgent.promptStream(prompt, sessionId)) {
+          // notifications are forwarded by the adapter
+        }
+      } else {
+        console.error(
+          `[Orchestrator] Workspace agent not available for session ${sessionId}`
+        );
       }
     } else {
       const proc = manager.getProcess(sessionId);
