@@ -94,6 +94,30 @@ interface TeamMemberItem {
   avatarLabel: string;
 }
 
+interface SessionLaneSnippet {
+  id: string;
+  label: string;
+  text: string;
+  tone: "default" | "tool" | "complete" | "blocked";
+}
+
+interface SessionLaneItem {
+  id: string;
+  sessionId: string;
+  actor: string;
+  roleId?: string;
+  badge: string;
+  sessionName: string;
+  status: TeamMemberStatus;
+  lastUpdatedLabel: string;
+  provider?: string;
+  eventCount: number;
+  snippets: SessionLaneSnippet[];
+  completionSummary?: string;
+  pendingQuestion?: PendingSessionQuestion | null;
+  isLead?: boolean;
+}
+
 interface DeliverableItem {
   id: string;
   label: string;
@@ -116,6 +140,7 @@ interface SessionHistoryEntry {
     title?: string;
     taskStatus?: string;
     completionSummary?: string;
+    agentId?: string;
     name?: string;
     error?: string;
     toolCallId?: string;
@@ -198,7 +223,7 @@ function deliverableTone(status: DeliverableItem["status"]): string {
   return "bg-slate-100 text-slate-700 dark:bg-slate-700/50 dark:text-slate-300";
 }
 
-function activityTone(type: CoordinationEventType): string {
+function _activityTone(type: CoordinationEventType): string {
   switch (type) {
     case "plan":
       return "bg-violet-100 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300";
@@ -493,6 +518,58 @@ function inferCompletionEvent(
     return { type: "complete", title: `${actor} delivered UI proposal`, summary };
   }
   return { type: "complete", title: `${actor} marked phase complete`, summary };
+}
+
+function laneSnippetTone(update?: SessionHistoryEntry["update"]): SessionLaneSnippet["tone"] {
+  if (update?.sessionUpdate === "task_completion") {
+    return normalizeTaskStatus(update.taskStatus) === "blocked" ? "blocked" : "complete";
+  }
+  if (update?.sessionUpdate === "tool_call_update") return "tool";
+  if (update?.sessionUpdate === "acp_status" && update.status === "error") return "blocked";
+  return "default";
+}
+
+function laneSnippetLabel(update?: SessionHistoryEntry["update"]): string {
+  if (!update?.sessionUpdate) return "Update";
+  if (update.sessionUpdate === "tool_call_update") {
+    return getToolEventLabel(update as Record<string, unknown>) || "Tool";
+  }
+  if (update.sessionUpdate === "task_completion") return "Report back";
+  if (update.sessionUpdate === "user_message") return "User";
+  if (update.sessionUpdate === "agent_message") return "Agent";
+  if (update.sessionUpdate === "acp_status" && update.status === "error") return "Runtime";
+  return update.sessionUpdate.replaceAll("_", " ");
+}
+
+function buildLaneSnippets(history: SessionHistoryEntry[], maxSnippets = 5): SessionLaneSnippet[] {
+  return history
+    .map((entry, index) => {
+      const update = entry.update;
+      const updateType = update?.sessionUpdate;
+      if (!updateType || updateType === "agent_message_chunk" || updateType === "agent_thought_chunk") return null;
+      if (updateType === "acp_status" && update.status !== "error") return null;
+
+      const text = updateType === "task_completion"
+        ? summarizeText(update.completionSummary ?? extractHistoryText(update) ?? "Member finished and reported back to lead.", 180)
+        : summarizeText(
+          extractHistoryText(update)
+            ?? update.rawOutput?.output
+            ?? update.error
+            ?? (typeof update.rawInput?.additionalInstructions === "string" ? update.rawInput.additionalInstructions : undefined)
+            ?? (typeof update.rawInput?.title === "string" ? update.rawInput.title : undefined),
+          180,
+        );
+
+      if (!text) return null;
+      return {
+        id: `${entry.sessionId}-${index}`,
+        label: laneSnippetLabel(update),
+        text,
+        tone: laneSnippetTone(update),
+      } satisfies SessionLaneSnippet;
+    })
+    .filter((snippet): snippet is SessionLaneSnippet => Boolean(snippet))
+    .slice(-maxSnippets);
 }
 
 function extractGoalFromPrompt(text?: string): string | undefined {
@@ -892,7 +969,7 @@ export function TeamRunPageClient() {
     });
   }, [agents, rootHistory, session]);
 
-  const coordinationItems = useMemo<TeamActivityItem[]>(() => {
+  const _coordinationItems = useMemo<TeamActivityItem[]>(() => {
     const items: Array<TeamActivityItem & { sortKey: number }> = [];
     const leadName = specialistsById.get(TEAM_LEAD_SPECIALIST_ID)?.name ?? "Agent Lead";
 
@@ -1208,17 +1285,6 @@ export function TeamRunPageClient() {
     return result;
   }, [historiesBySessionId]);
 
-  const leadQuestionSessionIdsByItemId = useMemo(() => {
-    const itemIdBySessionId = new Map<string, string>();
-    for (const item of coordinationItems) {
-      const targetSessionId = item.memberSession?.sessionId ?? item.sessionId;
-      if (targetSessionId && !itemIdBySessionId.has(targetSessionId)) {
-        itemIdBySessionId.set(targetSessionId, item.id);
-      }
-    }
-    return itemIdBySessionId;
-  }, [coordinationItems]);
-
   const handleSubmitSessionQuestion = useCallback(async (
     targetSessionId: string,
     toolCallId: string,
@@ -1306,6 +1372,81 @@ export function TeamRunPageClient() {
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, 8);
   }, [allRunSessions, descendantSessions, historiesBySessionId, notesHook.notes, specialistsById]);
+
+  const completionByAgentId = useMemo(() => {
+    const map = new Map<string, NonNullable<SessionHistoryEntry["update"]>>();
+    for (const entry of rootHistory) {
+      const update = entry.update;
+      if (update?.sessionUpdate !== "task_completion" || typeof update.agentId !== "string") continue;
+      map.set(update.agentId, update);
+    }
+    return map;
+  }, [rootHistory]);
+
+  const sessionLanes = useMemo<SessionLaneItem[]>(() => {
+    const leadStatus = session?.acpStatus === "error" ? "blocked" : "working";
+    const leadSnippets = buildLaneSnippets(rootHistory.filter((entry) => {
+      const type = entry.update?.sessionUpdate;
+      return type === "user_message" || type === "agent_message" || type === "tool_call_update" || type === "task_completion";
+    }), 6);
+
+    const leadLane: SessionLaneItem = {
+      id: `lane-${sessionId}`,
+      sessionId,
+      actor: specialistsById.get(TEAM_LEAD_SPECIALIST_ID)?.name ?? "Agent Lead",
+      roleId: TEAM_LEAD_SPECIALIST_ID,
+      badge: "lead",
+      sessionName: session?.name ?? sessionId,
+      status: leadStatus,
+      lastUpdatedLabel: selectedSessionStream?.session.sessionId === sessionId
+        ? selectedSessionStream.lastUpdatedLabel
+        : formatRelativeTime(session?.createdAt ?? new Date().toISOString()),
+      provider: session?.provider,
+      eventCount: rootHistory.length,
+      snippets: leadSnippets,
+      pendingQuestion: pendingQuestionsBySessionId.get(sessionId) ?? null,
+      isLead: true,
+    };
+
+    const childLanes = sessionStreams
+      .filter((stream) => stream.session.parentSessionId)
+      .map((stream) => {
+        const history = historiesBySessionId[stream.session.sessionId] ?? [];
+        const member = teamMembers.find((item) => item.sessionId === stream.session.sessionId);
+        const completion = stream.session.routaAgentId ? completionByAgentId.get(stream.session.routaAgentId) : undefined;
+        const snippets = buildLaneSnippets(history, 4);
+        if (completion?.completionSummary) {
+          snippets.push({
+            id: `${stream.session.sessionId}-report-back`,
+            label: "Report back",
+            text: completion.completionSummary,
+            tone: normalizeTaskStatus(completion.taskStatus) === "blocked" ? "blocked" : "complete",
+          });
+        }
+        return {
+          id: `lane-${stream.session.sessionId}`,
+          sessionId: stream.session.sessionId,
+          actor: stream.actor,
+          roleId: resolveRosterSpecialistId(stream.session) ?? stream.session.specialistId,
+          badge: stream.badge,
+          sessionName: stream.session.name ?? stream.session.sessionId,
+          status: member?.status ?? "working",
+          lastUpdatedLabel: stream.lastUpdatedLabel,
+          provider: stream.session.provider,
+          eventCount: stream.eventCount,
+          snippets: snippets.slice(-5),
+          completionSummary: completion?.completionSummary,
+          pendingQuestion: pendingQuestionsBySessionId.get(stream.session.sessionId) ?? null,
+        } satisfies SessionLaneItem;
+      })
+      .sort((a, b) => {
+        if (a.status === "working" && b.status !== "working") return -1;
+        if (b.status === "working" && a.status !== "working") return 1;
+        return a.actor.localeCompare(b.actor);
+      });
+
+    return [leadLane, ...childLanes];
+  }, [completionByAgentId, historiesBySessionId, pendingQuestionsBySessionId, rootHistory, selectedSessionStream, session, sessionId, sessionStreams, specialistsById, teamMembers]);
 
   if (!session) {
     return (
@@ -1458,14 +1599,14 @@ export function TeamRunPageClient() {
             <div className="border-b border-desktop-border px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2.5">
                 <div>
-                  <h2 className="text-base font-semibold text-desktop-text-primary">Coordination Feed</h2>
+                  <h2 className="text-base font-semibold text-desktop-text-primary">Live Sessions</h2>
                   <p className="mt-0.5 text-xs leading-5 text-desktop-text-secondary">
-                    Supervision events only: planning, delegation, review, findings, and completion.
+                    Lead decisions plus live member session lanes. Members report back here when they finish.
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 text-[11px] text-desktop-text-secondary">
                   <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1">
-                    {coordinationItems.length} events
+                    {sessionLanes.length} lanes
                   </span>
                   <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1">
                     {sessionStreams.length} sessions
@@ -1475,28 +1616,18 @@ export function TeamRunPageClient() {
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-              {coordinationItems.length === 0 ? (
-                <EmptyPanel message="No coordination events yet." />
+              {sessionLanes.length === 0 ? (
+                <EmptyPanel message="No live session lanes yet." />
               ) : (
                 <div className="space-y-3">
-                  {coordinationItems.map((item, index) => (
-                    <CoordinationFeedItem
-                      key={item.id}
-                      item={item}
-                      isLast={index === coordinationItems.length - 1}
+                  {sessionLanes.map((lane) => (
+                    <SessionLaneCard
+                      key={lane.id}
+                      lane={lane}
                       activeSessionId={selectedSessionId}
                       workspaceId={workspaceId}
-                      pendingQuestion={
-                        (() => {
-                          const targetSessionId = item.memberSession?.sessionId ?? item.sessionId;
-                          if (!targetSessionId) return null;
-                          if (leadQuestionSessionIdsByItemId.get(targetSessionId) !== item.id) return null;
-                          return pendingQuestionsBySessionId.get(targetSessionId) ?? null;
-                        })()
-                      }
-                      onOpenItemSession={item.sessionId ? () => setSelectedSessionForModal(item.sessionId ?? sessionId) : undefined}
-                      onSelectSession={item.sessionId ? () => setSelectedSessionId(item.sessionId ?? sessionId) : undefined}
-                      onOpenViewer={item.sessionId ? () => setSelectedSessionForModal(item.sessionId ?? sessionId) : undefined}
+                      onSelectSession={() => setSelectedSessionId(lane.sessionId)}
+                      onOpenViewer={() => setSelectedSessionForModal(lane.sessionId)}
                       onSubmitQuestion={handleSubmitSessionQuestion}
                     />
                   ))}
@@ -1767,177 +1898,142 @@ function TaskStatusPill({ status }: { status: NormalizedTaskStatus }) {
   );
 }
 
-function CoordinationFeedItem({
-  item,
-  isLast,
+function SessionStatusPill({ status }: { status: TeamMemberStatus }) {
+  const tone =
+    status === "working"
+      ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-300"
+      : status === "reviewing"
+        ? "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
+        : status === "done"
+          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+          : status === "blocked"
+            ? "bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300"
+            : "bg-slate-100 text-slate-700 dark:bg-slate-700/50 dark:text-slate-300";
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] ${tone}`}>
+      {status}
+    </span>
+  );
+}
+
+function SessionLaneCard({
+  lane,
   activeSessionId,
   workspaceId,
-  pendingQuestion,
-  onOpenItemSession,
   onSelectSession,
   onOpenViewer,
   onSubmitQuestion,
 }: {
-  item: TeamActivityItem;
-  isLast: boolean;
+  lane: SessionLaneItem;
   activeSessionId?: string;
   workspaceId: string;
-  pendingQuestion?: PendingSessionQuestion | null;
-  onOpenItemSession?: () => void;
-  onSelectSession?: () => void;
-  onOpenViewer?: () => void;
+  onSelectSession: () => void;
+  onOpenViewer: () => void;
   onSubmitQuestion?: (sessionId: string, toolCallId: string, response: Record<string, unknown>) => Promise<void>;
 }) {
-  const memberSessionActive = item.memberSession?.sessionId === activeSessionId;
-  const itemSessionActive = item.sessionId === activeSessionId;
-  const pendingQuestionMessage = pendingQuestion ? {
-    id: `${pendingQuestion.sessionId}-${pendingQuestion.toolCallId}`,
+  const isActive = lane.sessionId === activeSessionId;
+  const pendingQuestionMessage = lane.pendingQuestion ? {
+    id: `${lane.pendingQuestion.sessionId}-${lane.pendingQuestion.toolCallId}`,
     role: "tool",
     content: "AskUserQuestion",
     timestamp: new Date(),
     toolName: "AskUserQuestion",
     toolStatus: "awaiting_input",
-    toolCallId: pendingQuestion.toolCallId,
+    toolCallId: lane.pendingQuestion.toolCallId,
     toolKind: "ask-user-question",
     toolRawInput: {
-      questions: pendingQuestion.questions,
-      answers: pendingQuestion.answers,
+      questions: lane.pendingQuestion.questions,
+      answers: lane.pendingQuestion.answers,
     },
   } satisfies ChatMessage : null;
 
   return (
-    <div className="relative">
-      {!isLast && (
-        <div className="absolute bottom-[-18px] left-[15px] top-10 w-px bg-desktop-border" />
-      )}
-      <div className="flex gap-2.5">
-        <div className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${activityTone(item.type)}`}>
-          {item.type[0].toUpperCase()}
-        </div>
-        <div
-          role={onOpenItemSession ? "button" : undefined}
-          tabIndex={onOpenItemSession ? 0 : undefined}
-          onClick={onOpenItemSession}
-          onKeyDown={onOpenItemSession ? (event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              onOpenItemSession();
-            }
-          } : undefined}
-          className={`min-w-0 flex-1 rounded-[16px] border p-3 text-left transition ${
-            itemSessionActive
-              ? "border-cyan-300 bg-cyan-50/60 dark:border-cyan-800 dark:bg-cyan-950/20"
-              : "border-desktop-border bg-desktop-bg-secondary"
-          } ${onOpenItemSession ? "cursor-pointer hover:border-cyan-300 hover:bg-desktop-bg-active/50" : ""}`}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2.5">
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-desktop-text-primary">{item.title}</div>
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-desktop-text-secondary">
-                <span className={`rounded-full border px-2 py-0.5 font-medium ${roleChipClass(item.actorRoleId, "soft")}`}>
-                  {item.actor}
-                </span>
-                {item.target && (
-                  <>
-                    <span className="opacity-40">→</span>
-                    <span className={`rounded-full border px-2 py-0.5 font-medium ${roleChipClass(item.targetRoleId, "soft")}`}>
-                      {item.target}
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
-            <span className="text-[11px] text-desktop-text-muted">{item.timestamp}</span>
-          </div>
-          {item.summary && (
-            <div className="mt-2 rounded-[14px] border border-desktop-border bg-desktop-bg-primary px-2.5 py-2 text-[11px] leading-5 text-desktop-text-secondary">
-              {item.summary}
-            </div>
-          )}
-          {item.memberSession && (
-            <div className="relative mt-3 pl-5">
-              <div className="absolute bottom-3 left-[11px] top-2 w-px bg-desktop-border" />
-              <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-desktop-text-muted">
-                <span className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2 py-0.5">Member lane</span>
-              </div>
-              <div
-                className={`rounded-[14px] border px-2.5 py-2.5 ${
-                  memberSessionActive
-                    ? "border-cyan-300 bg-cyan-50/80 dark:border-cyan-800 dark:bg-cyan-950/20"
-                    : `bg-desktop-bg-primary ${roleChipClass(item.memberSession.roleId, "soft")}`
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2.5">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onSelectSession?.();
-                        }}
-                        className={`rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] transition ${roleChipClass(item.memberSession.roleId, "strong")}`}
-                      >
-                        {item.memberSession.actor}
-                      </button>
-                      <span className="rounded-full border border-desktop-border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-desktop-text-secondary">
-                        {item.memberSession.badge}
-                      </span>
-                      <span className="text-[10px] text-desktop-text-muted">
-                        {item.memberSession.lastUpdatedLabel}
-                      </span>
-                      <span className="text-[10px] text-desktop-text-muted opacity-40">/</span>
-                      <span className="text-[10px] text-desktop-text-muted">
-                        {item.memberSession.eventCount} updates
-                      </span>
-                    </div>
-                    <div className="mt-1 truncate text-[11px] text-desktop-text-secondary">
-                      {item.memberSession.sessionName}
-                    </div>
-                    <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-desktop-text-secondary">
-                      {item.memberSession.preview ?? item.memberSession.sessionId}
-                    </div>
-                    <div className="mt-2 flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onOpenViewer?.();
-                        }}
-                        className="rounded-[12px] border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1.5 text-[11px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
-                      >
-                        Open viewer
-                      </button>
-                      <Link
-                        onClick={(event) => event.stopPropagation()}
-                        href={`/workspace/${workspaceId}/sessions/${item.memberSession.sessionId}`}
-                        className="rounded-[12px] bg-desktop-accent px-2.5 py-1.5 text-[11px] font-medium text-desktop-accent-text transition-colors hover:opacity-90"
-                      >
-                        Raw session
-                      </Link>
-                      {item.memberSession.provider && (
-                        <span className="text-[10px] text-desktop-text-muted">{item.memberSession.provider}</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          {pendingQuestionMessage && onSubmitQuestion && (
-            <div
-              className="mt-3"
-              onClick={(event) => event.stopPropagation()}
-              onKeyDown={(event) => event.stopPropagation()}
+    <div className={`rounded-[16px] border p-3 ${isActive ? "border-cyan-300 bg-cyan-50/60 dark:border-cyan-800 dark:bg-cyan-950/20" : "border-desktop-border bg-desktop-bg-secondary"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={onSelectSession}
+              className={`rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] transition ${roleChipClass(lane.roleId, lane.isLead ? "strong" : "soft")}`}
             >
-              <AskUserQuestionBubble
-                message={pendingQuestionMessage}
-                onSubmit={(toolCallId, response) => onSubmitQuestion(pendingQuestion.sessionId, toolCallId, response)}
-              />
+              {lane.actor}
+            </button>
+            <span className="rounded-full border border-desktop-border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-desktop-text-secondary">
+              {lane.badge}
+            </span>
+            <SessionStatusPill status={lane.status} />
+            <span className="text-[10px] text-desktop-text-muted">{lane.lastUpdatedLabel}</span>
+            <span className="text-[10px] text-desktop-text-muted opacity-40">/</span>
+            <span className="text-[10px] text-desktop-text-muted">{lane.eventCount} updates</span>
+            {lane.provider && (
+              <>
+                <span className="text-[10px] text-desktop-text-muted opacity-40">/</span>
+                <span className="text-[10px] text-desktop-text-muted">{lane.provider}</span>
+              </>
+            )}
+          </div>
+          <div className="mt-2 truncate text-sm font-semibold text-desktop-text-primary">{lane.sessionName}</div>
+          {lane.completionSummary && (
+            <div className="mt-2 rounded-[12px] border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-[11px] leading-5 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
+              <span className="mr-1 font-semibold uppercase tracking-[0.12em]">Report back</span>
+              {lane.completionSummary}
             </div>
           )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onOpenViewer}
+            className="rounded-[12px] border border-desktop-border bg-desktop-bg-primary px-2.5 py-1.5 text-[11px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+          >
+            Open viewer
+          </button>
+          <Link
+            href={`/workspace/${workspaceId}/sessions/${lane.sessionId}`}
+            className="rounded-[12px] bg-desktop-accent px-2.5 py-1.5 text-[11px] font-medium text-desktop-accent-text transition-colors hover:opacity-90"
+          >
+            Raw session
+          </Link>
         </div>
       </div>
+
+      <div className="mt-3 space-y-2">
+        {lane.snippets.length === 0 ? (
+          <div className="rounded-[12px] border border-dashed border-desktop-border px-3 py-2 text-[11px] text-desktop-text-secondary">
+            No transcript content yet.
+          </div>
+        ) : (
+          lane.snippets.map((snippet) => (
+            <div
+              key={snippet.id}
+              className={`rounded-[12px] border px-3 py-2 ${
+                snippet.tone === "complete"
+                  ? "border-emerald-200 bg-emerald-50/80 dark:border-emerald-500/20 dark:bg-emerald-500/10"
+                  : snippet.tone === "blocked"
+                    ? "border-rose-200 bg-rose-50/80 dark:border-rose-500/20 dark:bg-rose-500/10"
+                    : snippet.tone === "tool"
+                      ? "border-cyan-200 bg-cyan-50/80 dark:border-cyan-500/20 dark:bg-cyan-500/10"
+                      : "border-desktop-border bg-desktop-bg-primary"
+              }`}
+            >
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-muted">
+                {snippet.label}
+              </div>
+              <div className="mt-1 text-[11px] leading-5 text-desktop-text-secondary">{snippet.text}</div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {pendingQuestionMessage && onSubmitQuestion && lane.pendingQuestion && (
+        <div className="mt-3">
+          <AskUserQuestionBubble
+            message={pendingQuestionMessage}
+            onSubmit={(toolCallId, response) => onSubmitQuestion(lane.pendingQuestion!.sessionId, toolCallId, response)}
+          />
+        </div>
+      )}
     </div>
   );
 }
