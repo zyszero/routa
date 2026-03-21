@@ -4,6 +4,7 @@ import * as path from "path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  isCanonicalTeamSpecialistId,
   mergeSpecialistDefinitions,
   getLocaleOverlayDirs,
   loadSpecialistsFromDirectory,
@@ -93,6 +94,47 @@ describe("specialist-file-loader", () => {
 
     expect(loaded.map((entry) => entry.id)).toEqual(["team-agent-lead"]);
     expect(loaded[0]?.locale).toBe("en");
+  });
+
+  it("keeps only canonical bundled team specialist ids", () => {
+    const rootDir = createTempDir();
+    writeYamlSpecialist(
+      path.join(rootDir, "team", "frontend-dev.yaml"),
+      "team-frontend-dev",
+      "Frontend Dev",
+      "Frontend body"
+    );
+    writeYamlSpecialist(
+      path.join(rootDir, "team", "frontend-dev-lee.yaml"),
+      "team-frontend-dev-lee",
+      "Frontend Dev Lee",
+      "Lee body"
+    );
+
+    const loaded = loadSpecialistsFromDirectory(rootDir, "bundled");
+
+    expect(loaded.map((entry) => entry.id)).toEqual(["team-frontend-dev"]);
+  });
+
+  it("allows non-canonical team ids in user specialist directories", () => {
+    const rootDir = createTempDir();
+    writeYamlSpecialist(
+      path.join(rootDir, "team", "frontend-dev-lee.yaml"),
+      "team-frontend-dev-lee",
+      "Frontend Dev Lee",
+      "Lee body"
+    );
+
+    const loaded = loadSpecialistsFromDirectory(rootDir, "user");
+
+    expect(loaded.map((entry) => entry.id)).toEqual(["team-frontend-dev-lee"]);
+  });
+
+  it("recognizes the canonical team specialist id allowlist", () => {
+    expect(isCanonicalTeamSpecialistId("team-agent-lead")).toBe(true);
+    expect(isCanonicalTeamSpecialistId("team-frontend-dev")).toBe(true);
+    expect(isCanonicalTeamSpecialistId("team-frontend-dev-lee")).toBe(false);
+    expect(isCanonicalTeamSpecialistId("frontend-dev")).toBe(false);
   });
 
   it("uses the new locale overlay path for bundled specialist directories", () => {

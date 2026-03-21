@@ -19,6 +19,7 @@ import { PostgresSpecialistStore } from "@/core/store/specialist-store";
 import { syncBundledSpecialistsToDatabase } from "@/core/specialists/specialist-db-loader";
 import { setSpecialistDatabaseEnabled, reloadSpecialists, loadSpecialistsSync } from "@/core/orchestration/specialist-prompts";
 import { AgentRole, ModelTier } from "@/core/models/agent";
+import { isCanonicalTeamSpecialistId } from "@/core/specialists/specialist-file-loader";
 
 function normalizeOptionalString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -32,6 +33,16 @@ function isAgentRole(value: string | undefined): value is AgentRole {
 
 function isModelTier(value: string | undefined): value is ModelTier {
   return value !== undefined && Object.values(ModelTier).includes(value as ModelTier);
+}
+
+function validateTeamSpecialistId(id: string | undefined): string | null {
+  if (!id?.startsWith("team-")) {
+    return null;
+  }
+  if (isCanonicalTeamSpecialistId(id)) {
+    return null;
+  }
+  return `Invalid team specialist id: ${id}. Team specialists must use one of the bundled canonical ids.`;
 }
 
 function normalizeSpecialistPayload(body: Record<string, unknown>) {
@@ -154,6 +165,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const teamIdError = validateTeamSpecialistId(id);
+    if (teamIdError) {
+      return NextResponse.json({ error: teamIdError }, { status: 400 });
+    }
+
     // Validate role
     if (!isAgentRole(role)) {
       return NextResponse.json(
@@ -246,6 +262,11 @@ export async function PUT(request: NextRequest) {
         { error: "Missing required field: id" },
         { status: 400 }
       );
+    }
+
+    const teamIdError = validateTeamSpecialistId(id);
+    if (teamIdError) {
+      return NextResponse.json({ error: teamIdError }, { status: 400 });
     }
 
     // Validate role if provided

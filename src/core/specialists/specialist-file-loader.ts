@@ -70,6 +70,17 @@ const VALID_MODEL_TIERS = ["fast", "balanced", "smart"];
 const SPECIALIST_ROOT_DIRNAME = "specialists";
 const SPECIALIST_LOCALES_DIRNAME = "locales";
 const DEFAULT_LOCALE = "en";
+const CANONICAL_TEAM_SPECIALIST_IDS = new Set([
+  "team-agent-lead",
+  "team-backend-dev",
+  "team-code-reviewer",
+  "team-frontend-dev",
+  "team-general-engineer",
+  "team-operations",
+  "team-qa",
+  "team-researcher",
+  "team-ux-designer",
+]);
 
 function isLocaleDirectoryName(name: string): boolean {
   return name === SPECIALIST_LOCALES_DIRNAME || /^[a-z]{2}(?:-[A-Z]{2})?$/.test(name);
@@ -185,6 +196,20 @@ export function filenameToSpecialistId(filename: string): string {
   return path.basename(filename, path.extname(filename));
 }
 
+export function isCanonicalTeamSpecialistId(id: string | undefined): boolean {
+  return typeof id === "string" && CANONICAL_TEAM_SPECIALIST_IDS.has(id);
+}
+
+function shouldSkipBundledTeamSpecialist(filePath: string, id: string): boolean {
+  if (!filePath.includes(`${path.sep}team${path.sep}`)) {
+    return false;
+  }
+  if (!id.startsWith("team-")) {
+    return false;
+  }
+  return !isCanonicalTeamSpecialistId(id);
+}
+
 function normalizeSpecialistMeta(raw: Record<string, unknown>): SpecialistFileMeta {
   const execution = typeof raw.execution === "object" && raw.execution !== null
     ? raw.execution as Record<string, unknown>
@@ -259,8 +284,16 @@ function parseYamlSpecialistFile(
     frontmatter.modelTier = "smart";
   }
 
+  const id = frontmatter.id ?? filenameToSpecialistId(filePath);
+  if (source === "bundled" && shouldSkipBundledTeamSpecialist(filePath, id)) {
+    console.warn(
+      `[SpecialistLoader] Skipping ${filePath}: non-canonical bundled team specialist id "${id}"`
+    );
+    return null;
+  }
+
   return {
-    id: frontmatter.id ?? filenameToSpecialistId(filePath),
+    id,
     filePath,
     frontmatter,
     behaviorPrompt: frontmatter.system_prompt?.trim() ?? "",
