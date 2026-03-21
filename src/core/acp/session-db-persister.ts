@@ -258,13 +258,14 @@ export async function saveHistoryToDb(
 }
 
 export async function loadHistoryFromDb(
-  sessionId: string
+  sessionId: string,
+  cwdOverride?: string,
 ): Promise<import("@/core/acp/http-session-store").SessionUpdateNotification[]> {
   const driver = getDatabaseDriver();
   if (driver === "memory") return [];
 
   let dbHistory: import("@/core/acp/http-session-store").SessionUpdateNotification[] = [];
-  let sessionCwd: string | undefined;
+  let sessionCwd: string | undefined = cwdOverride;
 
   try {
     if (driver === "postgres") {
@@ -280,7 +281,7 @@ export async function loadHistoryFromDb(
         (await sqliteStore.getHistory(sessionId)) as import("@/core/acp/http-session-store").SessionUpdateNotification[]
       );
       // Also capture cwd from SQLite so we can try the JSONL fallback below
-      if (!isServerless()) {
+      if (!sessionCwd && !isServerless()) {
         const session = await sqliteStore.get(sessionId);
         sessionCwd = session?.cwd;
       }

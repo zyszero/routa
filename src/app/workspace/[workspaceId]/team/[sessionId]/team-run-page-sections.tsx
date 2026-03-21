@@ -36,7 +36,7 @@ export function ObjectiveSidebarSection({
       <div className="border-b border-desktop-border px-4 py-2.5">
         <div className="text-[13px] font-semibold uppercase tracking-[0.2em] text-desktop-text-muted">Objective</div>
         <div className="mt-2 rounded-[18px] border border-desktop-border bg-desktop-bg-primary p-3">
-          <div className="text-sm leading-5 text-desktop-text-primary">{objective}</div>
+          <div className="text-sm leading-5 text-desktop-text-primary [overflow-wrap:anywhere]">{objective}</div>
         </div>
         <div className="mt-2 grid grid-cols-3 gap-2 text-center">
           <MetricChip label="Done" value={memberCounts.done} tone="emerald" />
@@ -502,14 +502,18 @@ function SessionTimelineCard({
             {lane.snippets.length === 0 ? (
               <div className="text-[11px] text-desktop-text-secondary">No transcript content yet.</div>
             ) : (
-              <div className={`min-w-0 ${lane.snippets.at(-1)?.kind === "user" ? "flex justify-end" : ""}`}>
-                <div className={`min-w-0 ${lane.snippets.at(-1)?.kind === "user" ? "max-w-[85%]" : "w-full"}`}>
-                  <div className={`rounded-[10px] border px-2.5 py-1.5 ${snippetBodyClass(lane.snippets.at(-1)!)} `}>
-                    <div className="line-clamp-1 text-[11px] leading-5 text-desktop-text-secondary">
-                      {lane.snippets.at(-1)!.text}
+              <div className="space-y-1">
+                {lane.snippets.slice(-3).map((snippet) => (
+                  <div key={snippet.id} className={`min-w-0 ${snippet.kind === "user" ? "flex justify-end" : ""}`}>
+                    <div className={`min-w-0 ${snippet.kind === "user" ? "max-w-[85%]" : "w-full"}`}>
+                      <div className={`rounded-[10px] border px-2.5 py-1.5 ${snippetBodyClass(snippet)} `}>
+                        <div className="line-clamp-2 text-[11px] leading-5 text-desktop-text-secondary">
+                          {snippet.text}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
+                ))}
               </div>
             )}
           </div>

@@ -350,6 +350,14 @@ export function summarizeText(text?: string, max = 220): string | undefined {
   return normalized.length > max ? `${normalized.slice(0, max - 3)}...` : normalized;
 }
 
+export function normalizeObjectiveText(text?: string): string | undefined {
+  const normalized = text
+    ?.replace(/\s*\n+\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return normalized || undefined;
+}
+
 export function extractHistoryText(update?: SessionHistoryEntry["update"]): string | undefined {
   if (!update?.content) return undefined;
   if (!Array.isArray(update.content)) {
@@ -639,7 +647,7 @@ export function extractGoalFromPrompt(text?: string): string | undefined {
 }
 
 export function findObjectiveText(session: SessionInfo | null, rootHistory: SessionHistoryEntry[], notes: NoteData[]): string {
-  const sessionName = session?.name?.replace(/^Team\s*-\s*/i, "").trim();
+  const sessionName = normalizeObjectiveText(session?.name?.replace(/^Team\s*-\s*/i, "").trim());
   if (sessionName && !/^team automation verifier$/i.test(sessionName)) {
     return sessionName;
   }
@@ -652,8 +660,11 @@ export function findObjectiveText(session: SessionInfo | null, rootHistory: Sess
     .filter((note) => note.metadata.type === "spec")
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
   if (specNote?.content.trim()) {
-    return extractGoalFromPrompt(specNote.content) ?? summarizeText(specNote.content, 320) ?? specNote.content;
+    return normalizeObjectiveText(extractGoalFromPrompt(specNote.content))
+      ?? normalizeObjectiveText(summarizeText(specNote.content, 320))
+      ?? normalizeObjectiveText(specNote.content)
+      ?? specNote.content;
   }
 
-  return session?.name ?? "Team objective not captured yet.";
+  return normalizeObjectiveText(session?.name) ?? "Team objective not captured yet.";
 }

@@ -85,6 +85,50 @@ function persistSessionHistorySnapshot(
   return buffer.flush(sessionId);
 }
 
+function shouldFlushForwardedSessionUpdate(
+  notification: SessionUpdateNotification,
+): boolean {
+  const update = notification.update as Record<string, unknown> | undefined;
+  const sessionUpdate = typeof update?.sessionUpdate === "string" ? update.sessionUpdate : undefined;
+  if (!sessionUpdate) return false;
+
+  if (
+    sessionUpdate === "turn_complete"
+    || sessionUpdate === "task_completion"
+    || sessionUpdate === "completed"
+    || sessionUpdate === "ended"
+    || sessionUpdate === "error"
+  ) {
+    return true;
+  }
+
+  if (sessionUpdate === "tool_call_update") {
+    const status = typeof update?.status === "string" ? update.status : undefined;
+    return status === "completed" || status === "failed";
+  }
+
+  return false;
+}
+
+function pushAndPersistForwardedNotification(
+  store: ReturnType<typeof getHttpSessionStore>,
+  sessionId: string,
+  data: unknown,
+): void {
+  const notification = {
+    ...(data as Record<string, unknown>),
+    sessionId,
+  } as SessionUpdateNotification;
+
+  store.pushNotification(notification);
+
+  const buffer = getSessionWriteBuffer();
+  buffer.add(sessionId, notification);
+  if (shouldFlushForwardedSessionUpdate(notification)) {
+    void buffer.flush(sessionId);
+  }
+}
+
 async function loadSpecialistConfig(
   specialistId: string | undefined,
   locale: string,
@@ -782,10 +826,7 @@ export async function POST(request: NextRequest) {
               orchestrator.registerAgentSession(routaAgentId, sessionId);
 
               orchestrator.setNotificationHandler((targetSessionId, data) => {
-                store.pushNotification({
-                  ...data as Record<string, unknown>,
-                  sessionId: targetSessionId,
-                } as never);
+                pushAndPersistForwardedNotification(store, targetSessionId, data);
               });
 
               orchestrator.setSessionRegistrationHandler((childSession) => {

@@ -7,6 +7,7 @@ import { DesktopAppShell } from "@/client/components/desktop-app-shell";
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
 import { ChatPanel } from "@/client/components/chat-panel";
 import { getToolEventLabel } from "@/client/components/chat-panel/tool-call-name";
+import { TiptapInput } from "@/client/components/tiptap-input";
 import { useAcp } from "@/client/hooks/use-acp";
 import { useNotes } from "@/client/hooks/use-notes";
 import { consumePendingPrompt } from "@/client/utils/pending-prompt";
@@ -76,8 +77,12 @@ export function TeamRunPageClient() {
     connected: acpConnected,
     loading: acpLoading,
     updates: acpUpdates,
+    providers: acpProviders,
+    selectedProvider: acpSelectedProvider,
     connect: connectAcp,
     prompt: acpPrompt,
+    promptSession: acpPromptSession,
+    setProvider: acpSetProvider,
     selectSession,
   } = acp;
   const modalAcp = useAcp();
@@ -97,6 +102,7 @@ export function TeamRunPageClient() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedSessionId, setSelectedSessionId] = useState<string>(sessionId);
   const [selectedSessionForModal, setSelectedSessionForModal] = useState<string | null>(null);
+  const [timelineInputKey, setTimelineInputKey] = useState(0);
   const sessionBlockRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastUpdateIndexRef = useRef(0);
@@ -136,6 +142,12 @@ export function TeamRunPageClient() {
     if (!node) return;
     node.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, []);
+
+  const handleTimelinePrompt = useCallback((text: string) => {
+    if (!sessionId) return;
+    void acpPromptSession(sessionId, text);
+    setTimelineInputKey((current) => current + 1);
+  }, [acpPromptSession, sessionId]);
 
   useEffect(() => {
     if (!sessionId || !acpConnected || acpLoading) return;
@@ -1048,10 +1060,49 @@ export function TeamRunPageClient() {
         } satisfies SessionTimelineItem];
       }
 
-      return [];
+      return [{
+        id: `${sessionId}-tool-${index}`,
+        sessionId,
+        title: `Lead used ${toolLabel}`,
+        actor: leadName,
+        actorRoleId: TEAM_LEAD_SPECIALIST_ID,
+        timestamp,
+        summary: summarizeText(
+          typeof update.rawInput?.additionalInstructions === "string"
+            ? update.rawInput.additionalInstructions
+            : typeof update.rawInput?.title === "string"
+              ? update.rawInput.title
+              : update.rawOutput?.output ?? extractHistoryText(update) ?? update.error,
+          320,
+        ),
+        tone: update.status === "failed" ? "blocked" : "tool",
+      } satisfies SessionTimelineItem];
     });
 
-    const deduped = items.filter((item, index, all) => {
+    const referencedLaneIds = new Set(
+      items
+        .map((item) => item.memberLane?.sessionId)
+        .filter((laneSessionId): laneSessionId is string => Boolean(laneSessionId)),
+    );
+
+    const missingLaneItems = sessionLanes
+      .filter((lane) => !lane.isLead && !referencedLaneIds.has(lane.sessionId))
+      .map((lane) => ({
+        id: `${lane.sessionId}-lane-fallback`,
+        sessionId: lane.sessionId,
+        title: `Lead opened ${lane.actor}`,
+        actor: leadName,
+        actorRoleId: TEAM_LEAD_SPECIALIST_ID,
+        timestamp: lane.lastUpdatedLabel,
+        summary: lane.snippets.at(-1)?.text ?? lane.sessionName,
+        tone: "tool" as const,
+        memberLane: lane,
+        pendingQuestion: lane.pendingQuestion ?? null,
+      }));
+
+    const combined = [...items, ...missingLaneItems];
+
+    const deduped = combined.filter((item, index, all) => {
       const previous = all[index - 1];
       return !previous || previous.title !== item.title || previous.summary !== item.summary;
     });
@@ -1168,17 +1219,37 @@ export function TeamRunPageClient() {
             onFocusSession={focusSessionBlock}
           />
 
-          <SessionTimelineSection
-            sessionTimeline={sessionTimeline}
-            sessionLanes={sessionLanes}
-            selectedSessionId={selectedSessionId}
-            onSelectSession={focusSessionBlock}
-            onOpenViewer={(nextSessionId) => setSelectedSessionForModal(nextSessionId)}
-            onSubmitQuestion={handleSubmitSessionQuestion}
-            sessionBlockRef={(nextSessionId, node) => {
-              sessionBlockRefs.current[nextSessionId] = node;
-            }}
-          />
+          <div className="flex min-h-0 flex-col">
+            <SessionTimelineSection
+              sessionTimeline={sessionTimeline}
+              sessionLanes={sessionLanes}
+              selectedSessionId={selectedSessionId}
+              onSelectSession={focusSessionBlock}
+              onOpenViewer={(nextSessionId) => setSelectedSessionForModal(nextSessionId)}
+              onSubmitQuestion={handleSubmitSessionQuestion}
+              sessionBlockRef={(nextSessionId, node) => {
+                sessionBlockRefs.current[nextSessionId] = node;
+              }}
+            />
+
+            <div className="border-t border-desktop-border bg-desktop-bg-primary px-3 py-2">
+              <TiptapInput
+                key={timelineInputKey}
+                onSend={(text) => handleTimelinePrompt(text)}
+                disabled={!acpConnected}
+                loading={acpLoading}
+                skills={[]}
+                repoSkills={[]}
+                providers={acpProviders}
+                selectedProvider={acpSelectedProvider}
+                onProviderChange={acpSetProvider}
+                sessions={[]}
+                repoSelection={null}
+                onRepoChange={() => {}}
+                agentRole={session.role}
+              />
+            </div>
+          </div>
 
           <TeamMembersSection
             teamMembers={teamMembers}

@@ -16,6 +16,25 @@ import { loadHistoryFromDb, normalizeSessionHistory } from "@/core/acp/session-d
 
 export const dynamic = "force-dynamic";
 
+function mergeHistorySources<T>(inMemoryHistory: T[], dbHistory: T[]): T[] {
+  if (inMemoryHistory.length === 0) return dbHistory;
+  if (dbHistory.length === 0) return inMemoryHistory;
+  if (dbHistory.length <= inMemoryHistory.length) return inMemoryHistory;
+
+  const firstInMemory = JSON.stringify(inMemoryHistory[0]);
+  const overlapIndex = dbHistory.findIndex((entry) => JSON.stringify(entry) === firstInMemory);
+
+  if (overlapIndex === -1) {
+    return dbHistory;
+  }
+
+  if (overlapIndex === 0) {
+    return dbHistory;
+  }
+
+  return [...dbHistory.slice(0, overlapIndex), ...inMemoryHistory];
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
@@ -25,9 +44,10 @@ export async function GET(
 
   const store = getHttpSessionStore();
   const inMemoryHistory = store.getHistory(sessionId);
+  const sessionRecord = store.getSession(sessionId);
 
   // Always check DB — it may contain older entries that were trimmed from memory
-  const dbHistory = await loadHistoryFromDb(sessionId);
+  const dbHistory = await loadHistoryFromDb(sessionId, sessionRecord?.cwd);
 
   let history: typeof inMemoryHistory;
 
@@ -38,21 +58,7 @@ export async function GET(
     }
     history = dbHistory;
   } else if (dbHistory.length > inMemoryHistory.length) {
-    // DB has older entries that were trimmed from in-memory store.
-    // Find where in-memory starts in DB and prepend the DB prefix.
-    const firstInMemory = JSON.stringify(inMemoryHistory[0]);
-    let overlapIndex = -1;
-    for (let i = dbHistory.length - 1; i >= 0; i--) {
-      if (JSON.stringify(dbHistory[i]) === firstInMemory) {
-        overlapIndex = i;
-        break;
-      }
-    }
-    if (overlapIndex > 0) {
-      history = [...dbHistory.slice(0, overlapIndex), ...inMemoryHistory];
-    } else {
-      history = inMemoryHistory;
-    }
+    history = mergeHistorySources(inMemoryHistory, dbHistory);
   } else {
     history = inMemoryHistory;
   }
@@ -64,4 +70,3 @@ export async function GET(
     { headers: { "Cache-Control": "no-store" } }
   );
 }
-
