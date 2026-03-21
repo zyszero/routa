@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { desktopAwareFetch } from "../../../utils/diagnostics";
 import type { AcpSessionNotification } from "../../../acp-client";
-import type { TraceRecord } from "@/core/trace";
 import type { ChatMessage, UsageInfo } from "../types";
 import type { ChecklistItem } from "../../../utils/checklist-parser";
 import { type FileChangesState, createFileChangesState } from "../../../utils/file-changes-tracker";
 import { extractTaskBlocks, hasTaskBlocks, type ParsedTask } from "../../../utils/task-block-parser";
-import { processTracesToMessages, processUpdate, processHistoryToMessages } from "./message-processor";
+import { hydrateTranscriptMessages, type SessionTranscriptPayload } from "@/core/session-transcript";
+import { processUpdate } from "./message-processor";
 
 export interface UseChatMessagesOptions {
   activeSessionId: string | null;
@@ -87,31 +87,22 @@ export function useChatMessages({
     if (sessionId === "__placeholder__") return;
 
     try {
-      const [historyRes, tracesRes] = await Promise.all([
-        desktopAwareFetch(`/api/sessions/${sessionId}/history`, { cache: "no-store" }),
-        desktopAwareFetch(`/api/traces?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" }),
-      ]);
-      const data = await historyRes.json();
-      const tracesData = await tracesRes.json().catch(() => ({}));
+      const response = await desktopAwareFetch(`/api/sessions/${sessionId}/transcript`, { cache: "no-store" });
+      const data = await response.json().catch(() => ({})) as Partial<SessionTranscriptPayload>;
       const history = Array.isArray(data?.history) ? data.history as AcpSessionNotification[] : [];
-      const traces = Array.isArray(tracesData?.traces) ? tracesData.traces as TraceRecord[] : [];
+      const serializedMessages = Array.isArray(data?.messages) ? data.messages : [];
+      const messages = hydrateTranscriptMessages(serializedMessages);
 
-      if (history.length === 0 && traces.length === 0) {
+      if (history.length === 0 && messages.length === 0) {
         loadedHistoryRef.current.add(sessionId);
         return;
       }
-
-      const historyMessages = processHistoryToMessages(history, sessionId);
-      const traceMessages = processTracesToMessages(traces, sessionId);
-      const messages = traceMessages.length > historyMessages.length
-        ? traceMessages
-        : historyMessages;
       loadedHistoryRef.current.add(sessionId);
 
       // Check if session is still running
-      if (history.length > 0) {
-        const lastUpdate = history[history.length - 1];
-        const lastKind = ((lastUpdate.update ?? lastUpdate) as Record<string, unknown>).sessionUpdate as string | undefined;
+      if (history.length > 0 || typeof data?.latestEventKind === "string") {
+        const lastKind = data?.latestEventKind
+          ?? (((history.at(-1)?.update ?? history.at(-1)) as Record<string, unknown> | undefined)?.sessionUpdate as string | undefined);
         const isRunning = lastKind !== "turn_complete" && lastKind !== "acp_status";
         setIsSessionRunning(isRunning);
       }

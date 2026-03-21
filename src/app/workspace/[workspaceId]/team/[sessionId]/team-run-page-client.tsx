@@ -6,7 +6,6 @@ import { useParams, useRouter } from "next/navigation";
 import { DesktopAppShell } from "@/client/components/desktop-app-shell";
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
 import { ChatPanel } from "@/client/components/chat-panel";
-import { processUpdate } from "@/client/components/chat-panel/hooks";
 import type { ChatMessage } from "@/client/components/chat-panel/types";
 import { getToolEventLabel } from "@/client/components/chat-panel/tool-call-name";
 import { TiptapInput } from "@/client/components/tiptap-input";
@@ -15,7 +14,7 @@ import { useNotes } from "@/client/hooks/use-notes";
 import { consumePendingPrompt } from "@/client/utils/pending-prompt";
 import { useWorkspaces } from "@/client/hooks/use-workspaces";
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
-import type { ChecklistItem } from "@/client/utils/checklist-parser";
+import { hydrateTranscriptMessages, type SessionTranscriptPayload } from "@/core/session-transcript";
 import { filterSpecialistsByCategory } from "@/client/utils/specialist-categories";
 import { formatRelativeTime, OverlayModal } from "../../ui-components";
 import type { SessionInfo } from "../../types";
@@ -23,7 +22,6 @@ import {
   avatarInitials,
   buildLaneSnippets,
   extractAskUserQuestionPayload,
-  extractFullHistoryText,
   extractGoalFromPrompt,
   extractHistoryText,
   findObjectiveText,
@@ -58,113 +56,6 @@ import {
   SessionTimelineSection,
   TeamMembersSection,
 } from "./team-run-page-sections";
-
-function buildTranscriptMessages(
-  history: SessionHistoryEntry[],
-  sessionId: string,
-  {
-    hideLowSignalAssistant = false,
-  }: {
-    hideLowSignalAssistant?: boolean;
-  } = {},
-): ChatMessage[] {
-  const messages: ChatMessage[] = [];
-  const streamingMsgIdRef = { current: {} as Record<string, string | null> };
-  const streamingThoughtIdRef = { current: {} as Record<string, string | null> };
-  const noopChecklist = (() => {}) as React.Dispatch<React.SetStateAction<ChecklistItem[]>>;
-  const noopFileChanges = (() => {}) as React.Dispatch<React.SetStateAction<unknown>>;
-  const noopUsage = (() => {}) as React.Dispatch<React.SetStateAction<unknown>>;
-  const modeUpdates: Record<string, string> = {};
-  let lastKind: string | null = null;
-
-  const normalizedMessageText = (value?: string) => value?.replace(/\s+/g, " ").trim() ?? "";
-
-  for (const entry of history) {
-    const update = entry.update;
-    const kind = update?.sessionUpdate;
-    if (!update || !kind) continue;
-
-    if (kind === "user_message") {
-      const text = extractFullHistoryText(update) ?? extractHistoryText(update);
-      if (!text) {
-        lastKind = kind;
-        continue;
-      }
-      const lastMessage = messages.at(-1);
-      if (lastMessage?.role === "user" && normalizedMessageText(lastMessage.content) === normalizedMessageText(text)) {
-        lastKind = kind;
-        continue;
-      }
-      messages.push({
-        id: `${sessionId}-user-${messages.length}`,
-        role: "user",
-        content: text,
-        timestamp: new Date(),
-      });
-      lastKind = kind;
-      continue;
-    }
-
-    if (kind === "agent_message") {
-      const text = extractFullHistoryText(update);
-      if (!text || (hideLowSignalAssistant && isLowSignalLeadMessage(text))) {
-        lastKind = kind;
-        continue;
-      }
-      const lastMessage = messages.at(-1);
-      if (lastMessage?.role === "assistant" && normalizedMessageText(lastMessage.content) === normalizedMessageText(text)) {
-        lastKind = kind;
-        continue;
-      }
-      messages.push({
-        id: `${sessionId}-assistant-${messages.length}`,
-        role: "assistant",
-        content: text,
-        timestamp: new Date(),
-      });
-      lastKind = kind;
-      continue;
-    }
-
-    const extractText = () => {
-      if (!update.content) return "";
-      if (!Array.isArray(update.content)) {
-        return update.content.text ?? "";
-      }
-      return update.content
-        .map((item) => item.text ?? item.content?.text ?? "")
-        .join(" ")
-        .trim();
-    };
-
-    processUpdate(
-      kind,
-      update as Record<string, unknown>,
-      messages,
-      sessionId,
-      lastKind,
-      extractText,
-      streamingMsgIdRef,
-      streamingThoughtIdRef,
-      noopChecklist,
-      noopFileChanges,
-      noopUsage,
-      modeUpdates,
-    );
-
-    lastKind = kind;
-  }
-
-  return messages.filter((message) => {
-    if (hideLowSignalAssistant && message.role === "assistant" && isLowSignalLeadMessage(message.content)) {
-      return false;
-    }
-    if (message.role === "info" && !message.content.trim()) {
-      return false;
-    }
-    return true;
-  });
-}
 
 function buildFallbackLeadMessages(
   objective: string,
@@ -264,6 +155,7 @@ export function TeamRunPageClient() {
   const [specialists, setSpecialists] = useState<SpecialistSummary[]>([]);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [historiesBySessionId, setHistoriesBySessionId] = useState<Record<string, SessionHistoryEntry[]>>({});
+  const [messagesBySessionId, setMessagesBySessionId] = useState<Record<string, ChatMessage[]>>({});
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedSessionId, setSelectedSessionId] = useState<string>(sessionId);
   const [selectedSessionForModal, setSelectedSessionForModal] = useState<string | null>(null);
@@ -456,21 +348,27 @@ export function TeamRunPageClient() {
 
     (async () => {
       try {
-        const historyEntries = await Promise.all(
+        const transcriptEntries = await Promise.all(
           sessionsToLoad.map(async (entry) => {
             const response = await desktopAwareFetch(
-              `/api/sessions/${encodeURIComponent(entry.sessionId)}/history?consolidated=true`,
+              `/api/sessions/${encodeURIComponent(entry.sessionId)}/transcript`,
               { cache: "no-store", signal: controller.signal },
             );
-            const data = await response.json().catch(() => ({}));
-            return [entry.sessionId, Array.isArray(data?.history) ? data.history : []] as const;
+            const data = await response.json().catch(() => ({})) as Partial<SessionTranscriptPayload>;
+            return {
+              sessionId: entry.sessionId,
+              history: Array.isArray(data?.history) ? data.history as SessionHistoryEntry[] : [],
+              messages: hydrateTranscriptMessages(Array.isArray(data?.messages) ? data.messages : []),
+            };
           }),
         );
         if (controller.signal.aborted) return;
-        setHistoriesBySessionId(Object.fromEntries(historyEntries));
+        setHistoriesBySessionId(Object.fromEntries(transcriptEntries.map((entry) => [entry.sessionId, entry.history])));
+        setMessagesBySessionId(Object.fromEntries(transcriptEntries.map((entry) => [entry.sessionId, entry.messages])));
       } catch {
         if (controller.signal.aborted) return;
         setHistoriesBySessionId({});
+        setMessagesBySessionId({});
       }
     })();
 
@@ -1035,8 +933,16 @@ export function TeamRunPageClient() {
   }, [rootHistory]);
 
   const leadMessages = useMemo(
-    () => buildTranscriptMessages(rootHistory, sessionId, { hideLowSignalAssistant: true }),
-    [rootHistory, sessionId],
+    () => (messagesBySessionId[sessionId] ?? []).filter((message) => {
+      if (message.role === "assistant" && isLowSignalLeadMessage(message.content)) {
+        return false;
+      }
+      if (message.role === "info" && !message.content.trim()) {
+        return false;
+      }
+      return true;
+    }),
+    [messagesBySessionId, sessionId],
   );
 
   const sessionLanes = useMemo<SessionLaneItem[]>(() => {
@@ -1100,7 +1006,7 @@ export function TeamRunPageClient() {
           provider: stream.session.provider,
           eventCount: stream.eventCount,
           snippets: snippets.slice(-4),
-          messages: buildTranscriptMessages(history, stream.session.sessionId),
+          messages: messagesBySessionId[stream.session.sessionId] ?? [],
           completionSummary: completion?.completionSummary,
           pendingQuestion: pendingQuestionsBySessionId.get(stream.session.sessionId) ?? null,
         } satisfies SessionLaneItem;
@@ -1114,7 +1020,7 @@ export function TeamRunPageClient() {
       });
 
     return [leadLane, ...childLanes];
-  }, [agentsById, completionByAgentId, historiesBySessionId, leadMessages, pendingQuestionsBySessionId, rootHistory, selectedSessionStream, session, sessionId, sessionStreams, specialistsById, teamMembers]);
+  }, [agentsById, completionByAgentId, historiesBySessionId, leadMessages, messagesBySessionId, pendingQuestionsBySessionId, rootHistory, selectedSessionStream, session, sessionId, sessionStreams, specialistsById, teamMembers]);
   const memberLaneByToolCallId = useMemo(() => {
     const toolCallMap = new Map<string, SessionLaneItem>();
     for (const entry of rootHistory) {
