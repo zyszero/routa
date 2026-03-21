@@ -12,8 +12,9 @@ import { TiptapInput } from "@/client/components/tiptap-input";
 import { useAcp } from "@/client/hooks/use-acp";
 import { useNotes } from "@/client/hooks/use-notes";
 import { consumePendingPrompt } from "@/client/utils/pending-prompt";
-import { useWorkspaces } from "@/client/hooks/use-workspaces";
+import { useCodebases, useWorkspaces } from "@/client/hooks/use-workspaces";
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
+import type { RepoSelection } from "@/client/components/repo-picker";
 import type { AcpSessionNotification } from "@/core/store/acp-session-store";
 import {
   historyNotificationsToMessages,
@@ -154,6 +155,7 @@ export function TeamRunPageClient() {
     selectSession: selectModalSession,
   } = modalAcp;
   const workspacesHook = useWorkspaces();
+  const { codebases } = useCodebases(workspaceId);
   const notesHook = useNotes(workspaceId, sessionId);
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [workspaceSessions, setWorkspaceSessions] = useState<SessionInfo[]>([]);
@@ -164,6 +166,7 @@ export function TeamRunPageClient() {
   const [selectedSessionId, setSelectedSessionId] = useState<string>(sessionId);
   const [selectedSessionForModal, setSelectedSessionForModal] = useState<string | null>(null);
   const [timelineInputKey, setTimelineInputKey] = useState(0);
+  const [repoSelection, setRepoSelection] = useState<RepoSelection | null>(null);
   const sessionBlockRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const lastUpdateIndexRef = useRef(0);
   const pendingPromptSentRef = useRef<Set<string>>(new Set());
@@ -206,6 +209,30 @@ export function TeamRunPageClient() {
   useEffect(() => {
     setSelectedSessionId(sessionId);
   }, [sessionId]);
+
+  useEffect(() => {
+    if (!session?.provider) return;
+    acpSetProvider(session.provider);
+  }, [acpSetProvider, session?.provider]);
+
+  useEffect(() => {
+    if (session?.cwd) {
+      setRepoSelection({
+        path: session.cwd,
+        branch: session.branch ?? "",
+        name: session.cwd.split("/").pop() ?? session.cwd,
+      });
+      return;
+    }
+
+    if (repoSelection || codebases.length === 0) return;
+    const defaultCodebase = codebases.find((codebase) => codebase.isDefault) ?? codebases[0];
+    setRepoSelection({
+      path: defaultCodebase.repoPath,
+      branch: defaultCodebase.branch ?? "",
+      name: defaultCodebase.label ?? defaultCodebase.repoPath.split("/").pop() ?? defaultCodebase.repoPath,
+    });
+  }, [codebases, repoSelection, session?.branch, session?.cwd]);
 
   const fetchSpecialists = useCallback(async () => {
     const response = await desktopAwareFetch("/api/specialists", { cache: "no-store" });
@@ -1337,8 +1364,15 @@ export function TeamRunPageClient() {
                 selectedProvider={acpSelectedProvider}
                 onProviderChange={acpSetProvider}
                 sessions={[]}
-                repoSelection={null}
-                onRepoChange={() => {}}
+                activeSessionMode={session.modeId}
+                repoSelection={repoSelection}
+                onRepoChange={setRepoSelection}
+                additionalRepos={codebases.map((codebase) => ({
+                  name: codebase.label ?? codebase.repoPath.split("/").pop() ?? codebase.repoPath,
+                  path: codebase.repoPath,
+                  branch: codebase.branch,
+                }))}
+                onFetchModels={acp.listProviderModels}
                 agentRole={session.role}
               />
             </div>
