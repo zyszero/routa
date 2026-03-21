@@ -3,14 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import { KanbanSettingsModal } from "../kanban-settings-modal";
 import type { KanbanBoardInfo } from "../../types";
 
-function clickWorkspaceTab(label: "Automation" | "Structure") {
-  const tab = screen.getAllByRole("button").find((button) => button.textContent?.trim() === label);
-  if (!tab) {
-    throw new Error(`Missing workspace tab ${label}`);
-  }
-  fireEvent.click(tab);
-}
-
 const board: KanbanBoardInfo = {
   id: "board-1",
   workspaceId: "workspace-1",
@@ -50,7 +42,6 @@ describe("KanbanSettingsModal", () => {
     render(
       <KanbanSettingsModal
         board={reviewBoard}
-        visibleColumns={["review"]}
         columnAutomation={{}}
         availableProviders={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
         specialists={[{ id: "kanban-review-guard", name: "Review Guard", role: "GATE" }]}
@@ -61,14 +52,13 @@ describe("KanbanSettingsModal", () => {
     );
 
     fireEvent.click(screen.getByRole("checkbox", { name: /toggle automation for review/i }));
-    clickWorkspaceTab("Automation");
     fireEvent.click(screen.getByTestId("kanban-settings-provider"));
     fireEvent.click(screen.getByRole("button", { name: /claude code/i }));
     fireEvent.click(screen.getByRole("button", { name: /save board settings/i }));
 
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledWith(
-        ["review"],
+        [expect.objectContaining({ id: "review", visible: true, position: 1 })],
         {
           review: expect.objectContaining({
             enabled: true,
@@ -97,7 +87,6 @@ describe("KanbanSettingsModal", () => {
     render(
       <KanbanSettingsModal
         board={board}
-        visibleColumns={["todo", "review"]}
         columnAutomation={{}}
         availableProviders={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
         specialists={[{ id: "verify", name: "Verifier", role: "GATE" }]}
@@ -121,7 +110,6 @@ describe("KanbanSettingsModal", () => {
     render(
       <KanbanSettingsModal
         board={reviewBoard}
-        visibleColumns={["review"]}
         columnAutomation={{ review: { enabled: true, steps: [{ id: "step-1", role: "GATE", specialistId: "kanban-review-guard" }] } }}
         availableProviders={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
         specialists={[
@@ -134,7 +122,6 @@ describe("KanbanSettingsModal", () => {
       />,
     );
 
-    clickWorkspaceTab("Automation");
     expect(screen.getAllByRole("button").some((button) => button.textContent?.trim() === "Kanban")).toBe(true);
     expect(screen.getAllByRole("option", { name: "Review Guard" }).length).toBeGreaterThan(0);
     expect(screen.queryAllByRole("option", { name: "Team QA" })).toHaveLength(0);
@@ -150,7 +137,6 @@ describe("KanbanSettingsModal", () => {
     render(
       <KanbanSettingsModal
         board={blockedBoard}
-        visibleColumns={["blocked"]}
         columnAutomation={{ blocked: { enabled: true, steps: [{ id: "step-1", role: "ROUTA", providerId: "claude" }] } }}
         availableProviders={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
         specialists={[]}
@@ -160,12 +146,12 @@ describe("KanbanSettingsModal", () => {
       />,
     );
 
-    expect(screen.getAllByRole("button").some((button) => button.textContent?.trim() === "Structure")).toBe(true);
+    expect(screen.getByRole("checkbox", { name: /toggle visibility for blocked/i })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /save board settings/i }));
 
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledWith(
-        ["blocked"],
+        [expect.objectContaining({ id: "blocked", visible: true, position: 0 })],
         {
           blocked: expect.objectContaining({ enabled: false }),
         },
@@ -178,5 +164,63 @@ describe("KanbanSettingsModal", () => {
         },
       );
     });
+  });
+
+  it("saves reordered stage positions", async () => {
+    const onSave = vi.fn(async () => {});
+    render(
+      <KanbanSettingsModal
+        board={board}
+        columnAutomation={{}}
+        availableProviders={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
+        specialists={[]}
+        specialistLanguage="en"
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /move to do down/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save board settings/i }));
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith(
+        [
+          expect.objectContaining({ id: "review", position: 0, visible: true }),
+          expect.objectContaining({ id: "todo", position: 1, visible: true }),
+        ],
+        {
+          review: { enabled: false },
+          todo: { enabled: false },
+        },
+        2,
+        {
+          mode: "watchdog_retry",
+          inactivityTimeoutMinutes: 10,
+          maxRecoveryAttempts: 1,
+          completionRequirement: "turn_complete",
+        },
+      );
+    });
+  });
+
+  it("adds and deletes stages from the stage map", async () => {
+    render(
+      <KanbanSettingsModal
+        board={board}
+        columnAutomation={{}}
+        availableProviders={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
+        specialists={[]}
+        specialistLanguage="en"
+        onClose={vi.fn()}
+        onSave={vi.fn(async () => {})}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /add stage/i }));
+    expect(screen.getByRole("button", { name: /delete stage 3/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /delete stage 3/i }));
+    expect(screen.queryByRole("button", { name: /delete stage 3/i })).toBeNull();
   });
 });

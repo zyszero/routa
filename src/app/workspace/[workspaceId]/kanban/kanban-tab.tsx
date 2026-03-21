@@ -1897,17 +1897,14 @@ export function KanbanTab({
       {showSettings && board && (
         <KanbanSettingsModal
           board={board}
-          visibleColumns={visibleColumns}
           columnAutomation={columnAutomation}
           availableProviders={availableProviders}
           specialists={specialists}
           specialistLanguage={specialistLanguage}
           onClose={() => setShowSettings(false)}
-          onSave={async (newVisibleColumns, newColumnAutomation, sessionConcurrencyLimit, devSessionSupervision) => {
-            // Merge automation config and visibility into columns
-            const updatedColumns = board.columns.map((col) => ({
+          onSave={async (newColumns, newColumnAutomation, sessionConcurrencyLimit, devSessionSupervision) => {
+            const updatedColumns = newColumns.map((col) => ({
               ...col,
-              visible: newVisibleColumns.includes(col.id),
               automation: newColumnAutomation[col.id]?.enabled
                 ? normalizeKanbanAutomation(newColumnAutomation[col.id])
                 : undefined,
@@ -1924,7 +1921,7 @@ export function KanbanTab({
               throw new Error(data.error ?? "Failed to save settings");
             }
 
-            setVisibleColumns(newVisibleColumns);
+            setVisibleColumns(updatedColumns.filter((col) => col.visible !== false).map((col) => col.id));
             setColumnAutomation(newColumnAutomation);
             setShowSettings(false);
             onRefresh();
