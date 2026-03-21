@@ -21,6 +21,8 @@ export interface CustomAcpProvider {
   description?: string;
 }
 
+export const DEFAULT_VISIBLE_PROVIDER_IDS = ["codex", "claude", "opencode", "kimi"] as const;
+
 /** Load all custom ACP providers from localStorage. */
 export function loadCustomAcpProviders(): CustomAcpProvider[] {
   if (typeof window === "undefined") return [];
@@ -63,6 +65,12 @@ export function getCustomAcpProviderById(id: string): CustomAcpProvider | undefi
 // ─── Disabled Providers Management ────────────────────────────────────────────
 
 const DISABLED_PROVIDERS_KEY = "routa.disabledProviders";
+const PROVIDER_DISPLAY_PREFERENCES_KEY = "routa.providerDisplayPreferences";
+export const PROVIDER_DISPLAY_PREFERENCES_CHANGED_EVENT = "routa:provider-display-preferences-changed";
+
+export interface ProviderDisplayPreferences {
+  visibleProviderIds: string[];
+}
 
 /** Load the list of disabled provider IDs from localStorage. */
 export function loadDisabledProviders(): string[] {
@@ -117,4 +125,84 @@ export function toggleProviderDisabled(providerId: string): boolean {
     saveDisabledProviders([...disabled, providerId]);
   }
   return !isDisabled; // Return new state
+}
+
+/** Load provider display preferences from localStorage. */
+export function loadProviderDisplayPreferences(): ProviderDisplayPreferences {
+  if (typeof window === "undefined") {
+    return { visibleProviderIds: [...DEFAULT_VISIBLE_PROVIDER_IDS] };
+  }
+
+  try {
+    const raw = localStorage.getItem(PROVIDER_DISPLAY_PREFERENCES_KEY);
+    if (!raw) {
+      return { visibleProviderIds: [...DEFAULT_VISIBLE_PROVIDER_IDS] };
+    }
+
+    const parsed = JSON.parse(raw);
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      !Array.isArray((parsed as { visibleProviderIds?: unknown }).visibleProviderIds)
+    ) {
+      return { visibleProviderIds: [...DEFAULT_VISIBLE_PROVIDER_IDS] };
+    }
+
+    return {
+      visibleProviderIds: (parsed as { visibleProviderIds: unknown[] }).visibleProviderIds.filter(
+        (id): id is string => typeof id === "string"
+      ),
+    };
+  } catch {
+    return { visibleProviderIds: [...DEFAULT_VISIBLE_PROVIDER_IDS] };
+  }
+}
+
+/** Save provider display preferences and notify listeners in the current window. */
+export function saveProviderDisplayPreferences(preferences: ProviderDisplayPreferences): void {
+  if (typeof window === "undefined") return;
+
+  const normalizedPreferences = {
+    visibleProviderIds: dedupeProviderIds(preferences.visibleProviderIds),
+  };
+
+  try {
+    localStorage.setItem(PROVIDER_DISPLAY_PREFERENCES_KEY, JSON.stringify(normalizedPreferences));
+    window.dispatchEvent(new CustomEvent(PROVIDER_DISPLAY_PREFERENCES_CHANGED_EVENT));
+  } catch (err) {
+    console.warn("[custom-acp-providers] Failed to save provider display preferences:", err);
+  }
+}
+
+export function dedupeProviderIds(providerIds: string[]): string[] {
+  return Array.from(new Set(providerIds));
+}
+
+export function getOrderedVisibleProviderIds(providerIds: string[]): string[] {
+  const preferences = loadProviderDisplayPreferences();
+  const providerSet = new Set(providerIds);
+  const preferredVisibleIds = dedupeProviderIds(preferences.visibleProviderIds).filter((id) => providerSet.has(id));
+
+  if (preferredVisibleIds.length > 0) {
+    return preferredVisibleIds;
+  }
+
+  return DEFAULT_VISIBLE_PROVIDER_IDS.filter((id) => providerSet.has(id));
+}
+
+export function sortProviderIdsByPreference(providerIds: string[]): string[] {
+  const preferredVisibleIds = getOrderedVisibleProviderIds(providerIds);
+  const preferredOrder = new Map(preferredVisibleIds.map((id, index) => [id, index]));
+
+  return [...providerIds].sort((left, right) => {
+    const leftOrder = preferredOrder.get(left);
+    const rightOrder = preferredOrder.get(right);
+
+    if (leftOrder !== undefined && rightOrder !== undefined) {
+      return leftOrder - rightOrder;
+    }
+    if (leftOrder !== undefined) return -1;
+    if (rightOrder !== undefined) return 1;
+    return 0;
+  });
 }

@@ -25,7 +25,12 @@ import {
   shouldSuppressTeardownError,
   toErrorMessage,
 } from "../utils/diagnostics";
-import { loadCustomAcpProviders, loadDisabledProviders, type CustomAcpProvider } from "../utils/custom-acp-providers";
+import {
+  loadCustomAcpProviders,
+  loadDisabledProviders,
+  sortProviderIdsByPreference,
+  type CustomAcpProvider,
+} from "../utils/custom-acp-providers";
 import { loadDockerOpencodeAuthJson } from "../components/settings-panel";
 import type { McpServerProfile } from "@/core/mcp/mcp-server-profiles";
 
@@ -39,6 +44,17 @@ function toAcpProviderInfo(cp: CustomAcpProvider): AcpProviderInfo {
     status: "available",
     source: "static",
   };
+}
+
+function sortProvidersByPreference(providers: AcpProviderInfo[]): AcpProviderInfo[] {
+  const orderedIds = sortProviderIdsByPreference(providers.map((provider) => provider.id));
+  const orderMap = new Map(orderedIds.map((providerId, index) => [providerId, index]));
+
+  return [...providers].sort((left, right) => {
+    const leftIndex = orderMap.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+    const rightIndex = orderMap.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+    return leftIndex - rightIndex;
+  });
 }
 
 /**
@@ -192,8 +208,10 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
 
       // Filter out disabled providers
       const disabledProviders = loadDisabledProviders();
-      const allLocalProviders = [...localProviders, ...customProviders].filter(
-        (p) => !disabledProviders.includes(p.id)
+      const allLocalProviders = sortProvidersByPreference(
+        [...localProviders, ...customProviders].filter(
+          (p) => !disabledProviders.includes(p.id)
+        )
       );
 
       client.onUpdate((update) => {
@@ -225,15 +243,17 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
 
         // Filter out disabled providers
         const disabledProvs = loadDisabledProviders();
-        const filteredLocalProviders = [...checkedLocalProviders, ...customProvs].filter(
-          (p) => !disabledProvs.includes(p.id)
+        const filteredLocalProviders = sortProvidersByPreference(
+          [...checkedLocalProviders, ...customProvs].filter(
+            (p) => !disabledProvs.includes(p.id)
+          )
         );
 
         setState((s) => {
           const existingRegistry = s.providers.filter((p) => p.source === "registry");
           return {
             ...s,
-            providers: [...filteredLocalProviders, ...existingRegistry],
+            providers: sortProvidersByPreference([...filteredLocalProviders, ...existingRegistry]),
           };
         });
       }).catch((err) => {
@@ -251,16 +271,18 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
         // loadRegistryProviders returns ALL providers (local + registry)
         // Filter to get only registry providers to avoid duplicates
         const disabledProvs = loadDisabledProviders();
-        const registryProviders = allProviders
-          .filter((p) => p.source === "registry")
-          .filter((p) => !disabledProvs.includes(p.id));
+        const registryProviders = sortProvidersByPreference(
+          allProviders
+            .filter((p) => p.source === "registry")
+            .filter((p) => !disabledProvs.includes(p.id))
+        );
         if (registryProviders.length > 0) {
           setState((s) => {
             // Keep only local providers from current state, add new registry providers
             const localProviders = s.providers.filter((p) => p.source === "static");
             return {
               ...s,
-              providers: [...localProviders, ...registryProviders],
+              providers: sortProvidersByPreference([...localProviders, ...registryProviders]),
             };
           });
 
@@ -269,15 +291,17 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
           client.listProviders(true, true).then((checkedAllProviders) => {
             if (tearingDownRef.current) return;
             const disabledProvs = loadDisabledProviders();
-            const checkedRegistry = checkedAllProviders
-              .filter((p) => p.source === "registry")
-              .filter((p) => !disabledProvs.includes(p.id));
+            const checkedRegistry = sortProvidersByPreference(
+              checkedAllProviders
+                .filter((p) => p.source === "registry")
+                .filter((p) => !disabledProvs.includes(p.id))
+            );
             if (checkedRegistry.length > 0) {
               setState((s) => {
                 const localProviders = s.providers.filter((p) => p.source === "static");
                 return {
                   ...s,
-                  providers: [...localProviders, ...checkedRegistry],
+                  providers: sortProvidersByPreference([...localProviders, ...checkedRegistry]),
                 };
               });
             }

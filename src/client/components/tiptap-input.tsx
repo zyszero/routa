@@ -18,7 +18,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { desktopAwareFetch } from "../utils/diagnostics";
-import { createPortal } from "react-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -35,6 +34,7 @@ import type { SkillSummary } from "../skill-client";
 import { RepoPicker, type RepoSelection } from "./repo-picker";
 import type { FileMatch } from "../hooks/use-file-search";
 import { isDarkThemeActive } from "../utils/theme";
+import { AcpProviderDropdown } from "./acp-provider-dropdown";
 
 const lowlight = createLowlight(common);
 
@@ -513,11 +513,6 @@ export function TiptapInput({
   variant = "default",
 }: TiptapInputProps) {
   const isHero = variant === "hero";
-  const [providerDropdownOpen, setProviderDropdownOpen] = useState(false);
-  const providerDropdownRef = useRef<HTMLDivElement>(null);
-  const providerDropdownMenuRef = useRef<HTMLDivElement>(null);
-  const providerBtnRef = useRef<HTMLButtonElement>(null);
-  const [dropdownPos, setDropdownPos] = useState<{ left: number; bottom?: number; top?: number } | null>(null);
   const [claudeMode, setClaudeMode] = useState<"acceptEdits" | "plan">("acceptEdits");
   const [opencodeMode, setOpencodeMode] = useState<"build" | "plan">("build");
 
@@ -530,7 +525,6 @@ export function TiptapInput({
   const modelBtnRef = useRef<HTMLButtonElement>(null);
   const [modelDropdownPos, setModelDropdownPos] = useState<{ left: number; bottom?: number; top?: number; maxHeight: number } | null>(null);
   const [modelFilter, setModelFilter] = useState("");
-  const selectedProviderInfo = providers.find((p) => p.id === selectedProvider);
   const editorClass = isHero
     ? "tiptap-chat-input outline-none min-h-[132px] max-h-[360px] overflow-y-auto text-base leading-8 text-slate-900 dark:text-slate-100"
     : "tiptap-chat-input outline-none min-h-[60px] max-h-[240px] overflow-y-auto text-sm text-gray-900 dark:text-gray-100";
@@ -544,9 +538,6 @@ export function TiptapInput({
   const toolbarClass = isHero
     ? "mt-3 flex min-w-0 items-center gap-2.5 overflow-hidden"
     : "mt-1.5 -mb-0.5 flex min-w-0 items-center gap-2 overflow-hidden";
-  const providerButtonClass = isHero
-    ? "flex items-center gap-2 rounded-lg border border-[#d6e5fb] px-3 py-1.5 text-sm transition-colors hover:bg-sky-50 dark:border-white/10 dark:hover:bg-white/5"
-    : "flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs transition-colors";
   const modelButtonClass = isHero
     ? "flex items-center gap-2 rounded-lg border border-[#d6e5fb] px-3 py-1.5 text-sm transition-colors hover:bg-sky-50 dark:border-white/10 dark:hover:bg-white/5"
     : "flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs transition-colors";
@@ -843,19 +834,6 @@ export function TiptapInput({
     handleSendRef.current = handleSend;
   }, [handleSend]);
 
-  // Close provider dropdown on click outside
-  useEffect(() => {
-    if (!providerDropdownOpen) return;
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (!providerDropdownRef.current?.contains(target) && !providerDropdownMenuRef.current?.contains(target)) {
-        setProviderDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [providerDropdownOpen]);
-
   // Close model dropdown on click outside
   useEffect(() => {
     if (!modelDropdownOpen) return;
@@ -879,12 +857,6 @@ export function TiptapInput({
     if (editor) editor.setEditable(!disabled);
   }, [editor, disabled]);
 
-  // Group providers by source (builtin/static first, then registry)
-  const builtinAvailable = providers.filter((p) => p.source === "static" && p.status === "available");
-  const builtinUnavailable = providers.filter((p) => p.source === "static" && p.status !== "available");
-  const registryAvailable = providers.filter((p) => p.source === "registry" && p.status === "available");
-  const registryUnavailable = providers.filter((p) => p.source === "registry" && p.status !== "available");
-
   return (
     <div className="flex-1 flex flex-col gap-1.5">
       {/* Editor wrapper */}
@@ -903,204 +875,14 @@ export function TiptapInput({
           </div>
 
           {/* Provider dropdown */}
-          <div ref={providerDropdownRef} className="shrink-0">
-            <button
-              ref={providerBtnRef}
-              type="button"
-              onClick={() => {
-                if (!providerDropdownOpen && providerBtnRef.current) {
-                  const rect = providerBtnRef.current.getBoundingClientRect();
-                  const dropdownHeight = 320; // max-h-80 = 320px
-                  const spaceAbove = rect.top;
-                  const spaceBelow = window.innerHeight - rect.bottom;
-                  if (spaceBelow >= dropdownHeight + 4) {
-                    // 优先向下展开（更符合用户期望）
-                    setDropdownPos({
-                      left: rect.left,
-                      top: rect.bottom + 4,
-                    });
-                  } else if (spaceAbove >= dropdownHeight + 4) {
-                    // 向上展开
-                    setDropdownPos({
-                      left: rect.left,
-                      bottom: window.innerHeight - rect.top + 4,
-                    });
-                  } else {
-                    // 两侧都不够时，紧贴可见区域
-                    const spaceForDropdown = Math.max(spaceAbove, spaceBelow) - 4;
-                    setDropdownPos({
-                      left: rect.left,
-                      top: spaceBelow >= spaceAbove
-                        ? rect.bottom + 4
-                        : Math.max(4, rect.top - Math.min(spaceForDropdown, dropdownHeight) - 4),
-                    });
-                  }
-                }
-                setProviderDropdownOpen((v) => !v);
-              }}
-              className={providerButtonClass}
-              title="Select provider"
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${selectedProviderInfo?.status === "available" ? "bg-green-500" : "bg-gray-400"}`} />
-              <span className={`font-medium truncate ${isHero ? "max-w-[160px] text-slate-700 dark:text-slate-200" : "max-w-[120px] text-gray-700 dark:text-gray-300"}`}>
-                {selectedProviderInfo?.name ?? selectedProvider}
-              </span>
-              <svg className={`w-3 h-3 text-gray-400 transition-transform ${providerDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-
-            {providerDropdownOpen && dropdownPos && createPortal(
-              <div
-                ref={providerDropdownMenuRef}
-                className="fixed w-72 max-h-80 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl z-[9999]"
-                style={{ left: dropdownPos.left, top: dropdownPos.top, bottom: dropdownPos.bottom }}
-              >
-                {/* Builtin Available */}
-                {builtinAvailable.length > 0 && (
-                  <div className="py-1">
-                    <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                      Built-in ({builtinAvailable.length})
-                    </div>
-                    {builtinAvailable.map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => {
-                          onProviderChange?.(p.id);
-                          setProviderDropdownOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-xs transition-colors ${
-                          p.id === selectedProvider
-                            ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                            : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"
-                        }`}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-                        <span className="font-medium truncate flex-1">{p.name}</span>
-                        <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[140px]">{p.command}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Registry Available */}
-                {registryAvailable.length > 0 && (
-                  <div className={`py-1 ${builtinAvailable.length > 0 ? "border-t border-gray-100 dark:border-gray-800" : ""}`}>
-                    <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                      ACP Registry ({registryAvailable.length})
-                    </div>
-                    {registryAvailable.map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => {
-                          onProviderChange?.(p.id);
-                          setProviderDropdownOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-xs transition-colors ${
-                          p.id === selectedProvider
-                            ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                            : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"
-                        }`}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-                        <span className="font-medium truncate flex-1">{p.name}</span>
-                        <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[140px]">{p.command}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Builtin Unavailable */}
-                {builtinUnavailable.length > 0 && (
-                  <div className={`py-1 ${(builtinAvailable.length > 0 || registryAvailable.length > 0) ? "border-t border-gray-100 dark:border-gray-800" : ""}`}>
-                    <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                      Built-in - Not Installed ({builtinUnavailable.length})
-                    </div>
-                    {builtinUnavailable.map((p) => {
-                      const isDockerProvider = p.id === "docker-opencode";
-                      const isDisabled = isDockerProvider;
-                      return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => {
-                          if (isDisabled) return;
-                          onProviderChange?.(p.id);
-                          setProviderDropdownOpen(false);
-                        }}
-                        disabled={isDisabled}
-                        title={p.unavailableReason ?? p.description}
-                        className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-xs transition-colors opacity-60 ${
-                          p.id === selectedProvider
-                            ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                            : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-500 dark:text-gray-400"
-                        }`}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />
-                        <span className="font-medium truncate flex-1">{p.name}</span>
-                        <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[140px]">{p.command}</span>
-                      </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Registry Unavailable */}
-                {registryUnavailable.length > 0 && (
-                  <div className="py-1 border-t border-gray-100 dark:border-gray-800">
-                    <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                      ACP Registry - Not Installed ({registryUnavailable.length})
-                    </div>
-                    {registryUnavailable.map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => {
-                          onProviderChange?.(p.id);
-                          setProviderDropdownOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-xs transition-colors opacity-60 ${
-                          p.id === selectedProvider
-                            ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                            : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-500 dark:text-gray-400"
-                        }`}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />
-                        <span className="font-medium truncate flex-1">{p.name}</span>
-                        <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[140px]">{p.command}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {providers.length === 0 && (
-                  <div className="px-3 py-3 text-xs text-gray-400 text-center">
-                    Connecting...
-                  </div>
-                )}
-
-                {/* No available providers message */}
-                {providers.length > 0 && builtinAvailable.length === 0 && registryAvailable.length === 0 && (
-                  <div className="px-3 py-3 text-xs text-gray-500 dark:text-gray-400 text-center">
-                    {builtinUnavailable.length > 0 || registryUnavailable.length > 0 ? (
-                      <>
-                        <p className="font-medium mb-1">No providers available</p>
-                        <p className="text-[10px] opacity-75">
-                          {providers.some(p => p.id === "opencode-sdk")
-                            ? "Configure OPENCODE_SERVER_URL environment variable to use OpenCode SDK"
-                            : "Install a provider to get started"}
-                        </p>
-                      </>
-                    ) : (
-                      "Loading providers..."
-                    )}
-                  </div>
-                )}
-              </div>,
-              document.body
-            )}
+          <div className="shrink-0">
+            <AcpProviderDropdown
+              providers={providers}
+              selectedProvider={selectedProvider}
+              onProviderChange={onProviderChange ?? (() => {})}
+              disabled={disabled}
+              variant={isHero ? "hero" : "compact"}
+            />
           </div>
 
           {/* Model selector — shown for providers that support model listing */}
