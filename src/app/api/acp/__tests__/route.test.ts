@@ -51,7 +51,7 @@ vi.mock("@/core/acp/session-db-persister", async () => {
   };
 });
 
-import { GET } from "../route";
+import { GET, POST } from "../route";
 
 async function readStream(response: Response): Promise<string> {
   const reader = response.body?.getReader();
@@ -128,5 +128,70 @@ describe("/api/acp GET", () => {
       expect.anything(),
       { skipPending: false },
     );
+  });
+});
+
+describe("/api/acp POST", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    isForwardedAcpRequest.mockReturnValue(false);
+    getRequiredRunnerUrl.mockReturnValue(null);
+  });
+
+  it("returns ACP capabilities for initialize before any process exists", async () => {
+    const response = await POST(
+      new NextRequest("http://localhost/api/acp", {
+        method: "POST",
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: { protocolVersion: 1 },
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        protocolVersion: 1,
+        agentCapabilities: {
+          loadSession: false,
+        },
+        agentInfo: {
+          name: "routa-acp",
+          version: "0.1.0",
+        },
+      },
+    });
+  });
+
+  it("rejects session/new when workspaceId is missing", async () => {
+    const response = await POST(
+      new NextRequest("http://localhost/api/acp", {
+        method: "POST",
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "session/new",
+          params: {
+            provider: "opencode",
+            cwd: "/tmp/project",
+          },
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      jsonrpc: "2.0",
+      id: 2,
+      error: {
+        code: -32602,
+        message: "workspaceId is required",
+      },
+    });
   });
 });
