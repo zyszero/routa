@@ -1,6 +1,7 @@
 import type { KanbanSpecialistLanguage } from "../kanban-specialist-language";
 
 export interface KanbanTaskAgentCopy {
+  [key: string]: string;
   providerAriaLabel: string;
   placeholder: string;
   connectingPlaceholder: string;

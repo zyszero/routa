@@ -8,6 +8,7 @@ import { RepoPicker, type RepoSelection } from "@/client/components/repo-picker"
 import { resolveEffectiveTaskAutomation } from "@/core/kanban/effective-task-automation";
 import { KanbanCard } from "./kanban-card";
 import { KanbanCardActivityBar, KanbanCardDetail } from "./kanban-card-detail";
+import type { KanbanTaskAgentCopy } from "./i18n/kanban-task-agent";
 import { KanbanCreateModal, type DraftIssue } from "../kanban-create-modal";
 import { KanbanEmptySessionPane } from "./kanban-card-activity";
 import { KanbanRepoSyncStatus, type RepoSyncState } from "./kanban-repo-sync-status";
@@ -82,7 +83,7 @@ export function KanbanBoardSurface({
   onAgentPrompt?: unknown;
   availableProviders: AcpProviderInfo[];
   acp?: UseAcpState & UseAcpActions;
-  kanbanTaskAgentCopy: Record<string, string>;
+  kanbanTaskAgentCopy: KanbanTaskAgentCopy;
   agentInput: string;
   setAgentInput: Dispatch<SetStateAction<string>>;
   agentLoading: boolean;
