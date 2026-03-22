@@ -31,8 +31,10 @@
 ## Coding Standards
 
 - Limit file size to **1000 lines** as much as possible if the file is too large, split it into smaller files.
-- When a long file mixes layout/rendering with side effects, queues, streaming updates, or session/task orchestration, refactor toward an **orchestration shell + domain hooks** shape instead of only splitting JSX.
+- When a long file mixes layout/rendering with side effects, queues, streaming updates, or session/task orchestration, refactor toward an **orchestration shell + domain hooks** shape instead of only splitting JSX. Here, **orchestration shell** means a thin top-level entrypoint that routes flow and coordinates modules without carrying the full implementation mass itself.
+- Apply the same rule to oversized API routes: keep the top-level route as an orchestration shell, and extract heavy method workflows like session creation, prompt streaming, or provider dispatch into dedicated modules.
 - Prefer extracting one stable workflow boundary at a time, for example bootstrap, navigation, task execution, or streaming sync; do not replace one oversized file with one oversized catch-all hook.
+- For route refactors, split by workflow branch before shared helpers; do not start with a generic `utils` file when the real mass lives in one or two protocol branches.
 - Before large refactors on behavior-heavy files, add or extend characterization tests that lock current routing, lifecycle, persistence, and recovery behavior.
 - Unless explicitly asked, do not write additional documentation for your work.
 - **Linter**: ESLint 9 flat config (`eslint.config.mjs`) — TypeScript-ESLint + React Hooks + Next.js plugin. Run with `npm run lint`. Rust side uses `cargo clippy`. Fix all warnings before committing; do not disable rules inline without justification.
