@@ -1,11 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { Readable } from "node:stream";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { NextRequest } from "next/server";
-
-import { GET as getAcp, POST as postAcp } from "@/app/api/acp/route";
-import { DELETE as deleteSession, GET as getSession, PATCH as patchSession } from "@/app/api/sessions/[sessionId]/route";
-import { POST as disconnectSession } from "@/app/api/sessions/[sessionId]/disconnect/route";
-import { GET as getSessionHistory } from "@/app/api/sessions/[sessionId]/history/route";
 
 type RouteMatch =
   | { kind: "acp" }
@@ -13,6 +9,59 @@ type RouteMatch =
   | { kind: "sessionHistory"; sessionId: string }
   | { kind: "sessionDisconnect"; sessionId: string }
   | null;
+
+type RouteContext = { params: Promise<{ sessionId: string }> };
+type AcpGetHandler = (request: NextRequest) => Promise<Response>;
+type AcpPostHandler = (request: NextRequest) => Promise<Response>;
+type SessionGetHandler = (request: NextRequest, context: RouteContext) => Promise<Response>;
+type SessionPatchHandler = (request: NextRequest, context: RouteContext) => Promise<Response>;
+type SessionDeleteHandler = (request: NextRequest, context: RouteContext) => Promise<Response>;
+type SessionDisconnectHandler = (request: NextRequest, context: RouteContext) => Promise<Response>;
+type SessionHistoryHandler = (request: NextRequest, context: RouteContext) => Promise<Response>;
+
+type RunnerHandlers = {
+  getAcp: AcpGetHandler;
+  postAcp: AcpPostHandler;
+  getSession: SessionGetHandler;
+  patchSession: SessionPatchHandler;
+  deleteSession: SessionDeleteHandler;
+  disconnectSession: SessionDisconnectHandler;
+  getSessionHistory: SessionHistoryHandler;
+};
+
+let handlerPromise: Promise<RunnerHandlers> | null = null;
+
+function importRouteModule<T>(modulePath: string): Promise<T> {
+  return Function("modulePath", "return import(modulePath)")(modulePath) as Promise<T>;
+}
+
+async function loadRunnerHandlers(): Promise<RunnerHandlers> {
+  const [acpRoute, sessionRoute, disconnectRoute, historyRoute] = await Promise.all([
+    importRouteModule<{ GET: AcpGetHandler; POST: AcpPostHandler }>("@/app/api/acp/route"),
+    importRouteModule<{
+      GET: SessionGetHandler;
+      PATCH: SessionPatchHandler;
+      DELETE: SessionDeleteHandler;
+    }>("@/app/api/sessions/[sessionId]/route"),
+    importRouteModule<{ POST: SessionDisconnectHandler }>("@/app/api/sessions/[sessionId]/disconnect/route"),
+    importRouteModule<{ GET: SessionHistoryHandler }>("@/app/api/sessions/[sessionId]/history/route"),
+  ]);
+
+  return {
+    getAcp: acpRoute.GET,
+    postAcp: acpRoute.POST,
+    getSession: sessionRoute.GET,
+    patchSession: sessionRoute.PATCH,
+    deleteSession: sessionRoute.DELETE,
+    disconnectSession: disconnectRoute.POST,
+    getSessionHistory: historyRoute.GET,
+  };
+}
+
+async function getRunnerHandlers(): Promise<RunnerHandlers> {
+  handlerPromise ??= loadRunnerHandlers();
+  return handlerPromise;
+}
 
 export function matchRunnerRoute(pathname: string): RouteMatch {
   if (pathname === "/api/acp") {
@@ -46,7 +95,7 @@ export function matchRunnerRoute(pathname: string): RouteMatch {
   return null;
 }
 
-async function readRequestBody(req: IncomingMessage): Promise<Uint8Array | undefined> {
+async function readRequestBody(req: IncomingMessage): Promise<Buffer | undefined> {
   if (req.method === "GET" || req.method === "HEAD") return undefined;
 
   const chunks: Buffer[] = [];
@@ -58,7 +107,7 @@ async function readRequestBody(req: IncomingMessage): Promise<Uint8Array | undef
   return Buffer.concat(chunks);
 }
 
-function toNextRequest(baseUrl: string, req: IncomingMessage, body?: Uint8Array): NextRequest {
+function toNextRequest(baseUrl: string, req: IncomingMessage, body?: Buffer): NextRequest {
   const url = new URL(req.url ?? "/", baseUrl);
   const headers = new Headers();
   for (const [key, value] of Object.entries(req.headers)) {
@@ -72,7 +121,7 @@ function toNextRequest(baseUrl: string, req: IncomingMessage, body?: Uint8Array)
   return new NextRequest(url, {
     method: req.method,
     headers,
-    body,
+    body: body ? new Blob([new Uint8Array(body)]) : undefined,
     duplex: body ? "half" : undefined,
   });
 }
@@ -88,7 +137,7 @@ async function writeResponse(nodeRes: ServerResponse, response: Response): Promi
     return;
   }
 
-  const readable = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
+  const readable = Readable.fromWeb(response.body as unknown as NodeReadableStream);
   await new Promise<void>((resolve, reject) => {
     readable.on("error", reject);
     nodeRes.on("error", reject);
@@ -109,27 +158,28 @@ export async function handleRunnerRequest(baseUrl: string, req: IncomingMessage)
 
   const body = await readRequestBody(req);
   const nextRequest = toNextRequest(baseUrl, req, body);
+  const handlers = await getRunnerHandlers();
 
   if (match.kind === "acp") {
-    if (req.method === "GET") return getAcp(nextRequest);
-    if (req.method === "POST") return postAcp(nextRequest);
+    if (req.method === "GET") return handlers.getAcp(nextRequest);
+    if (req.method === "POST") return handlers.postAcp(nextRequest);
   }
 
   if (match.kind === "session") {
     const params = Promise.resolve({ sessionId: match.sessionId });
-    if (req.method === "GET") return getSession(nextRequest, { params });
-    if (req.method === "PATCH") return patchSession(nextRequest, { params });
-    if (req.method === "DELETE") return deleteSession(nextRequest, { params });
+    if (req.method === "GET") return handlers.getSession(nextRequest, { params });
+    if (req.method === "PATCH") return handlers.patchSession(nextRequest, { params });
+    if (req.method === "DELETE") return handlers.deleteSession(nextRequest, { params });
   }
 
   if (match.kind === "sessionHistory" && req.method === "GET") {
-    return getSessionHistory(nextRequest, {
+    return handlers.getSessionHistory(nextRequest, {
       params: Promise.resolve({ sessionId: match.sessionId }),
     });
   }
 
   if (match.kind === "sessionDisconnect" && req.method === "POST") {
-    return disconnectSession(nextRequest, {
+    return handlers.disconnectSession(nextRequest, {
       params: Promise.resolve({ sessionId: match.sessionId }),
     });
   }
