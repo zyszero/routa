@@ -78,8 +78,8 @@ const fetchRoutes: StoryFetchRoute[] = [
 ];
 
 const skills: SkillSummary[] = [
-  { name: "find-skills", description: "Discover and install Codex skills", source: "global" },
-  { name: "frontend-design", description: "Create polished frontend interfaces", source: "global" },
+  { name: "find-skills", description: "Discover and install Codex skills", source: "local" },
+  { name: "frontend-design", description: "Create polished frontend interfaces", source: "local" },
 ];
 
 const repoSkills: SkillSummary[] = [

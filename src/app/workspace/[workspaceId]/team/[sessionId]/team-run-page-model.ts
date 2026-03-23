@@ -151,6 +151,8 @@ export interface SessionHistoryEntry {
   };
 }
 
+type RosterRoleLookup = Pick<Map<string, string>, "get">;
+
 export interface AskUserQuestionItem {
   question: string;
   header: string;
@@ -311,6 +313,7 @@ export function sessionBadge(session: SessionInfo): string {
 export function resolveRosterSpecialistId(
   session: SessionInfo,
   agentsById?: Map<string, AgentSummary>,
+  delegatedRosterIdsBySessionId?: RosterRoleLookup,
 ): string | undefined {
   const metadataRosterId = session.routaAgentId
     ? agentsById?.get(session.routaAgentId)?.metadata?.rosterRoleId
@@ -319,6 +322,9 @@ export function resolveRosterSpecialistId(
 
   const direct = session.specialistId;
   if (direct?.startsWith("team-")) return direct;
+
+  const delegatedRosterId = delegatedRosterIdsBySessionId?.get(session.sessionId);
+  if (delegatedRosterId?.startsWith("team-")) return delegatedRosterId;
 
   const signature = `${session.specialistId ?? ""} ${session.role ?? ""} ${session.name ?? ""}`.toLowerCase();
   if (signature.includes("agent lead") || signature.includes("team-agent-lead")) return TEAM_LEAD_SPECIALIST_ID;
@@ -337,13 +343,14 @@ export function getActorLabel(
   session: SessionInfo,
   specialistsById: Map<string, SpecialistSummary>,
   agentsById?: Map<string, AgentSummary>,
+  delegatedRosterIdsBySessionId?: RosterRoleLookup,
 ): string {
   const displayLabel = session.routaAgentId
     ? agentsById?.get(session.routaAgentId)?.metadata?.displayLabel
     : undefined;
   if (displayLabel) return displayLabel;
 
-  const rosterId = resolveRosterSpecialistId(session, agentsById);
+  const rosterId = resolveRosterSpecialistId(session, agentsById, delegatedRosterIdsBySessionId);
   return specialistsById.get(rosterId ?? session.specialistId ?? "")?.name ?? session.name ?? session.specialistId ?? session.role ?? "Agent";
 }
 
@@ -439,6 +446,27 @@ export function resolveDelegationTarget(update?: SessionHistoryEntry["update"]):
 
   if (!specialist) return undefined;
   switch (specialist.toLowerCase()) {
+    case "researcher":
+      return "Research Analyst";
+    case "backend-dev":
+    case "backend":
+      return "Backend Developer";
+    case "frontend-dev":
+    case "frontend":
+      return "Frontend Dev";
+    case "qa":
+    case "qa-specialist":
+      return "QA Specialist";
+    case "code-reviewer":
+    case "reviewer":
+      return "Code Reviewer";
+    case "ux-designer":
+      return "UX Designer";
+    case "operations":
+    case "ops":
+      return "Operations Engineer";
+    case "general-engineer":
+      return "General Engineer";
     case "crafter":
       return "Implementor";
     case "gate":
@@ -465,8 +493,28 @@ export function resolveDelegationRosterSpecialistId(update?: SessionHistoryEntry
     .toLowerCase();
 
   switch (directSpecialist?.toLowerCase()) {
+    case "researcher":
+      return "team-researcher";
+    case "backend-dev":
+    case "backend":
+      return "team-backend-dev";
+    case "frontend-dev":
+    case "frontend":
+      return "team-frontend-dev";
+    case "qa":
+    case "qa-specialist":
     case "gate":
       return "team-qa";
+    case "code-reviewer":
+    case "reviewer":
+      return "team-code-reviewer";
+    case "ux-designer":
+      return "team-ux-designer";
+    case "operations":
+    case "ops":
+      return "team-operations";
+    case "general-engineer":
+      return "team-general-engineer";
     case "crafter":
     case "developer":
       if (hintText.includes("research")) return "team-researcher";
@@ -477,6 +525,19 @@ export function resolveDelegationRosterSpecialistId(update?: SessionHistoryEntry
       return "team-general-engineer";
     default:
       return undefined;
+  }
+}
+
+export function extractDelegationSessionId(update?: SessionHistoryEntry["update"]): string | undefined {
+  const output = update?.rawOutput?.output;
+  if (!output) return undefined;
+
+  try {
+    const parsed = JSON.parse(output);
+    return typeof parsed?.sessionId === "string" ? parsed.sessionId : undefined;
+  } catch {
+    const match = output.match(/"sessionId"\s*:\s*"([^"]+)"/);
+    return match?.[1];
   }
 }
 

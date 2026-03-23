@@ -110,8 +110,21 @@ impl SpecialistConfig {
     pub fn by_id(id: &str) -> Option<Self> {
         match id.to_lowercase().as_str() {
             "crafter" => Some(Self::crafter()),
+            "backend-dev" => Some(Self::crafter()),
+            "backend" => Some(Self::crafter()),
+            "frontend-dev" => Some(Self::crafter()),
+            "frontend" => Some(Self::crafter()),
+            "general-engineer" => Some(Self::crafter()),
+            "operations" => Some(Self::crafter()),
+            "ops" => Some(Self::crafter()),
             "gate" => Some(Self::gate()),
+            "qa" => Some(Self::gate()),
+            "qa-specialist" => Some(Self::gate()),
+            "code-reviewer" => Some(Self::gate()),
+            "reviewer" => Some(Self::gate()),
             "developer" => Some(Self::developer()),
+            "researcher" => Some(Self::developer()),
+            "ux-designer" => Some(Self::developer()),
             _ => None,
         }
     }
@@ -169,6 +182,10 @@ impl SpecialistConfig {
         }
 
         let target = input.to_lowercase();
+
+        if let Some(alias) = Self::by_id(&target) {
+            return Some(alias);
+        }
 
         Self::list_available()
             .into_iter()
@@ -505,18 +522,44 @@ impl RoutaOrchestrator {
             }
         };
 
-        // Send the initial prompt
-        if let Err(e) = self
-            .acp_manager
-            .prompt(&child_session_id, &delegation_prompt)
-            .await
-        {
-            tracing::error!(
-                "[Orchestrator] Failed to send initial prompt to agent {}: {}",
-                agent_id,
-                e
-            );
-        }
+        // Kick off the child prompt in the background. Waiting for the entire
+        // child turn here blocks the parent MCP tool call long enough for
+        // OpenCode to abort delegation before the child can report progress.
+        self.acp_manager.mark_first_prompt_sent(&child_session_id).await;
+        let child_prompt_manager = Arc::clone(&self.acp_manager);
+        let child_prompt_session_id = child_session_id.clone();
+        let child_prompt_agent_id = agent_id.clone();
+        tokio::spawn(async move {
+            if let Err(e) = child_prompt_manager
+                .prompt(&child_prompt_session_id, &delegation_prompt)
+                .await
+            {
+                tracing::error!(
+                    "[Orchestrator] Failed to send initial prompt to agent {}: {}",
+                    child_prompt_agent_id,
+                    e
+                );
+            }
+        });
+
+        self.acp_manager
+            .push_to_history(
+                &child_session_id,
+                serde_json::json!({
+                    "sessionId": child_session_id,
+                    "update": {
+                        "sessionUpdate": "agent_message",
+                        "content": {
+                            "type": "text",
+                            "text": format!(
+                                "Delegated task '{}' to child agent {}. Child session launched and awaiting transcript updates.",
+                                task.title, agent_name
+                            )
+                        }
+                    }
+                }),
+            )
+            .await;
 
         // 8. Track the child agent
         {

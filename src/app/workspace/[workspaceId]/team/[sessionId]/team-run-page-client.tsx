@@ -28,6 +28,7 @@ import {
   avatarInitials,
   buildLaneSnippets,
   extractAskUserQuestionPayload,
+  extractDelegationSessionId,
   extractGoalFromPrompt,
   extractHistoryText,
   findObjectiveText,
@@ -119,6 +120,20 @@ function buildFallbackLeadMessages(
   }
 
   return messages;
+}
+
+function delegationRoleMatchesSession(targetRosterId: string, child: SessionInfo): boolean {
+  const normalizedRole = (child.role ?? "").toUpperCase();
+  if (targetRosterId === "team-qa") {
+    return normalizedRole === "GATE";
+  }
+  if (targetRosterId === "team-code-reviewer") {
+    return normalizedRole === "GATE" || normalizedRole === "DEVELOPER";
+  }
+  if (targetRosterId === TEAM_LEAD_SPECIALIST_ID) {
+    return normalizedRole === "ROUTA";
+  }
+  return normalizedRole === "CRAFTER" || normalizedRole === "DEVELOPER";
 }
 
 export function TeamRunPageClient() {
@@ -604,6 +619,52 @@ export function TeamRunPageClient() {
     [descendantSessions, session],
   );
 
+  const rootHistory = useMemo(
+    () => historiesBySessionId[sessionId] ?? [],
+    [historiesBySessionId, sessionId],
+  );
+
+  const delegatedRosterIdsBySessionId = useMemo(() => {
+    const map = new Map<string, string>();
+    const pendingDelegations: string[] = [];
+
+    for (const entry of rootHistory) {
+      const update = entry.update;
+      if (!update || update.sessionUpdate !== "tool_call_update") continue;
+      const toolLabel = getToolEventLabel(update as Record<string, unknown>);
+      if (!toolLabel.includes("delegate_task")) continue;
+      const targetRosterId = resolveDelegationRosterSpecialistId(update);
+      if (!targetRosterId) continue;
+      const delegatedSessionId = extractDelegationSessionId(update);
+      if (delegatedSessionId) {
+        map.set(delegatedSessionId, targetRosterId);
+        continue;
+      }
+      if (update.status === "in_progress" || update.status === "completed") {
+        pendingDelegations.push(targetRosterId);
+      }
+    }
+
+    if (pendingDelegations.length === 0) {
+      return map;
+    }
+
+    const unmatchedChildren = [...descendantSessions]
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      .filter((child) => !map.has(child.sessionId));
+
+    for (const targetRosterId of pendingDelegations) {
+      const nextMatchIndex = unmatchedChildren.findIndex((child) => delegationRoleMatchesSession(targetRosterId, child));
+      if (nextMatchIndex < 0) continue;
+      const [matchedChild] = unmatchedChildren.splice(nextMatchIndex, 1);
+      if (matchedChild) {
+        map.set(matchedChild.sessionId, targetRosterId);
+      }
+    }
+
+    return map;
+  }, [descendantSessions, rootHistory]);
+
   const sessionStreams = useMemo<SessionStreamSummary[]>(() => {
     return allRunSessions
       .map((entry) => {
@@ -624,7 +685,7 @@ export function TeamRunPageClient() {
 
         return {
           session: entry,
-          actor: getActorLabel(entry, specialistsById, agentsById),
+          actor: getActorLabel(entry, specialistsById, agentsById, delegatedRosterIdsBySessionId),
           badge: sessionBadge(entry),
           preview,
           eventCount: history.length,
@@ -637,7 +698,7 @@ export function TeamRunPageClient() {
         if (b.session.sessionId === sessionId) return 1;
         return b.lastUpdatedAt - a.lastUpdatedAt;
       });
-  }, [agentsById, allRunSessions, historiesBySessionId, sessionId, specialistsById]);
+  }, [agentsById, allRunSessions, delegatedRosterIdsBySessionId, historiesBySessionId, sessionId, specialistsById]);
 
   const selectedSessionStream = useMemo(
     () => sessionStreams.find((item) => item.session.sessionId === selectedSessionId) ?? sessionStreams[0] ?? null,
@@ -653,17 +714,13 @@ export function TeamRunPageClient() {
     const map = new Map<string, SessionStreamSummary>();
     for (const stream of sessionStreams) {
       if (!stream.session.parentSessionId) continue;
-      const rosterId = resolveRosterSpecialistId(stream.session, agentsById);
+      const rosterId = resolveRosterSpecialistId(stream.session, agentsById, delegatedRosterIdsBySessionId);
       if (!rosterId && !stream.session.specialistId) continue;
       map.set(rosterId ?? stream.session.specialistId ?? stream.session.sessionId, stream);
     }
     return map;
-  }, [agentsById, sessionStreams]);
+  }, [agentsById, delegatedRosterIdsBySessionId, sessionStreams]);
 
-  const rootHistory = useMemo(
-    () => historiesBySessionId[sessionId] ?? [],
-    [historiesBySessionId, sessionId],
-  );
   const objective = useMemo(() => findObjectiveText(session, rootHistory, notesHook.notes), [notesHook.notes, rootHistory, session]);
 
   const createdAgents = useMemo(() => {
@@ -770,7 +827,7 @@ export function TeamRunPageClient() {
             linkedStream,
             linkedStream?.session ?? session,
             linkedStream?.actor ?? target,
-            targetRosterId ?? resolveRosterSpecialistId(linkedStream?.session ?? session, agentsById),
+            targetRosterId ?? resolveRosterSpecialistId(linkedStream?.session ?? session, agentsById, delegatedRosterIdsBySessionId),
           ),
           sortKey,
         });
@@ -795,8 +852,8 @@ export function TeamRunPageClient() {
     });
 
     for (const child of descendantSessions) {
-      const actor = getActorLabel(child, specialistsById, agentsById);
-      const childRoleId = resolveRosterSpecialistId(child, agentsById) ?? child.specialistId;
+      const actor = getActorLabel(child, specialistsById, agentsById, delegatedRosterIdsBySessionId);
+      const childRoleId = resolveRosterSpecialistId(child, agentsById, delegatedRosterIdsBySessionId) ?? child.specialistId;
       const childCreatedAt = new Date(child.createdAt).getTime();
 
       items.push({
@@ -874,19 +931,19 @@ export function TeamRunPageClient() {
       .sort((a, b) => b.sortKey - a.sortKey)
       .slice(0, 24)
       .map(({ sortKey: _sortKey, ...item }) => item);
-  }, [agentsById, descendantSessions, historiesBySessionId, latestChildSessionByRosterId, notesHook.notes, rootHistory, session, sessionId, sessionStreamsBySessionId, specialistsById]);
+  }, [agentsById, delegatedRosterIdsBySessionId, descendantSessions, historiesBySessionId, latestChildSessionByRosterId, notesHook.notes, rootHistory, session, sessionId, sessionStreamsBySessionId, specialistsById]);
 
   const latestSessionBySpecialistId = useMemo(() => {
     const map = new Map<string, SessionStreamSummary>();
     for (const stream of sessionStreams) {
-      const specialistId = resolveRosterSpecialistId(stream.session, agentsById);
+      const specialistId = resolveRosterSpecialistId(stream.session, agentsById, delegatedRosterIdsBySessionId);
       if (!specialistId) continue;
       if (!map.has(specialistId)) {
         map.set(specialistId, stream);
       }
     }
     return map;
-  }, [agentsById, sessionStreams]);
+  }, [agentsById, delegatedRosterIdsBySessionId, sessionStreams]);
 
   const sessionStreamByAgentId = useMemo(() => {
     const map = new Map<string, SessionStreamSummary>();
@@ -962,17 +1019,17 @@ export function TeamRunPageClient() {
 
       return {
         id: specialist.id,
-        actor: latest ? getActorLabel(latest.session, specialistsById, agentsById) : specialist.name,
+        actor: latest ? getActorLabel(latest.session, specialistsById, agentsById, delegatedRosterIdsBySessionId) : specialist.name,
         roleId: specialist.id,
         roleLabel: specialist.name,
         status,
         lastUpdatedLabel: latest?.lastUpdatedLabel,
         sessionId: latest?.session.sessionId,
         preview: latest?.preview,
-        avatarLabel: avatarInitials(latest ? getActorLabel(latest.session, specialistsById, agentsById) : specialist.name),
+        avatarLabel: avatarInitials(latest ? getActorLabel(latest.session, specialistsById, agentsById, delegatedRosterIdsBySessionId) : specialist.name),
       };
     });
-  }, [agentsById, createdAgents, historiesBySessionId, latestSessionBySpecialistId, session, sessionId, sessionStreams, sessionStreamByAgentId, specialists, specialistsById]);
+  }, [agentsById, createdAgents, delegatedRosterIdsBySessionId, historiesBySessionId, latestSessionBySpecialistId, session, sessionId, sessionStreams, sessionStreamByAgentId, specialists, specialistsById]);
 
   const memberCounts = useMemo(
     () => ({
@@ -1062,12 +1119,14 @@ export function TeamRunPageClient() {
   const deliverables = useMemo<DeliverableItem[]>(() => {
     const noteDeliverables = notesHook.notes.map((note) => {
       const sourceSession = note.sessionId ? allRunSessions.find((entry) => entry.sessionId === note.sessionId) : undefined;
-      const ownerId = sourceSession ? resolveRosterSpecialistId(sourceSession, agentsById) ?? sourceSession.specialistId : undefined;
+      const ownerId = sourceSession
+        ? resolveRosterSpecialistId(sourceSession, agentsById, delegatedRosterIdsBySessionId) ?? sourceSession.specialistId
+        : undefined;
       return {
         id: `note-${note.id}`,
         label: inferDeliverableLabel(note, ownerId),
         title: note.title,
-        owner: sourceSession ? getActorLabel(sourceSession, specialistsById, agentsById) : "Agent Lead",
+        owner: sourceSession ? getActorLabel(sourceSession, specialistsById, agentsById, delegatedRosterIdsBySessionId) : "Agent Lead",
         status:
           note.metadata.type === "spec"
             ? "approved"
@@ -1083,7 +1142,7 @@ export function TeamRunPageClient() {
     });
 
     const sessionDeliverables = descendantSessions.flatMap((entry) => {
-      const actor = getActorLabel(entry, specialistsById, agentsById);
+      const actor = getActorLabel(entry, specialistsById, agentsById, delegatedRosterIdsBySessionId);
       const history = historiesBySessionId[entry.sessionId] ?? [];
       const latestCompletion = [...history].reverse().find((item) => item.update?.sessionUpdate === "task_completion");
       if (!latestCompletion?.update) return [];
@@ -1107,7 +1166,7 @@ export function TeamRunPageClient() {
     return [...noteDeliverables, ...sessionDeliverables]
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, 8);
-  }, [agentsById, allRunSessions, descendantSessions, historiesBySessionId, notesHook.notes, specialistsById]);
+  }, [agentsById, allRunSessions, delegatedRosterIdsBySessionId, descendantSessions, historiesBySessionId, notesHook.notes, specialistsById]);
 
   const completionByAgentId = useMemo(() => {
     const map = new Map<string, NonNullable<SessionHistoryEntry["update"]>>();
@@ -1165,7 +1224,7 @@ export function TeamRunPageClient() {
         const history = historiesBySessionId[stream.session.sessionId] ?? [];
         const member = teamMembers.find((item) => item.sessionId === stream.session.sessionId);
         const completion = stream.session.routaAgentId ? completionByAgentId.get(stream.session.routaAgentId) : undefined;
-        const roleId = resolveRosterSpecialistId(stream.session, agentsById) ?? stream.session.specialistId;
+        const roleId = resolveRosterSpecialistId(stream.session, agentsById, delegatedRosterIdsBySessionId) ?? stream.session.specialistId;
         const snippets = buildLaneSnippets(history, 4);
         if (completion?.completionSummary && !isLowSignalLeadMessage(completion.completionSummary)) {
           snippets.push({
@@ -1207,7 +1266,7 @@ export function TeamRunPageClient() {
       });
 
     return [leadLane, ...childLanes];
-  }, [agentsById, completionByAgentId, historiesBySessionId, leadMessages, messagesBySessionId, pendingQuestionsBySessionId, rootHistory, selectedSessionStream, session, sessionId, sessionStreams, specialistsById, teamMembers]);
+  }, [agentsById, completionByAgentId, delegatedRosterIdsBySessionId, historiesBySessionId, leadMessages, messagesBySessionId, pendingQuestionsBySessionId, rootHistory, selectedSessionStream, session, sessionId, sessionStreams, specialistsById, teamMembers]);
   const memberLaneByToolCallId = useMemo(() => {
     const toolCallMap = new Map<string, SessionLaneItem>();
     for (const entry of rootHistory) {
