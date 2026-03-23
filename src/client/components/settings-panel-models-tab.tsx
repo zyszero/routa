@@ -72,7 +72,7 @@ export function ModelsTab() {
             </svg>
           </div>
           <span className="text-xs font-semibold text-blue-700 dark:text-blue-400">Add a model</span>
-          <span className="text-[10px] text-gray-400 dark:text-gray-500 ml-auto hidden sm:block">Press Enter to add</span>
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 ml-auto hidden sm:block">Press Enter to add</span>
         </div>
 
         <div className="grid grid-cols-2 gap-2">
@@ -150,18 +150,18 @@ export function ModelsTab() {
           {defs.map((definition, idx) => {
             const isOpen = expandedIdx === idx;
             return (
-              <div key={idx} className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-                <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-[#1e2130]">
+              <div key={idx} className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-[#1e2130]">
                   <button
                     onClick={() => setExpandedIdx(isOpen ? null : idx)}
                     className="flex-1 flex items-center gap-2 min-w-0 text-left"
                   >
-                    <svg className={`w-3 h-3 text-gray-400 shrink-0 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                    <svg className={`w-3 h-3 text-slate-400 shrink-0 transition-transform ${isOpen ? "rotate-90" : ""}`}
                       fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                     </svg>
-                    <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate">{definition.alias}</span>
-                    <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate">→ {definition.modelName}</span>
+                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{definition.alias}</span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono truncate">→ {definition.modelName}</span>
                     {definition.baseUrl && (
                       <span className="text-[10px] text-blue-500 dark:text-blue-400 font-mono truncate hidden sm:block">
                         {definition.baseUrl.replace(/https?:\/\//, "").substring(0, 30)}
@@ -170,7 +170,7 @@ export function ModelsTab() {
                   </button>
                   <button
                     onClick={() => handleDelete(idx)}
-                    className="shrink-0 p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    className="shrink-0 p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                     title="Delete"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -179,7 +179,7 @@ export function ModelsTab() {
                   </button>
                 </div>
                 {isOpen && (
-                  <div className="p-3 space-y-2.5 border-t border-gray-200 dark:border-gray-700">
+                  <div className="p-3 space-y-2.5 border-t border-slate-200 dark:border-slate-700">
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
                         <label className={labelCls}>Alias</label>
@@ -209,7 +209,7 @@ export function ModelsTab() {
               </div>
             );
           })}
-          <p className="text-[10px] text-gray-400 dark:text-gray-500 pt-1">
+          <p className="text-[10px] text-slate-400 dark:text-slate-500 pt-1">
             Aliases appear in the <strong>Providers</strong> tab model selector and resolve to the actual model + connection at session creation.
           </p>
         </div>

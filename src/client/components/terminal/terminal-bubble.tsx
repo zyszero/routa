@@ -195,9 +195,9 @@ export function TerminalBubble({
 
   const statusColor = exited
     ? exitCode === 0
-      ? "bg-green-500"
+      ? "bg-emerald-500"
       : "bg-red-500"
-    : "bg-yellow-500 animate-pulse";
+    : "bg-amber-500 animate-pulse";
 
   const statusText = exited
     ? exitCode === 0
@@ -209,16 +209,16 @@ export function TerminalBubble({
 
   return (
     <div className="flex justify-start">
-      <div className="max-w-[95%] w-full rounded-lg border border-gray-700 dark:border-gray-700 overflow-hidden">
+      <div className="max-w-[95%] w-full rounded-lg border border-slate-700 dark:border-slate-700 overflow-hidden">
         {/* Header */}
         <button
           type="button"
           onClick={() => setExpanded((e) => !e)}
-          className="w-full px-3 py-1.5 bg-[#161b22] border-b border-gray-700 flex items-center gap-2 text-left"
+          className="w-full px-3 py-1.5 bg-[#161b22] border-b border-slate-700 flex items-center gap-2 text-left"
         >
           {/* Terminal icon */}
           <svg
-            className="w-3.5 h-3.5 text-green-400 shrink-0"
+            className="w-3.5 h-3.5 text-emerald-400 shrink-0"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -231,14 +231,14 @@ export function TerminalBubble({
             />
           </svg>
           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusColor}`} />
-          <span className="text-xs font-mono text-gray-300 truncate flex-1">
+          <span className="text-xs font-mono text-slate-300 truncate flex-1">
             {cmdLabel}
           </span>
-          <span className="text-[10px] text-gray-500 shrink-0">
+          <span className="text-[10px] text-slate-500 shrink-0">
             {statusText}
           </span>
           <svg
-            className={`w-3 h-3 text-gray-500 transition-transform duration-150 shrink-0 ${
+            className={`w-3 h-3 text-slate-500 transition-transform duration-150 shrink-0 ${
               expanded ? "rotate-90" : ""
             }`}
             fill="none"

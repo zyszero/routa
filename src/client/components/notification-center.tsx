@@ -133,7 +133,7 @@ export function NotificationBell() {
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="relative p-1.5 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#151720] transition-colors"
+        className="relative p-1.5 rounded-md text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#151720] transition-colors"
         title="Notifications"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -149,9 +149,9 @@ export function NotificationBell() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-2 w-80 max-h-96 overflow-hidden bg-white dark:bg-[#12141c] border border-gray-200 dark:border-[#1c1f2e] rounded-xl shadow-xl z-50">
-            <div className="px-3 py-2 border-b border-gray-100 dark:border-[#1c1f2e] flex items-center justify-between">
-              <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Notifications</span>
+          <div className="absolute right-0 top-full mt-2 w-80 max-h-96 overflow-hidden bg-white dark:bg-[#12141c] border border-slate-200 dark:border-[#1c1f2e] rounded-xl shadow-xl z-50">
+            <div className="px-3 py-2 border-b border-slate-100 dark:border-[#1c1f2e] flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Notifications</span>
               <div className="flex items-center gap-2">
                 {unreadCount > 0 && (
                   <button onClick={markAllAsRead} className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline">
@@ -165,23 +165,23 @@ export function NotificationBell() {
             </div>
             <div className="max-h-72 overflow-y-auto">
               {notifications.length === 0 ? (
-                <div className="p-6 text-center text-xs text-gray-400">No notifications</div>
+                <div className="p-6 text-center text-xs text-slate-400">No notifications</div>
               ) : (
                 notifications.slice(0, 20).map((n) => (
                   <button
                     key={n.id}
                     onClick={() => { markAsRead(n.id); if (n.link) window.location.href = n.link; }}
-                    className={`w-full px-3 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-[#171a24] transition-colors border-b border-gray-50 dark:border-[#171a24] last:border-0 ${!n.read ? "bg-blue-50/50 dark:bg-blue-900/10" : ""}`}
+                    className={`w-full px-3 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-[#171a24] transition-colors border-b border-slate-50 dark:border-[#171a24] last:border-0 ${!n.read ? "bg-blue-50/50 dark:bg-blue-900/10" : ""}`}
                   >
                     <div className="flex items-start gap-2">
                       <span className="text-sm">{getTypeIcon(n.type)}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">{n.title}</span>
+                          <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">{n.title}</span>
                           {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
                         </div>
-                        <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{n.message}</p>
-                        <span className="text-[10px] text-gray-400 dark:text-gray-500">{formatTime(n.timestamp)}</span>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{n.message}</p>
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500">{formatTime(n.timestamp)}</span>
                       </div>
                     </div>
                   </button>

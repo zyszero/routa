@@ -360,21 +360,21 @@ export function ChatPanel({
     <div className="flex flex-col h-full bg-white dark:bg-[#0f1117]">
       {/* Session info bar with view toggle */}
       {activeSessionId && (
-        <div className="px-5 py-2 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+        <div className="px-5 py-2 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-            <span className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
               Session: {activeSessionId.slice(0, 12)}...
             </span>
           </div>
           {/* View toggle: Chat | Trace */}
-          <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-md p-0.5">
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-md p-0.5">
             <button
               onClick={() => setViewMode("chat")}
               className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors ${
                 viewMode === "chat"
-                  ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
-                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                  ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
               }`}
             >
               Chat
@@ -383,8 +383,8 @@ export function ChatPanel({
               onClick={() => setViewMode("trace")}
               className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors ${
                 viewMode === "trace"
-                  ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
-                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                  ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
               }`}
             >
               Trace
@@ -495,7 +495,7 @@ export function ChatPanel({
           <div className="flex-1 overflow-y-auto min-h-0" data-testid="chat-panel-message-shell">
             <div className="max-w-3xl mx-auto px-5 py-5 space-y-2">
               {visibleMessages.length === 0 && activeSessionId && (
-                <div className="text-center py-20 text-sm text-gray-400 dark:text-gray-500">
+                <div className="text-center py-20 text-sm text-slate-400 dark:text-slate-500">
                   Send a message to start.
                 </div>
               )}
@@ -535,7 +535,7 @@ export function ChatPanel({
           </div>
 
           {/* Input */}
-          <div className="border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-[#0f1117]">
+          <div className="border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0f1117]">
             <div className="max-w-3xl mx-auto px-5 py-3 space-y-2">
               {/* AskUserQuestion sticky cards — displayed above input until user submits */}
               {pendingAskUserQuestions.length > 0 && (
@@ -588,8 +588,8 @@ export function ChatPanel({
                 />
               </div>
               {repoSelection?.path && (
-                <div className="flex items-center gap-1.5 px-1 text-[10px] text-gray-400 dark:text-gray-500">
-                  <span className="font-medium text-gray-500 dark:text-gray-400">
+                <div className="flex items-center gap-1.5 px-1 text-[10px] text-slate-400 dark:text-slate-500">
+                  <span className="font-medium text-slate-500 dark:text-slate-400">
                     Repo path
                   </span>
                   <span className="truncate font-mono" title={repoSelection.path}>

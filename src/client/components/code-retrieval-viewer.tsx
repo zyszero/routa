@@ -162,7 +162,7 @@ export function CodeRetrievalViewer({
 
   if (sections.length === 0) {
     return (
-      <div className="text-xs text-gray-500 dark:text-gray-400 italic">
+      <div className="text-xs text-slate-500 dark:text-slate-400 italic">
         No code sections found in output
       </div>
     );
@@ -174,10 +174,10 @@ export function CodeRetrievalViewer({
       <button
         type="button"
         onClick={() => setExpanded((e) => !e)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
       >
         <svg
-          className={`w-3 h-3 text-gray-400 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
+          className={`w-3 h-3 text-slate-400 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -185,7 +185,7 @@ export function CodeRetrievalViewer({
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
         </svg>
-        <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+        <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
           {sections.length} {sections.length === 1 ? "code section" : "code sections"} retrieved
         </span>
       </button>
@@ -196,17 +196,17 @@ export function CodeRetrievalViewer({
           {sections.map((section, index) => (
             <div
               key={`${section.path}-${index}`}
-              className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
+              className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden"
             >
               {/* Section header */}
               <button
                 type="button"
                 onClick={() => setSelectedSection(selectedSection === index ? null : index)}
-                className="w-full px-3 py-2 flex items-center justify-between bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                className="w-full px-3 py-2 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700/60 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               >
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <svg
-                    className="w-3.5 h-3.5 text-gray-400 shrink-0"
+                    className="w-3.5 h-3.5 text-slate-400 shrink-0"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -218,17 +218,17 @@ export function CodeRetrievalViewer({
                       d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                     />
                   </svg>
-                  <span className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate">
+                  <span className="text-xs font-mono text-slate-700 dark:text-slate-300 truncate">
                     {section.path}
                   </span>
                   {section.startLine !== undefined && (
-                    <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0">
                       Ln {section.startLine}
                     </span>
                   )}
                 </div>
                 <svg
-                  className={`w-3 h-3 text-gray-400 transition-transform duration-150 ${
+                  className={`w-3 h-3 text-slate-400 transition-transform duration-150 ${
                     selectedSection === index ? "rotate-180" : ""
                   }`}
                   fill="none"

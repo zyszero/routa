@@ -63,7 +63,7 @@ export function ConnectionDot({ connected }: { connected: boolean }) {
   return (
     <div className="flex items-center gap-1.5" title={connected ? "Connected" : "Disconnected"}>
       <span className={`h-1.5 w-1.5 rounded-full ring-4 transition-colors ${connected ? "bg-emerald-500 ring-emerald-500/10" : "bg-amber-400 ring-amber-400/10"}`} />
-      <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#577090] dark:text-gray-500">
+      <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#577090] dark:text-slate-500">
         {connected ? "Connected" : "Offline"}
       </span>
     </div>
@@ -637,7 +637,7 @@ export function OnboardingCard({ onCreateWorkspace }: { onCreateWorkspace: (titl
           <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776" />
         </svg>
       </div>
-      <h2 className="mb-1.5 font-['Avenir_Next_Condensed','Avenir_Next','Segoe_UI','Helvetica_Neue',sans-serif] text-[2rem] font-semibold tracking-[-0.05em] text-gray-900 dark:text-white">
+      <h2 className="mb-1.5 font-['Avenir_Next_Condensed','Avenir_Next','Segoe_UI','Helvetica_Neue',sans-serif] text-[2rem] font-semibold tracking-[-0.05em] text-slate-900 dark:text-white">
         Create a workspace
       </h2>
       <p className="mb-6 text-sm leading-7 text-[#577090] dark:text-slate-400">
@@ -775,7 +775,7 @@ export function WorkspaceCards({
   if (workspacesHook.loading) {
     return (
       <div className="flex min-h-[320px] items-center justify-center rounded-[30px] border border-sky-200/75 bg-white/90 dark:border-[#223049] dark:bg-[#10131b]/95">
-        <span className="text-sm text-gray-400 dark:text-slate-500">Loading…</span>
+        <span className="text-sm text-slate-400 dark:text-slate-500">Loading…</span>
       </div>
     );
   }
@@ -814,9 +814,9 @@ export function WorkspaceCards({
               <Link
                 href="/"
                 onClick={() => setShowWorkspacesMenu(false)}
-                className="flex items-center gap-2 px-3 py-2 text-xs text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-[#1a1d2c]"
+                className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#1a1d2c]"
               >
-                <svg className="h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <svg className="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776" />
                 </svg>
                 All Workspaces
@@ -824,9 +824,9 @@ export function WorkspaceCards({
               <Link
                 href="/traces"
                 onClick={() => setShowWorkspacesMenu(false)}
-                className="flex items-center gap-2 px-3 py-2 text-xs text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-[#1a1d2c]"
+                className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#1a1d2c]"
               >
-                <svg className="h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <svg className="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-3 3v-3z" />
                 </svg>
                 All Sessions
@@ -880,7 +880,7 @@ export function WorkspaceCards({
                   <Link
                     href={`/workspace/${workspace.id}`}
                     onClick={(event) => event.stopPropagation()}
-                    className="rounded-full border border-transparent p-1 text-gray-400 opacity-0 transition-opacity hover:border-gray-200 hover:text-gray-600 group-hover:opacity-100 dark:hover:border-[#2a3042] dark:hover:text-gray-300"
+                    className="rounded-full border border-transparent p-1 text-slate-400 opacity-0 transition-opacity hover:border-slate-200 hover:text-slate-600 group-hover:opacity-100 dark:hover:border-[#2a3042] dark:hover:text-slate-300"
                     title="Open overview"
                   >
                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -914,7 +914,7 @@ export function WorkspaceCards({
                   ))}
                 </div>
               ) : (
-                <span className="text-[11px] italic text-gray-300 dark:text-slate-600">No sessions yet</span>
+                <span className="text-[11px] italic text-slate-300 dark:text-slate-600">No sessions yet</span>
               )}
             </button>
           );
