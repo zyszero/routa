@@ -22,6 +22,14 @@ metrics:
     tier: normal
     description: "语义层：A2UI、workspace stat 与 Kanban 默认色不得重新引入 legacy violet/indigo/purple 语义名，统一改用 brand route/slate"
 
+  - name: design_system_color_system_advisory
+    command: npm run lint:color-system 2>&1
+    pattern: "Color system advisory lint completed"
+    gate: advisory
+    hard_gate: false
+    tier: normal
+    description: "告警层：扫描 src 下未接入 color system 的 palette class、hex、rgb 与 bracket color，提示后续收敛目标"
+
   - name: design_system_storybook_governance
     command: npm run storybook:governance 2>&1
     pattern: "Storybook governance check passed"
@@ -64,6 +72,8 @@ metrics:
 
 - 命令：`npm run lint:css`
 - 语义守卫命令：`npm run lint:brand-semantics`
+- 告警命令：`npm run lint:color-system`
+- 严格命令：`npm run lint:color-system:strict -- <file...>`
 - 范围：
   - `src/client/components/desktop-app-shell.tsx`
   - `src/client/components/desktop-layout.tsx`
@@ -83,6 +93,7 @@ metrics:
   - shell 共享组件不得出现 palette class / hex / rgb 硬编码
   - `desktop-theme.css` 变量前缀只允许 `--dt-*` 与 `--color-desktop-*`
   - brand semantic 文件不得重新出现 `violet` / `indigo` / `purple` 语义名
+  - advisory scan 会按单文件 warning 数排序，优先标出颜色债务最重的文件，但不会阻断
 
 ### 2. 设计层
 
@@ -130,6 +141,8 @@ metrics:
 
 ```bash
 npm run lint:css
+npm run lint:color-system
+npm run lint:color-system:strict -- src/client/components/button.tsx src/client/components/home-input.tsx
 npm run storybook:governance
 npm run test:e2e:desktop-shell
 npm run test:accessibility
@@ -138,6 +151,8 @@ entrix run --dry-run
 
 ## 已知边界
 
-- 这不是全仓 CSS lint，只聚焦 desktop shell 共享组件。
+- `lint:color-system` 是 advisory 扫描，不是严格 gate；它会输出高优先级文件列表，但仍会有误报，尤其在内容渲染器、第三方主题桥接和实验页面里。
+- `lint:color-system:strict` 适合对指定文件做严格约束；当前更适合用于共享组件、刚收敛过的页面或未来变更文件，而不是直接对全仓启用 hard fail。
+- `lint:css` 不是全仓 CSS lint，只聚焦 desktop shell 共享组件。
 - `ariaSnapshot` 验证的是结构稳定性，不等于完整 WCAG 审计。
 - performance smoke 已迁移到 `runtime/performance.md`；这里不再把运行时预算冒充成 design system 自身的质量门。

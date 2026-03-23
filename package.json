@@ -45,6 +45,8 @@
     "lint": "eslint .",
     "lint:css": "node scripts/lint-design-system-css.mjs",
     "lint:brand-semantics": "node scripts/lint-design-system-css.mjs --brand-semantics",
+    "lint:color-system": "node scripts/lint-design-system-css.mjs --color-system-warnings",
+    "lint:color-system:strict": "node scripts/lint-design-system-css.mjs --color-system-strict",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
