@@ -25,7 +25,7 @@ const workspaces: WorkspaceData[] = [
 ];
 
 const meta = {
-  title: "Desktop Shell/DesktopLayout",
+  title: "Layouts/Desktop/DesktopLayout",
   component: DesktopLayout,
   tags: ["autodocs"],
   parameters: {

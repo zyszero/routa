@@ -77,7 +77,7 @@ function DesktopPrimitiveGallery({ interactive = false }: { interactive?: boolea
 }
 
 const meta = {
-  title: "Shared/RuntimePrimitives",
+  title: "Foundations/Primitives/DesktopRuntimePrimitives",
   tags: ["autodocs"],
   parameters: {
     desktopTheme: true,
