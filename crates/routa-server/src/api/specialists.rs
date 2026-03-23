@@ -4,6 +4,9 @@ use axum::{
     Json, Router,
 };
 use serde::Deserialize;
+use serde_json::Value;
+
+use routa_core::workflow::specialist::{SpecialistDef, SpecialistLoader};
 
 use crate::error::ServerError;
 use crate::state::AppState;
@@ -31,8 +34,7 @@ async fn list_specialists(
     State(_state): State<AppState>,
     Query(query): Query<SpecialistQuery>,
 ) -> Result<Json<serde_json::Value>, ServerError> {
-    // Return bundled specialists (hardcoded for now)
-    let specialists = get_bundled_specialists();
+    let specialists = load_specialists();
 
     if let Some(id) = query.id {
         let specialist = specialists.iter().find(|s| s["id"] == id);
@@ -81,68 +83,43 @@ async fn delete_specialist(
     ))
 }
 
-/// Get bundled specialists (hardcoded for desktop version).
-fn get_bundled_specialists() -> Vec<serde_json::Value> {
-    vec![
-        serde_json::json!({
-            "id": "architect",
-            "name": "Architect",
-            "description": "System design and architecture specialist",
-            "role": "CRAFTER",
-            "defaultModelTier": "ADVANCED",
-            "systemPrompt": "You are an expert software architect. Focus on system design, scalability, and best practices.",
-            "source": "bundled",
-            "enabled": true
-        }),
-        serde_json::json!({
-            "id": "evolution-architecture",
-            "name": "Evolution Architecture",
-            "description": "Turns architecture intent into staged evolution plans, measurable fitness functions, and hard delivery gates",
-            "role": "DEVELOPER",
-            "defaultModelTier": "SMART",
-            "systemPrompt": "You are an architecture evolution specialist. Turn architecture intent into measurable fitness functions, explicit trade-offs, and staged, reversible change plans. Prefer incremental evolution over rewrites, contract-first checks for multi-runtime systems, and hard delivery gates for real invariants.",
-            "source": "bundled",
-            "enabled": true
-        }),
-        serde_json::json!({
-            "id": "debugger",
-            "name": "Debugger",
-            "description": "Bug investigation and fixing specialist",
-            "role": "DEVELOPER",
-            "defaultModelTier": "STANDARD",
-            "systemPrompt": "You are an expert debugger. Focus on identifying root causes and providing clear fixes.",
-            "source": "bundled",
-            "enabled": true
-        }),
-        serde_json::json!({
-            "id": "reviewer",
-            "name": "Code Reviewer",
-            "description": "Code review and quality assurance specialist",
-            "role": "GATE",
-            "defaultModelTier": "STANDARD",
-            "systemPrompt": "You are an expert code reviewer. Focus on code quality, best practices, and potential issues.",
-            "source": "bundled",
-            "enabled": true
-        }),
-        serde_json::json!({
-            "id": "tester",
-            "name": "Test Engineer",
-            "description": "Testing and quality assurance specialist",
-            "role": "DEVELOPER",
-            "defaultModelTier": "STANDARD",
-            "systemPrompt": "You are an expert test engineer. Focus on writing comprehensive tests and ensuring quality.",
-            "source": "bundled",
-            "enabled": true
-        }),
-        serde_json::json!({
-            "id": "documenter",
-            "name": "Documentation Writer",
-            "description": "Technical documentation specialist",
-            "role": "DEVELOPER",
-            "defaultModelTier": "STANDARD",
-            "systemPrompt": "You are an expert technical writer. Focus on clear, comprehensive documentation.",
-            "source": "bundled",
-            "enabled": true
-        }),
-    ]
+fn load_specialists() -> Vec<Value> {
+    let mut loader = SpecialistLoader::new();
+    loader.load_default_dirs();
+
+    let mut specialists = loader.all().values().cloned().collect::<Vec<_>>();
+
+    if specialists.is_empty() {
+        specialists = SpecialistLoader::builtin_specialists();
+    } else {
+        for builtin in SpecialistLoader::builtin_specialists() {
+            if !specialists
+                .iter()
+                .any(|specialist| specialist.id == builtin.id)
+            {
+                specialists.push(builtin);
+            }
+        }
+    }
+
+    specialists.sort_by(|left, right| left.id.cmp(&right.id));
+    specialists.into_iter().map(specialist_to_json).collect()
+}
+
+fn specialist_to_json(specialist: SpecialistDef) -> Value {
+    serde_json::json!({
+        "id": specialist.id,
+        "name": specialist.name,
+        "description": specialist.description,
+        "role": specialist.role,
+        "defaultModelTier": specialist.model_tier.to_uppercase(),
+        "systemPrompt": specialist.system_prompt,
+        "roleReminder": specialist.role_reminder,
+        "defaultProvider": specialist.default_provider,
+        "defaultAdapter": specialist.default_adapter,
+        "defaultModel": specialist.default_model,
+        "metadata": specialist.metadata,
+        "source": "bundled",
+        "enabled": true
+    })
 }

@@ -52,6 +52,24 @@ test.describe("Tauri/Rust Backend Verification", () => {
     console.log("✓ Sessions API working");
   });
 
+  test("Team specialists are exposed by the Rust backend", async ({ request }) => {
+    const baseUrl = getBaseUrl();
+
+    const specialistsRes = await request.get(`${baseUrl}/api/specialists`);
+    expect(specialistsRes.ok()).toBeTruthy();
+
+    const data = await specialistsRes.json();
+    expect(Array.isArray(data.specialists)).toBeTruthy();
+
+    const specialistIds = data.specialists.map((specialist: { id: string }) => specialist.id);
+    expect(specialistIds).toContain("team-agent-lead");
+    expect(specialistIds).toContain("team-frontend-dev");
+    expect(specialistIds).toContain("team-backend-dev");
+    expect(specialistIds).toContain("team-qa");
+
+    console.log("✓ Team specialists available:", specialistIds.filter((id: string) => id.startsWith("team-")));
+  });
+
   test("Frontend loads correctly from Rust backend", async ({ page }) => {
     const baseUrl = getBaseUrl();
     
@@ -113,5 +131,31 @@ test.describe("Tauri/Rust Backend Verification", () => {
 
     console.log("✓ Settings page loaded");
   });
-});
 
+  test("Team page shows Agent Lead roster on Rust backend", async ({ page }) => {
+    const baseUrl = getBaseUrl();
+
+    await page.goto(`${baseUrl}/workspace/default/team`);
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByText("Run a lead session and keep the list in the same surface.")).toBeVisible();
+    await expect(page.getByTitle(/team coordinator/i)).toBeVisible();
+    await expect(page.getByText("Research Analyst")).toBeVisible();
+    await expect(page.getByText("Frontend Dev")).toBeVisible();
+    await expect(page.getByText("Backend Developer")).toBeVisible();
+    await expect(page.getByText("QA Specialist")).toBeVisible();
+    await expect(page.getByText("Code Reviewer")).toBeVisible();
+    await expect(page.getByText("UX Designer")).toBeVisible();
+    await expect(page.getByText("Operations Engineer")).toBeVisible();
+    await expect(page.getByText("General Engineer")).toBeVisible();
+    await expect(page.getByText("8 members")).toBeVisible();
+    await expect(page.getByText("No Team runs yet.")).toBeVisible();
+
+    await page.screenshot({
+      path: "test-results/tauri-05-team-page.png",
+      fullPage: true,
+    });
+
+    console.log("✓ Team page roster visible");
+  });
+});
