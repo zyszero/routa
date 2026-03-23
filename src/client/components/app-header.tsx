@@ -10,6 +10,7 @@
 import React from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { Button } from "./button";
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
 import { ProtocolBadge } from "@/app/protocol-badge";
 import { DockerStatusIndicator } from "@/client/components/docker-status-indicator";
@@ -71,7 +72,9 @@ export function AppHeader({
     >
       {/* ── Mobile hamburger (session variant only) ── */}
       {!isDashboard && onToggleMobileSidebar && (
-        <button
+        <Button
+          variant="ghost"
+          size="xs"
           onClick={onToggleMobileSidebar}
           aria-label={showMobileSidebar ? "Close sidebar" : "Open sidebar"}
           className="md:hidden w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500"
@@ -83,7 +86,7 @@ export function AppHeader({
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
             )}
           </svg>
-        </button>
+        </Button>
       )}
 
       {/* ── Logo ── */}
