@@ -1,7 +1,7 @@
 ---
 title: "Task Execute button disabled due to stale IN_PROGRESS status"
 date: "2026-03-04"
-status: open
+status: resolved
 severity: medium
 area: ui
 tags: [collaborative-tasks, task-execution, state-management]
@@ -71,3 +71,15 @@ API 返回的任务数据：
 ## References
 
 - Screenshot: `task-status-changed-to-pending.png` - 显示 Execute 按钮被禁用的状态
+
+## Resolution
+
+Resolved by later session-task state synchronization work.
+
+Evidence in current implementation:
+
+- `src/app/workspace/[workspaceId]/sessions/[sessionId]/use-session-crafters.ts` now continuously syncs task-note status from crafter agent status.
+- The same module also contains a stale-task recovery effect that scans `IN_PROGRESS` task notes and resets them to `COMPLETED`, `FAILED`, or `PENDING` when no matching running crafter exists.
+- `src/client/components/collaborative-task-editor.tsx` now derives `hasRunning` from both task-note status and live crafter state, so the disabled state is tied to actual running work rather than only a stuck persisted note.
+
+This directly addresses the zombie `IN_PROGRESS` condition described in the original report.

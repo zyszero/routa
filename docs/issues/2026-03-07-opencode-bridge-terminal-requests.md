@@ -2,7 +2,7 @@
 title: "opencode-bridge 缺失 terminal 相关 agent 请求的需求分析"
 issue: 73
 date: "2026-03-07"
-status: open
+status: resolved
 severity: high
 area: acp, docker
 tags: [terminal, opencode-bridge, acp-protocol]
@@ -238,6 +238,24 @@ ACP 协议中还定义了 `ExtRequest` 类型用于扩展请求。当前 bridge 
 ### 步骤 7: 测试与验证
 
 - 手动测试：启动 Docker 容器，通过 bridge API 发送 terminal 相关请求
+
+## Resolution
+
+Resolved by the Docker bridge terminal lifecycle implementation.
+
+Evidence:
+
+- `docker/opencode-bridge/server.js` now implements:
+  - `terminal/create`
+  - `terminal/output`
+  - `terminal/wait_for_exit`
+  - `terminal/kill`
+  - `terminal/release`
+- The bridge now uses persistent `spawn`-based terminal management instead of the earlier one-shot `execFile` model.
+- Git history shows the dedicated landing commit:
+  - `652e5c3 feat(docker): implement full terminal lifecycle in opencode-bridge (#73)`
+
+This issue should now be treated as closed historical analysis rather than active missing functionality.
 - 验证终端创建、输出流式推送、等待退出、kill、release 全流程
 - 验证 Session 清理时终端进程是否正确清理
 - 验证内存不会因大量输出而无限增长

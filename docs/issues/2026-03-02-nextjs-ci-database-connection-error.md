@@ -1,7 +1,7 @@
 ---
 title: Next.js CI tests fail with PostgreSQL role error
 date: 2026-03-02
-status: open
+status: resolved
 severity: medium
 area: ci/cd
 reported_by: Augment
@@ -63,3 +63,14 @@ This error appears multiple times throughout the test execution, indicating that
 - Static schema validation passes
 - The issue only affects Next.js runtime tests in CI
 
+## Resolution
+
+Resolved as part of later CI and database-runtime cleanup.
+
+Evidence that the original failure mode is no longer the active path:
+
+- The old workflow file `.github/workflows/api-schema-validation.yml` referenced by this issue no longer exists.
+- The repository now uses `.github/workflows/defense.yaml` as the main validation pipeline instead of the removed schema-validation workflow.
+- `src/core/db/index.ts` now has explicit runtime/driver selection and a dedicated standard Postgres path for CI/local TCP databases, instead of relying on the earlier ambiguous connection behavior.
+
+This means the specific broken CI path documented here has been retired rather than left in place.

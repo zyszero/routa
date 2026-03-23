@@ -1,7 +1,7 @@
 ---
 title: "CLI 实现 @ 符号选择 Specialist 并创建 Agent"
 date: "2026-03-08"
-status: open
+status: resolved
 severity: medium
 area: "cli"
 tags: ["cli", "tui", "specialist", "agent"]
@@ -168,3 +168,21 @@ fn get_specialist_search_paths() -> Vec<PathBuf> {
 - [ ] 支持自定义 specialist
 - [ ] 添加帮助提示和命令补全
 - [ ] 优化用户体验
+
+## Resolution
+
+Resolved by later CLI specialist execution work.
+
+Evidence in current CLI:
+
+- `crates/routa-cli/src/commands/chat.rs` explicitly supports `@` at the start of a message to open an interactive specialist picker.
+- The same chat command supports inline `@specialist ...` parsing and specialist prompt injection.
+- `crates/routa-cli/src/main.rs` now exposes `routa agent run` with:
+  - `-s/--specialist`
+  - `-p/--prompt`
+  - `-d/--specialist-dir`
+- `crates/routa-cli/src/commands/agent.rs` resolves specialists from configured directories and also supports prompt-level specialist mention parsing.
+- Git history shows the main landing commit:
+  - `5d894bc feat(cli): streaming TUI renderer and @ specialist mention in chat`
+
+The exact UX evolved from the original sketch, but the capability requested by this issue is now present.
