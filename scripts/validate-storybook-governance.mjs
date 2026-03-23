@@ -32,6 +32,9 @@ const requiredStories = {
   "src/client/components/traces-page-header.stories.tsx": ["Default", "NoSessionSelected", "FocusState", "DarkMode"],
   "src/client/components/traces-view-tabs.stories.tsx": ["ChatActive", "TraceActive", "FocusState", "DarkMode"],
   "src/client/components/button.stories.tsx": ["Primary", "Secondary", "Danger", "FocusState", "DarkMode"],
+  "src/client/components/workspace-switcher.stories.tsx": ["Default", "DesktopCompact", "CreatingWorkspace", "DarkMode"],
+  "src/client/components/repo-picker.stories.tsx": ["SelectedRepo", "ExistingReposTab", "CloneTab", "CloneInProgress", "DarkMode"],
+  "src/client/components/branch-selector.stories.tsx": ["Default", "RemoteBranches", "Disabled", "DarkMode"],
   "src/client/components/desktop-color-tokens.stories.tsx": ["LightMode", "DarkMode"],
   "src/client/components/desktop-primitives.stories.tsx": ["Default", "InteractiveStates", "DarkMode"],
 };
