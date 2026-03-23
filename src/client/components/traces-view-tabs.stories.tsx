@@ -15,6 +15,7 @@ const meta = {
   },
   args: {
     activeTab: "chat",
+    onTabChange: () => {},
   },
 } satisfies Meta<typeof TracesViewTabs>;
 
@@ -22,21 +23,31 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const ChatActive: Story = {};
+const defaultStoryArgs = {
+  activeTab: "chat" as const,
+  onTabChange: () => {},
+};
+
+export const ChatActive: Story = {
+  args: defaultStoryArgs,
+};
 
 export const TraceActive: Story = {
   args: {
+    ...defaultStoryArgs,
     activeTab: "event-bridge",
   },
 };
 
 export const AgUiActive: Story = {
   args: {
+    ...defaultStoryArgs,
     activeTab: "ag-ui",
   },
 };
 
 export const FocusState: Story = {
+  args: defaultStoryArgs,
   play: async ({ canvasElement }) => {
     const button = canvasElement.querySelector("button");
     if (button instanceof HTMLElement) {
@@ -50,6 +61,7 @@ export const DarkMode: Story = {
     colorMode: "dark",
   },
   args: {
+    ...defaultStoryArgs,
     activeTab: "event-bridge",
   },
 };

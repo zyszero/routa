@@ -52,7 +52,7 @@ export function TracesPageHeader({
           <Button
             type="button"
             size="xs"
-            variant="desktop-secondary"
+            variant="secondary"
             onClick={onCopyCurrentUrl}
             className="group gap-1.5"
             title="Copy shareable URL"
@@ -66,7 +66,7 @@ export function TracesPageHeader({
         <Button
           type="button"
           size="xs"
-          variant="desktop-secondary"
+          variant="secondary"
           onClick={onToggleSidebar}
         >
           {showSidebar ? "Hide Sessions" : "Show Sessions"}
@@ -74,7 +74,7 @@ export function TracesPageHeader({
         <Button
           type="button"
           size="xs"
-          variant="desktop-secondary"
+          variant="secondary"
           onClick={onRefresh}
           disabled={loading}
         >
