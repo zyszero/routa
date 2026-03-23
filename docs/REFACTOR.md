@@ -9,6 +9,7 @@ This document defines refactor rules for large-file and hotspot cleanup in Routa
 3. For oversized files, extract logic out of the source file instead of adding more branching inside it.
 4. Use concept boundaries and workflow clustering for extraction; do not split by arbitrary line ranges.
 5. Write tests for the target extracted module first, then move logic. No move before behavior is covered.
+6. Prefer the highest-ROI, lowest-risk split first: extract only one or two high-coupling modules per pass before considering broader decomposition.
 
 ## Analysis-First Workflow
 
