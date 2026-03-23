@@ -2,15 +2,8 @@
 
 import React, { ButtonHTMLAttributes, forwardRef } from "react";
 
-type ButtonVariant =
-  | "primary"
-  | "secondary"
-  | "ghost"
-  | "danger"
-  | "desktop-secondary"
-  | "desktop-accent"
-  | "desktop-outline";
-type ButtonSize = "xs" | "sm" | "md" | "lg";
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -32,16 +25,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         "bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 focus:ring-gray-500",
       danger:
         "bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 dark:bg-red-600 dark:hover:bg-red-700",
-      "desktop-secondary":
-        "bg-desktop-bg-secondary text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary focus:ring-desktop-border",
-      "desktop-accent":
-        "bg-desktop-accent text-desktop-accent-text hover:opacity-90 focus:ring-desktop-accent",
-      "desktop-outline":
-        "border border-desktop-border bg-transparent text-desktop-text-secondary hover:bg-desktop-bg-active hover:text-desktop-text-primary focus:ring-desktop-border",
     };
 
     const sizeStyles: Record<ButtonSize, string> = {
-      xs: "px-2.5 py-1.5 text-[11px]",
       sm: "px-3 py-1.5 text-sm",
       md: "px-4 py-2 text-sm",
       lg: "px-6 py-3 text-base",
