@@ -63,6 +63,17 @@ export const DesktopAccent: Story = {
   },
 };
 
+export const DesktopOutline: Story = {
+  parameters: {
+    desktopTheme: true,
+  },
+  args: {
+    variant: "desktop-outline",
+    size: "sm",
+    children: "Open latest session",
+  },
+};
+
 export const Loading: Story = {
   args: {
     loading: true,

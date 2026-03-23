@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { Button } from "./button";
 
 export type WorkspaceOverviewTab = "overview" | "notes" | "activity";
 
@@ -47,16 +48,18 @@ function WorkspaceTabButton({
   children: React.ReactNode;
 }) {
   return (
-    <button
+    <Button
       type="button"
+      size="xs"
+      variant="desktop-secondary"
       onClick={onClick}
-      className={`px-3 py-1.5 text-[12px] font-medium transition-colors ${
+      className={`rounded-none border-b-2 px-3 py-1.5 text-[12px] ${
         active
-          ? "border-b-2 border-b-desktop-accent bg-desktop-bg-active text-desktop-accent"
-          : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
+          ? "border-b-desktop-accent bg-desktop-bg-active text-desktop-accent hover:bg-desktop-bg-active"
+          : "border-b-transparent bg-transparent text-desktop-text-secondary"
       }`}
     >
       {children}
-    </button>
+    </Button>
   );
 }
