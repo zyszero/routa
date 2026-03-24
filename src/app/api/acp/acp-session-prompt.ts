@@ -327,8 +327,20 @@ function createStreamingSseResponse(args: {
   store.enterStreamingMode(sessionId);
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
-    async start(controller) {
-      await run(controller, encoder);
+    start(controller) {
+      // Emit an initial comment frame so proxies/clients start consuming the stream early.
+      controller.enqueue(encoder.encode(": stream-open\n\n"));
+
+      // Do not await the long-running prompt stream in `start()`.
+      // Keeping start non-blocking avoids buffering the whole SSE response.
+      void run(controller, encoder).catch((err) => {
+        console.error(`[ACP Route] Streaming run failed for session ${sessionId}:`, err);
+        try {
+          controller.error(err);
+        } catch {
+          // Stream already closed by the producer path.
+        }
+      });
     },
   });
 
