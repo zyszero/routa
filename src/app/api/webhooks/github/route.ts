@@ -18,8 +18,8 @@ import { getRoutaSystem } from "@/core/routa-system";
 
 export const dynamic = "force-dynamic";
 
-// Disable Next.js body parsing so we can read the raw buffer for signature verification.
-export const config = { api: { bodyParser: false } };
+// App Router route handlers expose the raw request body via the Web Request API,
+// so no extra body parser config is required here.
 
 export async function POST(request: NextRequest) {
   try {
