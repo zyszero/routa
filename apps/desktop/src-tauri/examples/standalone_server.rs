@@ -1,15 +1,38 @@
 //! Standalone Rust backend server (without Tauri).
 //! Run with: cargo run --example standalone_server
 
+use std::path::PathBuf;
+
 #[tokio::main]
 async fn main() {
     // Try to find the static frontend directory
-    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let static_dir = ["frontend", "../../../out"]
-        .iter()
-        .map(|p| manifest_dir.join(p))
-        .find(|p| p.exists() && p.is_dir())
-        .map(|p| p.canonicalize().unwrap_or(p).to_string_lossy().to_string());
+    let static_dir = detect_repo_root()
+        .and_then(|repo_root| {
+            let out_dir = repo_root.join("out");
+            if out_dir.exists() && out_dir.is_dir() {
+                Some(canonicalize_path(out_dir))
+            } else {
+                None
+            }
+        })
+        .or_else(|| {
+            let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let frontend_dir = manifest_dir.join("frontend");
+            if frontend_dir.exists() && frontend_dir.is_dir() {
+                Some(canonicalize_path(frontend_dir))
+            } else {
+                None
+            }
+        })
+        .or_else(|| {
+            let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let legacy_out = manifest_dir.join("..").join("..").join("out");
+            if legacy_out.exists() && legacy_out.is_dir() {
+                Some(canonicalize_path(legacy_out))
+            } else {
+                None
+            }
+        });
 
     let config = routa_server::ServerConfig {
         host: "127.0.0.1".to_string(),
@@ -53,4 +76,34 @@ async fn main() {
             std::process::exit(1);
         }
     }
+}
+
+fn detect_repo_root() -> Option<PathBuf> {
+    if let Ok(v) = std::env::var("ROUTA_REPO_ROOT") {
+        let p = PathBuf::from(v);
+        if p.join("package.json").exists() {
+            return Some(p);
+        }
+    }
+
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mut candidate = manifest_dir;
+    for _ in 0..12 {
+        if candidate.join("package.json").exists() {
+            return Some(candidate);
+        }
+
+        if !candidate.pop() {
+            break;
+        }
+    }
+
+    None
+}
+
+fn canonicalize_path(path: PathBuf) -> String {
+    path.canonicalize()
+        .unwrap_or(path)
+        .to_string_lossy()
+        .to_string()
 }

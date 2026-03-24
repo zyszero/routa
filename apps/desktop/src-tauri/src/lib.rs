@@ -333,9 +333,15 @@ fn detect_repo_root() -> Option<PathBuf> {
     }
 
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let candidate = manifest_dir.join("../../..");
-    if candidate.join("package.json").exists() {
-        return Some(candidate);
+    let mut candidate = manifest_dir;
+    for _ in 0..12 {
+        if candidate.join("package.json").exists() {
+            return Some(candidate);
+        }
+
+        if !candidate.pop() {
+            break;
+        }
     }
 
     None
@@ -516,12 +522,25 @@ fn resolve_static_dir(app: &tauri::AppHandle) -> Option<String> {
         return Some(canonical.to_string_lossy().to_string());
     }
 
-    // 4. Check repo out/ directory (for cargo test / dev builds)
-    let out_dir = manifest_dir.join("..").join("..").join("..").join("out");
-    if out_dir.exists() && out_dir.is_dir() {
-        let canonical = out_dir.canonicalize().unwrap_or(out_dir);
+    // 4. Check repo root `out/` directory (for cargo test / dev builds)
+    if let Some(repo_root) = detect_repo_root() {
+        let out_dir = repo_root.join("out");
+        if out_dir.exists() && out_dir.is_dir() {
+            let canonical = out_dir.canonicalize().unwrap_or(out_dir);
+            println!(
+                "[rust-server] Using repo root out/ frontend: {}",
+                canonical.to_string_lossy()
+            );
+            return Some(canonical.to_string_lossy().to_string());
+        }
+    }
+
+    // 5. Check old manifest relative `out` path as a fallback for unusual layouts.
+    let legacy_out = manifest_dir.join("..").join("..").join("out");
+    if legacy_out.exists() && legacy_out.is_dir() {
+        let canonical = legacy_out.canonicalize().unwrap_or(legacy_out);
         println!(
-            "[rust-server] Using out/ frontend: {}",
+            "[rust-server] Using legacy out/ frontend: {}",
             canonical.to_string_lossy()
         );
         return Some(canonical.to_string_lossy().to_string());
