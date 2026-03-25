@@ -154,26 +154,26 @@ routa specialist run ui-journey-evaluator \
   - `--provider-retries`
 
 2) 不存在 provider 的 fail-fast
-- 命令：`HOME=/tmp/codex-routa-test XDG_CONFIG_HOME=/tmp/codex-routa-test/.config cargo run -p routa-cli -- specialist run resources/specialists/tools/ui-journey-evaluator.yaml --provider nope-provider --provider-timeout-ms 2000 --provider-retries 1 --workspace-id default --prompt 'scenario: core-home-session'`
+- 命令：`HOME=/tmp/codex-routa-test XDG_CONFIG_HOME=/tmp/codex-routa-test/.config cargo run -p routa-cli -- specialist run ui-journey-evaluator --provider nope-provider --provider-timeout-ms 2000 --provider-retries 1 --workspace-id default --prompt 'scenario: core-home-session'`
 - 结论：快速失败，返回：
   - `Error: Unsupported provider 'nope-provider': Agent 'nope-provider' not found in registry`
 
 3) claude 无登录态
-- 命令：`HOME=/tmp/codex-routa-test XDG_CONFIG_HOME=/tmp/codex-routa-test/.config cargo run -p routa-cli -- specialist run resources/specialists/tools/ui-journey-evaluator.yaml --provider claude --provider-timeout-ms 2000 --provider-retries 1 --workspace-id default --prompt 'scenario: core-home-session'`
+- 命令：`HOME=/tmp/codex-routa-test XDG_CONFIG_HOME=/tmp/codex-routa-test/.config cargo run -p routa-cli -- specialist run ui-journey-evaluator --provider claude --provider-timeout-ms 2000 --provider-retries 1 --workspace-id default --prompt 'scenario: core-home-session'`
 - 结论：
   - 进入运行页后打印 `⚠️  Claude may require authentication...`
   - 进程返回 `▶ Not logged in · Please run /login`
   - 命令尚未成功产出验收期望的 artifact（环境鉴权阻断）
 
 4) opencode 初始化超时与重试链路
-- 命令：`sh -c 'HOME=/tmp/codex-routa-test XDG_CONFIG_HOME=/tmp/codex-routa-test/.config timeout 40s cargo run -p routa-cli -- specialist run resources/specialists/tools/ui-journey-evaluator.yaml --provider opencode --provider-timeout-ms 3000 --provider-retries 1 --workspace-id default --prompt \"scenario: core-home-session\"'`
+- 命令：`sh -c 'HOME=/tmp/codex-routa-test XDG_CONFIG_HOME=/tmp/codex-routa-test/.config timeout 40s cargo run -p routa-cli -- specialist run ui-journey-evaluator --provider opencode --provider-timeout-ms 3000 --provider-retries 1 --workspace-id default --prompt \"scenario: core-home-session\"'`
 - 结论：
   - 进入运行页后在初始化阶段触发 `⚠️  Attempt 1 failed: Timeout waiting for initialize...`
   - 最终返回：`Error: Failed to create ACP session: Timeout waiting for initialize...`
   - 该路径确认了 `provider_timeout_ms` 和 `provider_retries` 已落到 runtime 分支，并触发了重试提示行为（当前环境仍因 provider 初始化耗时导致失败）。
 
 4) 验证失败落盘：provider 不存在时也产 artifact
-- 命令：`HOME=/tmp/codex-routa-test XDG_CONFIG_HOME=/tmp/codex-routa-test/.config cargo run -p routa-cli -- specialist run resources/specialists/tools/ui-journey-evaluator.yaml --provider nope-provider --provider-timeout-ms 2000 --provider-retries 1 --workspace-id default --prompt 'scenario: core-home-session, artifact_dir: /tmp/routa-ui-journey-test'`
+- 命令：`HOME=/tmp/codex-routa-test XDG_CONFIG_HOME=/tmp/codex-routa-test/.config cargo run -p routa-cli -- specialist run ui-journey-evaluator --provider nope-provider --provider-timeout-ms 2000 --provider-retries 1 --workspace-id default --prompt 'scenario: core-home-session, artifact_dir: /tmp/routa-ui-journey-test'`
 - 结论：
   - CLI 返回失败：`Unsupported provider 'nope-provider': Agent 'nope-provider' not found in registry`
   - 同时确认已生成：
@@ -184,7 +184,13 @@ routa specialist run ui-journey-evaluator \
   - 示例产物路径：
     - `/tmp/routa-ui-journey-test/core-home-session/<run-id>/`
 
-结论：本次方案的关键路径（参数解析、provider 预检、超时/重试透传）在 CLI 可运行层面已验证；未关闭的缺口是 provider 可用性与鉴权前提不足，导致仍无法拿到 `evaluation.json/summary.md/screenshots` 闭环产物。
+5) 验证输入参数校验链路
+- 命令：`HOME=/tmp/codex-routa-test XDG_CONFIG_HOME=/tmp/codex-routa-test/.config cargo run -p routa-cli -- specialist run ui-journey-evaluator --provider opencode --provider-timeout-ms 1500 --provider-retries 0 --workspace-id default --prompt 'base_url: http://localhost:3000'`
+- 结论：
+  - 约束生效：缺少 `scenario` 时报错 `Missing required journey parameter: scenario`
+  - 仍落盘 `evaluation.json` 与 `summary.md`，`failure_stage=prompt_validation`，用于规范化问题排查
+
+结论：本次方案的关键路径（参数解析、provider 预检、超时/重试透传）在 CLI 可运行层面已验证；未关闭的缺口是 provider 可用性与鉴权前提不足，导致仍无法拿到 `evaluation.json/summary.md/screenshots` 闭环产物。`specialist run` 支持按 `id` 自动从 `resources/specialists`/`ROUTA_SPECIALISTS_RESOURCE_DIR` 下解析定义，通常可避免写长路径。
 
 ## 进一步优化方案
 

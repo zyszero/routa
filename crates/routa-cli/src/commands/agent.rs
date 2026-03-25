@@ -211,6 +211,14 @@ async fn run_selected_specialist(
         initialization_elapsed_ms: None,
     };
 
+    if let Some(context) = journey_context.as_ref() {
+        if let Err(error) = validate_ui_journey_prompt(&context.prompt) {
+            metrics.elapsed_ms = run_start.elapsed().as_millis();
+            write_ui_journey_failure_artifacts(context, "prompt_validation", &error, &metrics);
+            return Err(error);
+        }
+    }
+
     let verify_provider = verify_provider_readiness(&effective_provider).await;
     if let Err(error) = verify_provider {
         if let Some(context) = journey_context.as_ref() {
@@ -484,7 +492,8 @@ fn parse_ui_journey_prompt(prompt: &str) -> UiJourneyPromptParams {
             continue;
         }
 
-        let Some((raw_key, raw_value)) = section.split_once(':') else {
+        let maybe_pair = section.split_once('=').or_else(|| section.split_once(':'));
+        let Some((raw_key, raw_value)) = maybe_pair else {
             continue;
         };
 
@@ -506,6 +515,21 @@ fn parse_ui_journey_prompt(prompt: &str) -> UiJourneyPromptParams {
             .remove("artifact_dir")
             .unwrap_or_else(|| DEFAULT_ARTIFACT_DIR.to_string()),
     }
+}
+
+fn validate_ui_journey_prompt(prompt: &UiJourneyPromptParams) -> Result<(), String> {
+    let scenario = prompt
+        .scenario_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty());
+    if scenario.is_none() {
+        return Err("Missing required journey parameter: scenario".to_string());
+    }
+    if prompt.artifact_dir.trim().is_empty() {
+        return Err("Missing required journey parameter: artifact_dir".to_string());
+    }
+
+    Ok(())
 }
 
 fn write_ui_journey_failure_artifacts(
@@ -879,7 +903,7 @@ async fn ensure_workspace(router: &RpcRouter, workspace_id: &str) -> Result<Stri
 #[cfg(test)]
 mod tests {
     use super::parse_prompt_mention;
-    use super::parse_ui_journey_prompt;
+    use super::{parse_ui_journey_prompt, validate_ui_journey_prompt};
     use super::{
         write_ui_journey_artifact_set, UiJourneyPromptParams, UiJourneyRunContext,
         UiJourneyRunMetrics, DEFAULT_ARTIFACT_DIR, DEFAULT_BASE_URL,
@@ -939,6 +963,16 @@ mod tests {
     }
 
     #[test]
+    fn parses_ui_journey_prompt_eq_syntax() {
+        let params =
+            parse_ui_journey_prompt("scenario=kanban-automation, base_url=http://127.0.0.1:3000");
+
+        assert_eq!(params.scenario_id.as_deref(), Some("kanban-automation"));
+        assert_eq!(params.base_url, "http://127.0.0.1:3000");
+        assert_eq!(params.artifact_dir, DEFAULT_ARTIFACT_DIR);
+    }
+
+    #[test]
     fn writes_ui_journey_failure_artifacts() {
         let base_dir = tempdir().unwrap();
         let artifact_dir = base_dir
@@ -994,5 +1028,22 @@ mod tests {
         assert_eq!(params.base_url, DEFAULT_BASE_URL);
         assert_eq!(params.artifact_dir, DEFAULT_ARTIFACT_DIR);
         assert_eq!(params.scenario_id.as_deref(), Some("unknown"));
+    }
+
+    #[test]
+    fn validate_ui_journey_prompt_requires_scenario() {
+        let missing = UiJourneyPromptParams {
+            scenario_id: None,
+            base_url: DEFAULT_BASE_URL.to_string(),
+            artifact_dir: DEFAULT_ARTIFACT_DIR.to_string(),
+        };
+        assert!(validate_ui_journey_prompt(&missing).is_err());
+
+        let present = UiJourneyPromptParams {
+            scenario_id: Some("core-home-session".to_string()),
+            base_url: DEFAULT_BASE_URL.to_string(),
+            artifact_dir: DEFAULT_ARTIFACT_DIR.to_string(),
+        };
+        assert!(validate_ui_journey_prompt(&present).is_ok());
     }
 }
