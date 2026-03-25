@@ -36,7 +36,9 @@ use ui_journey::{
 };
 use ui_journey_provider::{
     augment_runtime_failure_message as augment_ui_journey_runtime_failure_message,
-    diagnose_runtime_failure as diagnose_ui_journey_runtime_failure, verify_provider_readiness,
+    diagnose_runtime_failure as diagnose_ui_journey_runtime_failure,
+    extract_provider_output_from_process_output as extract_ui_journey_provider_output_from_process_output,
+    normalize_ui_journey_update, verify_provider_readiness,
 };
 
 pub async fn list(state: &AppState, workspace_id: &str) -> Result<(), String> {
@@ -558,35 +560,45 @@ async fn execute_specialist_run(
             recv_result = rx.recv() => {
                 match recv_result {
                     Ok(update) => {
-                idle_count = 0;
-                let update_payload = update
-                    .get("params")
-                    .and_then(|params| params.get("update"))
-                    .and_then(|value| value.as_object());
-                if let Some(update_payload) = update_payload {
-                    if let Some(text) = extract_update_text(update_payload) {
-                        collected_output.push_str(&text);
+                        idle_count = 0;
+                        let normalized_update = if journey_context.is_some() {
+                            normalize_ui_journey_update(effective_provider, &update)
+                        } else {
+                            Some(update.clone())
+                        };
+
+                        let Some(normalized_update) = normalized_update else {
+                            continue;
+                        };
+
+                        let update_payload = normalized_update
+                            .get("params")
+                            .and_then(|params| params.get("update"))
+                            .and_then(|value| value.as_object());
+                        if let Some(update_payload) = update_payload {
+                            if let Some(text) = extract_update_text(update_payload) {
+                                collected_output.push_str(&text);
+                            }
+                        }
+                        renderer.handle_update(&normalized_update);
+                        let payload_complete = journey_context.is_some()
+                            && ui_journey_output_contains_artifact_payload(&collected_output);
+                        let turn_complete = normalized_update
+                            .get("params")
+                            .and_then(|params| params.get("update"))
+                            .and_then(|value| value.get("sessionUpdate"))
+                            .and_then(|value| value.as_str())
+                            == Some("turn_complete");
+                        if payload_complete || turn_complete {
+                            renderer.finish();
+                            if payload_complete {
+                                println!("═══ Specialist artifact payload received ═══");
+                            } else {
+                                println!("═══ Specialist turn complete ═══");
+                            }
+                            break;
+                        }
                     }
-                }
-                renderer.handle_update(&update);
-                let payload_complete = journey_context.is_some()
-                    && ui_journey_output_contains_artifact_payload(&collected_output);
-                let turn_complete = update
-                    .get("params")
-                    .and_then(|params| params.get("update"))
-                    .and_then(|value| value.get("sessionUpdate"))
-                    .and_then(|value| value.as_str())
-                    == Some("turn_complete");
-                if payload_complete || turn_complete {
-                    renderer.finish();
-                    if payload_complete {
-                        println!("═══ Specialist artifact payload received ═══");
-                    } else {
-                        println!("═══ Specialist turn complete ═══");
-                    }
-                    break;
-                }
-            }
                     Err(_) => {
                         renderer.finish();
                         println!("═══ Specialist session ended ═══");
@@ -627,6 +639,11 @@ async fn execute_specialist_run(
     };
     let specialist_output = if specialist_output.trim().is_empty() {
         extract_text_from_prompt_result(&prompt_response).unwrap_or_default()
+    } else {
+        specialist_output
+    };
+    let specialist_output = if specialist_output.trim().is_empty() {
+        extract_ui_journey_provider_output_from_process_output(effective_provider, &history)
     } else {
         specialist_output
     };

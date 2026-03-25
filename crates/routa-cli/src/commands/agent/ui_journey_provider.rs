@@ -11,6 +11,13 @@ pub(crate) struct ProviderRuntimeDiagnostic {
     pub(crate) hint: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum CodexProcessOutputEvent {
+    AgentMessage(String),
+    AgentMessageChunk(String),
+    Ignore,
+}
+
 pub(crate) async fn verify_provider_readiness(provider: &str) -> Result<(), String> {
     let normalized_provider = provider.trim().to_lowercase();
     if normalized_provider.is_empty() {
@@ -44,6 +51,81 @@ pub(crate) async fn verify_provider_readiness(provider: &str) -> Result<(), Stri
     }
 
     Ok(())
+}
+
+pub(crate) fn normalize_ui_journey_update(
+    provider: &str,
+    update: &serde_json::Value,
+) -> Option<serde_json::Value> {
+    if !provider.trim().eq_ignore_ascii_case("codex") {
+        return Some(update.clone());
+    }
+
+    let inner = update.get("params")?.get("update")?;
+    let kind = inner
+        .get("sessionUpdate")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+
+    match kind {
+        "process_output" => {
+            let data = inner
+                .get("data")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+            match classify_codex_process_output(data) {
+                CodexProcessOutputEvent::AgentMessage(text) => {
+                    Some(synthetic_agent_update(update, "agent_message", text))
+                }
+                CodexProcessOutputEvent::AgentMessageChunk(text) => {
+                    Some(synthetic_agent_update(update, "agent_message_chunk", text))
+                }
+                CodexProcessOutputEvent::Ignore => None,
+            }
+        }
+        "agent_thought" | "agent_thought_chunk" => None,
+        _ => Some(update.clone()),
+    }
+}
+
+pub(crate) fn extract_provider_output_from_process_output(
+    provider: &str,
+    history: &[serde_json::Value],
+) -> String {
+    if !provider.trim().eq_ignore_ascii_case("codex") {
+        return String::new();
+    }
+
+    let mut delta_output = String::new();
+    for entry in history {
+        let Some(update) = entry
+            .get("params")
+            .and_then(|params| params.get("update"))
+            .and_then(|value| value.as_object())
+        else {
+            continue;
+        };
+
+        let session_update = update
+            .get("sessionUpdate")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        if session_update != "process_output" {
+            continue;
+        }
+
+        let Some(data) = update.get("data").and_then(|value| value.as_str()) else {
+            continue;
+        };
+
+        match classify_codex_process_output(data) {
+            CodexProcessOutputEvent::AgentMessage(text) => return text,
+            CodexProcessOutputEvent::AgentMessageChunk(text) => delta_output.push_str(&text),
+            CodexProcessOutputEvent::Ignore => {}
+        }
+    }
+
+    delta_output
 }
 
 pub(crate) fn augment_runtime_failure_message(
@@ -113,6 +195,78 @@ pub(crate) fn diagnose_runtime_failure(
         failure_stage_override,
         hint: (!hints.is_empty()).then(|| hints.join(" | ")),
     })
+}
+
+fn classify_codex_process_output(data: &str) -> CodexProcessOutputEvent {
+    if data.trim().is_empty() {
+        return CodexProcessOutputEvent::Ignore;
+    }
+
+    if data.contains("Agent message (non-delta) received: \"") {
+        return extract_quoted_log_text(data)
+            .map(CodexProcessOutputEvent::AgentMessage)
+            .unwrap_or(CodexProcessOutputEvent::Ignore);
+    }
+
+    if data.contains("Agent message content delta received:") {
+        return extract_delta_log_text(data)
+            .map(CodexProcessOutputEvent::AgentMessageChunk)
+            .unwrap_or(CodexProcessOutputEvent::Ignore);
+    }
+
+    CodexProcessOutputEvent::Ignore
+}
+
+fn synthetic_agent_update(
+    original_update: &serde_json::Value,
+    session_update: &str,
+    text: String,
+) -> serde_json::Value {
+    let session_id = original_update
+        .get("params")
+        .and_then(|params| params.get("sessionId"))
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+
+    serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+            "sessionId": session_id,
+            "update": {
+                "sessionUpdate": session_update,
+                "content": {
+                    "text": text,
+                }
+            }
+        }
+    })
+}
+
+fn decode_log_escaped_text(raw: &str) -> String {
+    let quoted = format!("\"{}\"", raw);
+    serde_json::from_str::<String>(&quoted).unwrap_or_else(|_| {
+        raw.replace("\\n", "\n")
+            .replace("\\r", "\r")
+            .replace("\\t", "\t")
+            .replace("\\\"", "\"")
+    })
+}
+
+fn extract_quoted_log_text(data: &str) -> Option<String> {
+    let marker = "Agent message (non-delta) received: \"";
+    let start = data.find(marker)?;
+    let tail = &data[start + marker.len()..];
+    let end = tail.rfind('"')?;
+    Some(decode_log_escaped_text(&tail[..end]))
+}
+
+fn extract_delta_log_text(data: &str) -> Option<String> {
+    let marker = "delta: \"";
+    let start = data.find(marker)?;
+    let tail = &data[start + marker.len()..];
+    let end = tail.rfind('"')?;
+    Some(decode_log_escaped_text(&tail[..end]))
 }
 
 fn resolve_preset_command(preset: &AcpPreset) -> String {
@@ -301,8 +455,9 @@ fn truncate(value: &str, max_chars: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        augment_runtime_failure_message, diagnose_runtime_failure, extract_opencode_failure_hint,
-        truncate,
+        augment_runtime_failure_message, classify_codex_process_output, diagnose_runtime_failure,
+        extract_opencode_failure_hint, extract_provider_output_from_process_output,
+        normalize_ui_journey_update, truncate, CodexProcessOutputEvent,
     };
     use std::fs;
     use std::time::SystemTime;
@@ -388,6 +543,83 @@ mod tests {
             .hint
             .unwrap()
             .contains("last process output: provider stderr line"));
+    }
+
+    #[test]
+    fn classifies_codex_agent_message_delta_logs() {
+        let event = classify_codex_process_output(
+            "INFO codex_acp::thread: Agent message content delta received: thread_id: x, delta: \"payload\"",
+        );
+        assert_eq!(
+            event,
+            CodexProcessOutputEvent::AgentMessageChunk("payload".to_string())
+        );
+    }
+
+    #[test]
+    fn ignores_codex_reasoning_logs() {
+        let event = classify_codex_process_output(
+            "INFO codex_acp::thread: Agent reasoning content delta received: thread_id: x, delta: \"noise\"",
+        );
+        assert_eq!(event, CodexProcessOutputEvent::Ignore);
+    }
+
+    #[test]
+    fn normalizes_codex_process_output_into_agent_message_update() {
+        let update = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "session/update",
+            "params": {
+                "sessionId": "abc",
+                "update": {
+                    "sessionUpdate": "process_output",
+                    "data": "INFO codex_acp::thread: Agent message (non-delta) received: \"final payload\""
+                }
+            }
+        });
+
+        let normalized = normalize_ui_journey_update("codex", &update).unwrap();
+        assert_eq!(
+            normalized["params"]["update"]["sessionUpdate"],
+            "agent_message"
+        );
+        assert_eq!(
+            normalized["params"]["update"]["content"]["text"],
+            "final payload"
+        );
+    }
+
+    #[test]
+    fn extracts_only_codex_agent_text_from_process_output_history() {
+        let history = vec![
+            serde_json::json!({
+                "params": {
+                    "update": {
+                        "sessionUpdate": "process_output",
+                        "data": "INFO codex_acp::thread: Agent reasoning content delta received: thread_id: x, delta: \"noise\""
+                    }
+                }
+            }),
+            serde_json::json!({
+                "params": {
+                    "update": {
+                        "sessionUpdate": "process_output",
+                        "data": "INFO codex_acp::thread: Agent message content delta received: thread_id: x, delta: \"<ui-journey-artifact>\""
+                    }
+                }
+            }),
+            serde_json::json!({
+                "params": {
+                    "update": {
+                        "sessionUpdate": "process_output",
+                        "data": "INFO codex_acp::thread: Agent message content delta received: thread_id: x, delta: \"done\""
+                    }
+                }
+            }),
+        ];
+
+        let output = extract_provider_output_from_process_output("codex", &history);
+        assert_eq!(output, "<ui-journey-artifact>done");
     }
 
     #[test]
