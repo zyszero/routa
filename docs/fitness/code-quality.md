@@ -228,7 +228,7 @@ metrics:
     description: "TypeScript 类型检查必须通过；若检测到 stale .next types，会自动清理后重试一次"
 
   - name: markdown_external_links
-    command: ./scripts/check-markdown-links.sh 2>&1
+    command: node --import tsx tools/hook-runtime/src/check-markdown-links.ts 2>&1
     hard_gate: true
     tier: normal
     execution_scope: ci

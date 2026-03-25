@@ -5,12 +5,14 @@ on:
     paths:
       - '**/*.md'
       - 'scripts/check-markdown-links.sh'
+      - 'tools/hook-runtime/src/check-markdown-links.ts'
       - '.github/workflows/markdown-links.yaml'
   push:
     branches: [main]
     paths:
       - '**/*.md'
       - 'scripts/check-markdown-links.sh'
+      - 'tools/hook-runtime/src/check-markdown-links.ts'
       - '.github/workflows/markdown-links.yaml'
   workflow_dispatch:
 
