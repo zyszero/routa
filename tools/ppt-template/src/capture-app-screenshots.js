@@ -85,6 +85,13 @@ function runAgentBrowser(args) {
   return result.stdout.trim();
 }
 
+function tryCloseBrowser() {
+  spawnSync("agent-browser", ["close"], {
+    encoding: "utf8",
+    cwd: toolRoot,
+  });
+}
+
 function formatRoute(target, options) {
   const route = typeof target.route === "function"
     ? target.route({ workspaceId: options.workspaceId, sessionId: options.sessionId })
@@ -96,6 +103,7 @@ function captureTarget(target, options) {
   const url = formatRoute(target, options);
   const outputPath = path.join(screenshotDir, `${target.id}.png`);
 
+  tryCloseBrowser();
   runAgentBrowser(["open", url]);
   runAgentBrowser(["wait", "--load", "networkidle"]);
   runAgentBrowser(["screenshot", ...(options.full ? ["--full"] : []), outputPath]);
@@ -133,6 +141,7 @@ function main() {
 
   fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`Saved manifest: ${manifestPath}`);
+  tryCloseBrowser();
 }
 
 main();

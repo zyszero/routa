@@ -13,6 +13,7 @@ const repoRoot = path.resolve(toolRoot, "..", "..");
 const releaseNotePath = path.join(repoRoot, "docs", "releases", "v0.2.7-release-notes.md");
 const outputDir = path.join(toolRoot, "output");
 const outputFile = path.join(outputDir, "routa-v0.2.7-release-notes.pptx");
+const screenshotManifestPath = path.join(outputDir, "screenshots", "manifest.json");
 
 const tokens = loadRoutaTokens();
 const shapeType = new PptxGenJS().ShapeType;
@@ -158,6 +159,14 @@ function readReleaseNotes() {
   }
 
   return document;
+}
+
+function readScreenshotManifest() {
+  try {
+    return JSON.parse(fs.readFileSync(screenshotManifestPath, "utf8"));
+  } catch {
+    return [];
+  }
 }
 
 function makePpt() {
@@ -680,9 +689,93 @@ function addUpgrade(slide, doc) {
   });
 }
 
+function addScreenshots(slide, screenshots) {
+  const light = tokens.desktop.light;
+  addBackground(slide, light["--dt-bg-primary"]);
+  addSectionTitle(
+    slide,
+    "Product Screens",
+    "Release surfaces captured from the running app",
+    screenshots.length > 0
+      ? "These screenshots are captured by agent-browser before deck generation."
+      : "No screenshots were available during this run.",
+    {
+      kicker: light["--dt-brand-purple"],
+      title: light["--dt-text-primary"],
+      body: light["--dt-text-secondary"],
+    },
+  );
+
+  const entries = screenshots.slice(0, 3);
+  if (entries.length === 0) {
+    slide.addShape(shapeType.roundRect, {
+      x: 1,
+      y: 2.15,
+      w: 11.35,
+      h: 4.3,
+      rectRadius: 0.08,
+      line: { color: light["--dt-border-light"] },
+      fill: { color: light["--dt-bg-secondary"] },
+    });
+    slide.addText("Screenshots were not captured in this run.", {
+      x: 4.1,
+      y: 3.95,
+      w: 4.8,
+      h: 0.18,
+      fontSize: 12,
+      bold: true,
+      color: light["--dt-text-primary"],
+      margin: 0,
+    });
+    return;
+  }
+
+  entries.forEach((entry, index) => {
+    const x = 0.8 + index * 4.15;
+    slide.addShape(shapeType.roundRect, {
+      x,
+      y: 2.15,
+      w: 3.55,
+      h: 4.55,
+      rectRadius: 0.08,
+      line: { color: light["--dt-border"] },
+      fill: { color: "FFFFFF" },
+    });
+    if (fs.existsSync(entry.file)) {
+      slide.addImage({
+        path: entry.file,
+        x: x + 0.12,
+        y: 2.28,
+        w: 3.31,
+        h: 2.7,
+      });
+    }
+    slide.addText(entry.id, {
+      x: x + 0.14,
+      y: 5.18,
+      w: 1.2,
+      h: 0.14,
+      fontSize: 8.8,
+      bold: true,
+      color: light["--dt-text-primary"],
+      margin: 0,
+    });
+    slide.addText(entry.route, {
+      x: x + 0.14,
+      y: 5.42,
+      w: 3.05,
+      h: 0.34,
+      fontSize: 7.5,
+      color: light["--dt-text-secondary"],
+      margin: 0,
+    });
+  });
+}
+
 async function main() {
   fs.mkdirSync(outputDir, { recursive: true });
   const doc = readReleaseNotes();
+  const screenshots = readScreenshotManifest();
   const pptx = makePpt();
 
   addCover(pptx.addSlide(), doc);
@@ -692,6 +785,7 @@ async function main() {
   addHighlights(pptx.addSlide(), doc, 4);
   addTechnical(pptx.addSlide(), doc);
   addUpgrade(pptx.addSlide(), doc);
+  addScreenshots(pptx.addSlide(), screenshots);
 
   await pptx.writeFile({ fileName: outputFile });
   console.log(`Generated release notes PPT: ${outputFile}`);

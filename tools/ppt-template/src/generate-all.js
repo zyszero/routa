@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 
+import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
-import { URL, fileURLToPath } from "node:url";
-import http from "node:http";
-import https from "node:https";
+import { spawn, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 import { readJson, resolveOutputPath } from "./ppt-theme.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const toolRoot = path.resolve(__dirname, "..");
+const repoRoot = path.resolve(toolRoot, "..", "..");
 const outputDir = resolveOutputPath(toolRoot);
 const manifestPath = resolveOutputPath(toolRoot, "screenshots", "manifest.json");
+const devServerLogPath = resolveOutputPath(toolRoot, "dev-server.log");
 
 const defaults = {
   baseUrl: process.env.ROUTA_PPT_BASE_URL || "http://127.0.0.1:3000",
@@ -60,29 +61,49 @@ function runNodeScript(scriptName, args = []) {
 }
 
 function checkUrlReachable(targetUrl) {
-  return new Promise((resolve) => {
-    const url = new URL(targetUrl);
-    const client = url.protocol === "https:" ? https : http;
-    const req = client.request(
-      {
-        method: "HEAD",
-        hostname: url.hostname,
-        port: url.port || (url.protocol === "https:" ? 443 : 80),
-        path: url.pathname || "/",
-        timeout: 2000,
-      },
-      (res) => {
-        resolve(Boolean(res.statusCode && res.statusCode < 500));
-      },
-    );
-
-    req.on("error", () => resolve(false));
-    req.on("timeout", () => {
-      req.destroy();
-      resolve(false);
-    });
-    req.end();
+  const result = spawnSync("/bin/zsh", ["-lc", `curl -I -s -o /dev/null -w "%{http_code}" "${targetUrl}"`], {
+    encoding: "utf8",
+    cwd: toolRoot,
   });
+  const statusCode = Number.parseInt(result.stdout.trim(), 10);
+  return result.status === 0 && Number.isFinite(statusCode) && statusCode > 0 && statusCode < 500;
+}
+
+async function waitForUrl(targetUrl, timeoutMs = 60_000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (checkUrlReachable(targetUrl)) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+  }
+  return false;
+}
+
+function startLocalDevServer() {
+  const logStream = fs.openSync(devServerLogPath, "a");
+  const child = spawn("npm", ["run", "dev"], {
+    cwd: repoRoot,
+    detached: true,
+    stdio: ["ignore", logStream, logStream],
+    env: process.env,
+  });
+  child.unref();
+  return child.pid;
+}
+
+async function ensureBaseUrl(options) {
+  if (checkUrlReachable(options.baseUrl)) {
+    return;
+  }
+
+  console.log(`${options.baseUrl} is not reachable. Starting local dev server...`);
+  const pid = startLocalDevServer();
+  const ready = await waitForUrl(options.baseUrl);
+  if (!ready) {
+    throw new Error(`Failed to start local dev server for ${options.baseUrl}. Check ${devServerLogPath} (pid ${pid}).`);
+  }
+  console.log(`Local dev server is ready on ${options.baseUrl} (pid ${pid}).`);
 }
 
 async function maybeCaptureScreenshots(options) {
@@ -96,22 +117,19 @@ async function maybeCaptureScreenshots(options) {
     return;
   }
 
-  const reachable = await checkUrlReachable(options.baseUrl);
-  if (!reachable) {
-    console.log(`Skipping screenshots: ${options.baseUrl} is not reachable.`);
-    return;
-  }
+  await ensureBaseUrl(options);
 
   console.log(`Capturing screenshots from ${options.baseUrl} ...`);
-  runNodeScript("capture-app-screenshots.js", ["--base-url", options.baseUrl, "--workspace-id", options.workspaceId]);
+  try {
+    runNodeScript("capture-app-screenshots.js", ["--base-url", options.baseUrl, "--workspace-id", options.workspaceId]);
+  } catch (error) {
+    console.log(`Skipping screenshots after capture failure: ${error.message}`);
+  }
 }
 
 function printArtifactSummary() {
   const artifacts = [
-    "routa-color-template.pptx",
     "routa-v0.2.7-release-notes.pptx",
-    "routa-architecture-deck.pptx",
-    "routa-product-showcase-deck.pptx",
   ].map((file) => path.join(outputDir, file));
 
   console.log("Generated artifacts:");
@@ -134,10 +152,7 @@ async function main() {
   }
 
   await maybeCaptureScreenshots(options);
-  runNodeScript("generate-template.mjs");
   runNodeScript("release-notes-to-ppt.js");
-  runNodeScript("generate-architecture-deck.js");
-  runNodeScript("generate-product-showcase-deck.js");
   printArtifactSummary();
 }
 
