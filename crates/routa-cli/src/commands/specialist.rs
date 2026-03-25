@@ -14,6 +14,7 @@ pub async fn run(
     provider: Option<&str>,
     provider_timeout_ms: Option<u64>,
     provider_retries: u8,
+    repeat_count: u8,
 ) -> Result<(), String> {
     if looks_like_existing_specialist_file(specialist_target) {
         return agent::run(
@@ -26,6 +27,7 @@ pub async fn run(
             None,
             provider_timeout_ms,
             provider_retries,
+            repeat_count,
         )
         .await;
     }
@@ -40,6 +42,7 @@ pub async fn run(
         None,
         provider_timeout_ms,
         provider_retries,
+        repeat_count,
     )
     .await
 }

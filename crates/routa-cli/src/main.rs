@@ -300,6 +300,9 @@ enum SpecialistAction {
         /// Extra retries for provider create/session init failure.
         #[arg(long, default_value_t = 0)]
         provider_retries: u8,
+        /// Repeat the run N times and write a baseline aggregate (ui-journey-evaluator only).
+        #[arg(long, default_value_t = 1)]
+        repeat: u8,
     },
 }
 
@@ -841,6 +844,7 @@ async fn main() {
                             specialist_dir.as_deref(),
                             None,
                             0,
+                            1,
                         )
                         .await
                     }
@@ -859,6 +863,7 @@ async fn main() {
                         provider,
                         provider_timeout_ms,
                         provider_retries,
+                        repeat,
                     } => {
                         commands::specialist::run(
                             &state,
@@ -868,6 +873,7 @@ async fn main() {
                             provider.as_deref(),
                             provider_timeout_ms,
                             provider_retries,
+                            repeat,
                         )
                         .await
                     }

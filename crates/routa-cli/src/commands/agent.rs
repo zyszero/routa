@@ -1,6 +1,6 @@
 //! `routa agent` — Agent management commands.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::OpenOptions;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -28,6 +28,7 @@ struct UiJourneyPromptParams {
     scenario_id: Option<String>,
     base_url: String,
     artifact_dir: String,
+    run_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -45,6 +46,16 @@ struct UiJourneyRunMetrics {
     provider_retries: u8,
     elapsed_ms: u128,
     initialization_elapsed_ms: Option<u128>,
+}
+
+#[derive(Debug, Clone)]
+struct UiJourneyAggregateRun {
+    run_id: String,
+    result: String,
+    task_fit_score: i64,
+    verdict: String,
+    failure_stage: Option<String>,
+    artifact_dir: PathBuf,
 }
 
 pub async fn list(state: &AppState, workspace_id: &str) -> Result<(), String> {
@@ -128,6 +139,7 @@ pub async fn run(
     specialist_dir: Option<&str>,
     provider_timeout_ms: Option<u64>,
     provider_retries: u8,
+    repeat_count: u8,
 ) -> Result<(), String> {
     let router = RpcRouter::new(state.clone());
 
@@ -164,6 +176,7 @@ pub async fn run(
             provider,
             provider_timeout_ms,
             provider_retries,
+            repeat_count,
         )
         .await;
     };
@@ -182,6 +195,7 @@ pub async fn run(
         provider,
         provider_timeout_ms,
         provider_retries,
+        repeat_count,
     )
     .await
 }
@@ -195,14 +209,109 @@ async fn run_selected_specialist(
     provider: Option<&str>,
     provider_timeout_ms: Option<u64>,
     provider_retries: u8,
+    repeat_count: u8,
 ) -> Result<(), String> {
     let effective_provider = provider
         .map(str::to_string)
         .or_else(|| selected_specialist.default_provider.clone())
         .unwrap_or_else(|| "opencode".to_string());
+
+    if repeat_count > 1 && selected_specialist.id != JOURNEY_EVALUATOR_ID {
+        return Err(format!(
+            "--repeat is only supported for specialist '{}'",
+            JOURNEY_EVALUATOR_ID
+        ));
+    }
+
+    if repeat_count <= 1 {
+        return execute_specialist_run(
+            state,
+            router,
+            selected_specialist,
+            user_prompt,
+            workspace_id,
+            &effective_provider,
+            provider_timeout_ms,
+            provider_retries,
+            None,
+        )
+        .await;
+    }
+
+    let batch_run_id = generate_run_id();
+    let mut aggregate_runs = Vec::new();
+    let mut failed_runs = 0usize;
+
+    for iteration in 1..=repeat_count {
+        println!(
+            "═══ UI Journey Baseline Run {}/{} ({}) ═══",
+            iteration, repeat_count, batch_run_id
+        );
+        let context =
+            build_ui_journey_context(&selected_specialist.id, &user_prompt, &effective_provider)
+                .ok_or_else(|| "Failed to build UI journey context".to_string())?;
+
+        let run_result = execute_specialist_run(
+            state,
+            router,
+            selected_specialist.clone(),
+            user_prompt.clone(),
+            workspace_id,
+            &effective_provider,
+            provider_timeout_ms,
+            provider_retries,
+            Some(context.clone()),
+        )
+        .await;
+
+        if run_result.is_err() {
+            failed_runs += 1;
+        }
+
+        aggregate_runs.push(load_ui_journey_aggregate_run(&context)?);
+    }
+
+    let aggregate_context =
+        build_ui_journey_context(&selected_specialist.id, &user_prompt, &effective_provider)
+            .ok_or_else(|| "Failed to build UI journey aggregate context".to_string())?;
+    let baseline_path = write_ui_journey_baseline_artifacts(
+        &aggregate_context,
+        &batch_run_id,
+        &aggregate_runs,
+        repeat_count,
+    )?;
+
+    if failed_runs > 0 {
+        return Err(format!(
+            "Completed {} UI journey runs with {} failures. Baseline summary written to {}",
+            repeat_count,
+            failed_runs,
+            baseline_path.display()
+        ));
+    }
+
+    println!(
+        "📊 UI journey baseline summary written to {}",
+        baseline_path.display()
+    );
+    Ok(())
+}
+
+async fn execute_specialist_run(
+    state: &AppState,
+    router: &RpcRouter,
+    selected_specialist: SpecialistConfig,
+    user_prompt: String,
+    workspace_id: &str,
+    effective_provider: &str,
+    provider_timeout_ms: Option<u64>,
+    provider_retries: u8,
+    journey_context_override: Option<UiJourneyRunContext>,
+) -> Result<(), String> {
     let run_start = Instant::now();
-    let journey_context =
-        build_ui_journey_context(&selected_specialist.id, &user_prompt, &effective_provider);
+    let journey_context = journey_context_override.or_else(|| {
+        build_ui_journey_context(&selected_specialist.id, &user_prompt, effective_provider)
+    });
     let mut metrics = UiJourneyRunMetrics {
         attempts: 0,
         provider_timeout_ms,
@@ -217,9 +326,15 @@ async fn run_selected_specialist(
             write_ui_journey_failure_artifacts(context, "prompt_validation", &error, &metrics);
             return Err(error);
         }
+
+        if let Err(error) = validate_ui_journey_scenario_resource(context) {
+            metrics.elapsed_ms = run_start.elapsed().as_millis();
+            write_ui_journey_failure_artifacts(context, "scenario_resolution", &error, &metrics);
+            return Err(error);
+        }
     }
 
-    let verify_provider = verify_provider_readiness(&effective_provider).await;
+    let verify_provider = verify_provider_readiness(effective_provider).await;
     if let Err(error) = verify_provider {
         if let Some(context) = journey_context.as_ref() {
             metrics.elapsed_ms = run_start.elapsed().as_millis();
@@ -302,7 +417,7 @@ async fn run_selected_specialist(
                 attempt_session_id.clone(),
                 cwd.clone(),
                 workspace_id.clone(),
-                Some(effective_provider.clone()),
+                Some(effective_provider.to_string()),
                 Some(agent_role.to_string()),
                 selected_specialist.default_model.clone(),
                 None,
@@ -368,8 +483,16 @@ async fn run_selected_specialist(
         .await
         .ok_or("Failed to subscribe to session updates")?;
 
-    let initial_prompt =
-        build_specialist_prompt(&selected_specialist, &agent_id, &workspace_id, &user_prompt);
+    let effective_user_prompt = journey_context
+        .as_ref()
+        .map(build_ui_journey_specialist_request)
+        .unwrap_or_else(|| user_prompt.clone());
+    let initial_prompt = build_specialist_prompt(
+        &selected_specialist,
+        &agent_id,
+        &workspace_id,
+        &effective_user_prompt,
+    );
 
     println!("🚀 Sending prompt to specialist...");
     println!();
@@ -442,9 +565,12 @@ async fn run_selected_specialist(
         }
     }
 
-    metrics.elapsed_ms = run_start.elapsed().as_millis();
     if let Some(context) = journey_context.as_ref() {
-        write_ui_journey_success_artifacts(context, &metrics);
+        metrics.elapsed_ms = run_start.elapsed().as_millis();
+        if let Err(error) = validate_ui_journey_success_artifacts(context, &metrics) {
+            write_ui_journey_failure_artifacts(context, "artifact_validation", &error, &metrics);
+            return Err(error);
+        }
     }
 
     Ok(())
@@ -465,11 +591,17 @@ fn build_ui_journey_context(
         return None;
     }
 
-    let parsed = parse_ui_journey_prompt(prompt);
+    let mut parsed = parse_ui_journey_prompt(prompt);
+    let run_id = parsed
+        .run_id
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(generate_run_id);
+    parsed.run_id = Some(run_id.clone());
     Some(UiJourneyRunContext {
         specialist_id: specialist_id.to_string(),
         provider: provider.to_string(),
-        run_id: generate_run_id(),
+        run_id,
         prompt: parsed,
     })
 }
@@ -514,6 +646,7 @@ fn parse_ui_journey_prompt(prompt: &str) -> UiJourneyPromptParams {
         artifact_dir: values
             .remove("artifact_dir")
             .unwrap_or_else(|| DEFAULT_ARTIFACT_DIR.to_string()),
+        run_id: values.remove("run_id"),
     }
 }
 
@@ -530,6 +663,64 @@ fn validate_ui_journey_prompt(prompt: &UiJourneyPromptParams) -> Result<(), Stri
     }
 
     Ok(())
+}
+
+fn build_ui_journey_specialist_request(context: &UiJourneyRunContext) -> String {
+    format!(
+        "scenario: {scenario}, base_url: {base_url}, artifact_dir: {artifact_dir}, run_id: {run_id}",
+        scenario = context
+            .prompt
+            .scenario_id
+            .as_deref()
+            .unwrap_or(DEFAULT_SCENARIO_ID),
+        base_url = context.prompt.base_url,
+        artifact_dir = context.prompt.artifact_dir,
+        run_id = context.run_id
+    )
+}
+
+fn validate_ui_journey_scenario_resource(context: &UiJourneyRunContext) -> Result<(), String> {
+    let scenario_id = context
+        .prompt
+        .scenario_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "Missing required journey parameter: scenario".to_string())?;
+
+    resolve_ui_journey_scenario_path(scenario_id).ok_or_else(|| {
+        format!(
+            "Scenario file not found for '{}'. Expected under resources/ui-journeys/<scenario>.yaml",
+            scenario_id
+        )
+    })?;
+
+    Ok(())
+}
+
+fn resolve_ui_journey_scenario_path(scenario_id: &str) -> Option<PathBuf> {
+    let mut search_dirs = Vec::new();
+
+    if let Ok(resource_dir) = std::env::var("ROUTA_SPECIALISTS_RESOURCE_DIR") {
+        let resource_path = PathBuf::from(resource_dir);
+        search_dirs.push(resource_path.join("..").join("ui-journeys"));
+        if let Some(parent) = resource_path.parent() {
+            search_dirs.push(parent.join("ui-journeys"));
+        }
+    }
+
+    search_dirs.push(PathBuf::from("resources/ui-journeys"));
+    search_dirs.push(PathBuf::from("../resources/ui-journeys"));
+
+    for dir in search_dirs {
+        for extension in ["yaml", "yml"] {
+            let candidate = dir.join(format!("{}.{}", scenario_id, extension));
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
 }
 
 fn write_ui_journey_failure_artifacts(
@@ -549,21 +740,6 @@ fn write_ui_journey_failure_artifacts(
     }
 }
 
-fn write_ui_journey_success_artifacts(
-    context: &UiJourneyRunContext,
-    metrics: &UiJourneyRunMetrics,
-) {
-    if let Err(err) = write_ui_journey_artifact_set(
-        context,
-        "completed",
-        "Session completed",
-        "completed",
-        metrics,
-    ) {
-        eprintln!("⚠️  Failed to write success artifacts: {}", err);
-    }
-}
-
 fn write_ui_journey_artifact_set(
     context: &UiJourneyRunContext,
     stage: &str,
@@ -576,9 +752,7 @@ fn write_ui_journey_artifact_set(
         .scenario_id
         .clone()
         .unwrap_or_else(|| DEFAULT_SCENARIO_ID.to_string());
-    let artifact_dir = Path::new(&context.prompt.artifact_dir)
-        .join(&scenario_id)
-        .join(&context.run_id);
+    let artifact_dir = ui_journey_artifact_dir(context);
     let screenshot_dir = artifact_dir.join("screenshots");
 
     std::fs::create_dir_all(&screenshot_dir)
@@ -650,6 +824,325 @@ fn write_ui_journey_artifact_set(
     );
 
     Ok(())
+}
+
+fn ui_journey_artifact_dir(context: &UiJourneyRunContext) -> PathBuf {
+    let scenario_id = context
+        .prompt
+        .scenario_id
+        .clone()
+        .unwrap_or_else(|| DEFAULT_SCENARIO_ID.to_string());
+    Path::new(&context.prompt.artifact_dir)
+        .join(scenario_id)
+        .join(&context.run_id)
+}
+
+fn validate_ui_journey_success_artifacts(
+    context: &UiJourneyRunContext,
+    metrics: &UiJourneyRunMetrics,
+) -> Result<(), String> {
+    let artifact_dir = ui_journey_artifact_dir(context);
+    let evaluation_path = artifact_dir.join("evaluation.json");
+    let summary_path = artifact_dir.join("summary.md");
+    let screenshot_dir = artifact_dir.join("screenshots");
+
+    if !evaluation_path.is_file() {
+        return Err(format!(
+            "Specialist run completed but missing evaluation artifact: {}",
+            evaluation_path.display()
+        ));
+    }
+    if !summary_path.is_file() {
+        return Err(format!(
+            "Specialist run completed but missing summary artifact: {}",
+            summary_path.display()
+        ));
+    }
+    if !screenshot_dir.is_dir() {
+        return Err(format!(
+            "Specialist run completed but missing screenshots directory: {}",
+            screenshot_dir.display()
+        ));
+    }
+
+    let screenshot_count = std::fs::read_dir(&screenshot_dir)
+        .map_err(|err| format!("Failed to read {}: {}", screenshot_dir.display(), err))?
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().is_file())
+        .count();
+    if screenshot_count == 0 {
+        return Err(format!(
+            "Specialist run completed but produced no screenshots in {}",
+            screenshot_dir.display()
+        ));
+    }
+
+    let evaluation_text = std::fs::read_to_string(&evaluation_path)
+        .map_err(|err| format!("Failed to read {}: {}", evaluation_path.display(), err))?;
+    let mut evaluation_value: serde_json::Value =
+        serde_json::from_str(&evaluation_text).map_err(|err| {
+            format!(
+                "Invalid evaluation JSON in {}: {}",
+                evaluation_path.display(),
+                err
+            )
+        })?;
+    let evaluation = evaluation_value.as_object_mut().ok_or_else(|| {
+        format!(
+            "Evaluation artifact must be a JSON object: {}",
+            evaluation_path.display()
+        )
+    })?;
+
+    let expected_scenario = context
+        .prompt
+        .scenario_id
+        .as_deref()
+        .unwrap_or(DEFAULT_SCENARIO_ID);
+    let actual_scenario = evaluation
+        .get("scenario_id")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| "Evaluation artifact missing string field: scenario_id".to_string())?;
+    if actual_scenario != expected_scenario {
+        return Err(format!(
+            "Evaluation artifact scenario_id mismatch: expected '{}', got '{}'",
+            expected_scenario, actual_scenario
+        ));
+    }
+
+    let actual_run_id = evaluation
+        .get("run_id")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| "Evaluation artifact missing string field: run_id".to_string())?;
+    if actual_run_id != context.run_id {
+        return Err(format!(
+            "Evaluation artifact run_id mismatch: expected '{}', got '{}'",
+            context.run_id, actual_run_id
+        ));
+    }
+
+    let task_fit_score = evaluation
+        .get("task_fit_score")
+        .and_then(|value| value.as_i64())
+        .ok_or_else(|| "Evaluation artifact missing integer field: task_fit_score".to_string())?;
+    if !(0..=100).contains(&task_fit_score) {
+        return Err(format!(
+            "Evaluation artifact task_fit_score out of range 0-100: {}",
+            task_fit_score
+        ));
+    }
+
+    let verdict = evaluation
+        .get("verdict")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| "Evaluation artifact missing string field: verdict".to_string())?;
+    if verdict.trim().is_empty() {
+        return Err("Evaluation artifact verdict cannot be empty".to_string());
+    }
+
+    if !evaluation
+        .get("findings")
+        .is_some_and(|value| value.is_array())
+    {
+        return Err("Evaluation artifact missing array field: findings".to_string());
+    }
+
+    let evidence_summary = evaluation
+        .get("evidence_summary")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| "Evaluation artifact missing string field: evidence_summary".to_string())?;
+    if evidence_summary.trim().is_empty() {
+        return Err("Evaluation artifact evidence_summary cannot be empty".to_string());
+    }
+
+    evaluation.insert("provider".to_string(), serde_json::json!(context.provider));
+    evaluation.insert(
+        "run_metadata".to_string(),
+        serde_json::json!({
+            "attempts": metrics.attempts,
+            "provider_timeout_ms": metrics.provider_timeout_ms,
+            "provider_retries": metrics.provider_retries,
+            "elapsed_ms": metrics.elapsed_ms,
+            "initialize_elapsed_ms": metrics.initialization_elapsed_ms,
+            "failure_stage": serde_json::Value::Null,
+        }),
+    );
+
+    let normalized_evaluation = serde_json::to_string_pretty(&evaluation_value)
+        .map_err(|err| format!("Failed to serialize {}: {}", evaluation_path.display(), err))?;
+    std::fs::write(&evaluation_path, normalized_evaluation)
+        .map_err(|err| format!("Failed to write {}: {}", evaluation_path.display(), err))?;
+
+    println!(
+        "✅ Validated UI journey artifacts at {} ({} screenshots)",
+        artifact_dir.display(),
+        screenshot_count
+    );
+
+    Ok(())
+}
+
+fn load_ui_journey_aggregate_run(
+    context: &UiJourneyRunContext,
+) -> Result<UiJourneyAggregateRun, String> {
+    let artifact_dir = ui_journey_artifact_dir(context);
+    let evaluation_path = artifact_dir.join("evaluation.json");
+    let evaluation_text = std::fs::read_to_string(&evaluation_path)
+        .map_err(|err| format!("Failed to read {}: {}", evaluation_path.display(), err))?;
+    let evaluation: serde_json::Value = serde_json::from_str(&evaluation_text).map_err(|err| {
+        format!(
+            "Invalid evaluation JSON in {}: {}",
+            evaluation_path.display(),
+            err
+        )
+    })?;
+
+    let task_fit_score = evaluation
+        .get("task_fit_score")
+        .and_then(|value| value.as_i64())
+        .ok_or_else(|| format!("Missing task_fit_score in {}", evaluation_path.display()))?;
+    let verdict = evaluation
+        .get("verdict")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| format!("Missing verdict in {}", evaluation_path.display()))?;
+    let result = evaluation
+        .get("result")
+        .and_then(|value| value.as_str())
+        .unwrap_or("completed");
+    let failure_stage = evaluation
+        .get("run_metadata")
+        .and_then(|value| value.get("failure_stage"))
+        .and_then(|value| value.as_str())
+        .map(str::to_string);
+
+    Ok(UiJourneyAggregateRun {
+        run_id: context.run_id.clone(),
+        result: result.to_string(),
+        task_fit_score,
+        verdict: verdict.to_string(),
+        failure_stage,
+        artifact_dir,
+    })
+}
+
+fn write_ui_journey_baseline_artifacts(
+    context: &UiJourneyRunContext,
+    batch_run_id: &str,
+    aggregate_runs: &[UiJourneyAggregateRun],
+    repeat_count: u8,
+) -> Result<PathBuf, String> {
+    let scenario_id = context
+        .prompt
+        .scenario_id
+        .as_deref()
+        .unwrap_or(DEFAULT_SCENARIO_ID);
+    let scenario_dir = Path::new(&context.prompt.artifact_dir).join(scenario_id);
+    std::fs::create_dir_all(&scenario_dir)
+        .map_err(|err| format!("Failed to create {}: {}", scenario_dir.display(), err))?;
+
+    let mut verdict_counts: BTreeMap<String, usize> = BTreeMap::new();
+    let mut failure_stage_counts: BTreeMap<String, usize> = BTreeMap::new();
+    let mut min_score = i64::MAX;
+    let mut max_score = i64::MIN;
+    let mut score_sum = 0i64;
+    let mut completed_runs = 0usize;
+
+    for run in aggregate_runs {
+        *verdict_counts.entry(run.verdict.clone()).or_default() += 1;
+        if let Some(stage) = run
+            .failure_stage
+            .as_deref()
+            .filter(|value| !value.is_empty())
+        {
+            *failure_stage_counts.entry(stage.to_string()).or_default() += 1;
+        }
+        min_score = min_score.min(run.task_fit_score);
+        max_score = max_score.max(run.task_fit_score);
+        score_sum += run.task_fit_score;
+        if run.result == "completed" {
+            completed_runs += 1;
+        }
+    }
+
+    let run_count = aggregate_runs.len();
+    let average_score = if run_count == 0 {
+        0.0
+    } else {
+        score_sum as f64 / run_count as f64
+    };
+    let baseline_json_path = scenario_dir.join(format!("baseline-{}.json", batch_run_id));
+    let baseline_md_path = scenario_dir.join(format!("baseline-{}.md", batch_run_id));
+    let runs_json = aggregate_runs
+        .iter()
+        .map(|run| {
+            serde_json::json!({
+                "run_id": run.run_id,
+                "result": run.result,
+                "task_fit_score": run.task_fit_score,
+                "verdict": run.verdict,
+                "failure_stage": run.failure_stage,
+                "artifact_dir": run.artifact_dir,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let baseline_json = serde_json::json!({
+        "scenario_id": scenario_id,
+        "batch_run_id": batch_run_id,
+        "requested_repeat_count": repeat_count,
+        "run_count": run_count,
+        "completed_runs": completed_runs,
+        "incomplete_runs": run_count.saturating_sub(completed_runs),
+        "score_range": {
+            "min": if run_count == 0 { 0 } else { min_score },
+            "max": if run_count == 0 { 0 } else { max_score },
+            "average": average_score,
+            "spread": if run_count == 0 { 0 } else { max_score - min_score },
+        },
+        "verdict_counts": verdict_counts,
+        "failure_stage_counts": failure_stage_counts,
+        "runs": runs_json,
+    });
+    let baseline_md = format!(
+        "# UI Journey Baseline\n\n- Scenario: {scenario}\n- Batch Run ID: {batch_run_id}\n- Requested Repeats: {repeat_count}\n- Actual Runs: {run_count}\n- Completed Runs: {completed_runs}\n- Incomplete Runs: {incomplete_runs}\n- Score Min/Avg/Max: {min}/{avg:.1}/{max}\n- Score Spread: {spread}\n\n## Runs\n{runs}",
+        scenario = scenario_id,
+        run_count = run_count,
+        incomplete_runs = run_count.saturating_sub(completed_runs),
+        min = if run_count == 0 { 0 } else { min_score },
+        avg = average_score,
+        max = if run_count == 0 { 0 } else { max_score },
+        spread = if run_count == 0 { 0 } else { max_score - min_score },
+        runs = aggregate_runs
+            .iter()
+            .map(|run| {
+                format!(
+                    "- `{}`: {} / {} / score={} / stage={} / {}\n",
+                    run.run_id,
+                    run.result,
+                    run.verdict,
+                    run.task_fit_score,
+                    run.failure_stage.as_deref().unwrap_or("none"),
+                    run.artifact_dir.display()
+                )
+            })
+            .collect::<String>(),
+    );
+
+    std::fs::write(
+        &baseline_json_path,
+        serde_json::to_string_pretty(&baseline_json).map_err(|err| {
+            format!(
+                "Failed to serialize {}: {}",
+                baseline_json_path.display(),
+                err
+            )
+        })?,
+    )
+    .map_err(|err| format!("Failed to write {}: {}", baseline_json_path.display(), err))?;
+    std::fs::write(&baseline_md_path, baseline_md)
+        .map_err(|err| format!("Failed to write {}: {}", baseline_md_path.display(), err))?;
+
+    Ok(baseline_json_path)
 }
 
 async fn verify_provider_readiness(provider: &str) -> Result<(), String> {
@@ -903,12 +1396,17 @@ async fn ensure_workspace(router: &RpcRouter, workspace_id: &str) -> Result<Stri
 #[cfg(test)]
 mod tests {
     use super::parse_prompt_mention;
-    use super::{parse_ui_journey_prompt, validate_ui_journey_prompt};
     use super::{
-        write_ui_journey_artifact_set, UiJourneyPromptParams, UiJourneyRunContext,
-        UiJourneyRunMetrics, DEFAULT_ARTIFACT_DIR, DEFAULT_BASE_URL,
+        parse_ui_journey_prompt, validate_ui_journey_prompt, validate_ui_journey_success_artifacts,
+        write_ui_journey_baseline_artifacts,
+    };
+    use super::{
+        write_ui_journey_artifact_set, UiJourneyAggregateRun, UiJourneyPromptParams,
+        UiJourneyRunContext, UiJourneyRunMetrics, DEFAULT_ARTIFACT_DIR, DEFAULT_BASE_URL,
+        DEFAULT_SCENARIO_ID,
     };
     use routa_core::orchestration::SpecialistConfig;
+    use serde_json::Value;
     use std::fs;
     use tempfile::tempdir;
 
@@ -965,11 +1463,12 @@ mod tests {
     #[test]
     fn parses_ui_journey_prompt_eq_syntax() {
         let params =
-            parse_ui_journey_prompt("scenario=kanban-automation, base_url=http://127.0.0.1:3000");
+            parse_ui_journey_prompt("scenario=kanban-automation, base_url=http://127.0.0.1:3000, run_id=20260325-120000-123");
 
         assert_eq!(params.scenario_id.as_deref(), Some("kanban-automation"));
         assert_eq!(params.base_url, "http://127.0.0.1:3000");
         assert_eq!(params.artifact_dir, DEFAULT_ARTIFACT_DIR);
+        assert_eq!(params.run_id.as_deref(), Some("20260325-120000-123"));
     }
 
     #[test]
@@ -988,6 +1487,7 @@ mod tests {
                 scenario_id: Some("core-home-session".to_string()),
                 base_url: DEFAULT_BASE_URL.to_string(),
                 artifact_dir: artifact_dir.clone(),
+                run_id: Some("2026-03-25-001".to_string()),
             },
         };
         let metrics = UiJourneyRunMetrics {
@@ -1028,6 +1528,7 @@ mod tests {
         assert_eq!(params.base_url, DEFAULT_BASE_URL);
         assert_eq!(params.artifact_dir, DEFAULT_ARTIFACT_DIR);
         assert_eq!(params.scenario_id.as_deref(), Some("unknown"));
+        assert!(params.run_id.is_none());
     }
 
     #[test]
@@ -1036,6 +1537,7 @@ mod tests {
             scenario_id: None,
             base_url: DEFAULT_BASE_URL.to_string(),
             artifact_dir: DEFAULT_ARTIFACT_DIR.to_string(),
+            run_id: None,
         };
         assert!(validate_ui_journey_prompt(&missing).is_err());
 
@@ -1043,7 +1545,187 @@ mod tests {
             scenario_id: Some("core-home-session".to_string()),
             base_url: DEFAULT_BASE_URL.to_string(),
             artifact_dir: DEFAULT_ARTIFACT_DIR.to_string(),
+            run_id: None,
         };
         assert!(validate_ui_journey_prompt(&present).is_ok());
+    }
+
+    #[test]
+    fn validates_ui_journey_success_artifacts_and_injects_run_metadata() {
+        let base_dir = tempdir().unwrap();
+        let artifact_dir = base_dir
+            .path()
+            .join("artifacts")
+            .to_string_lossy()
+            .to_string();
+        let context = UiJourneyRunContext {
+            specialist_id: "ui-journey-evaluator".to_string(),
+            provider: "opencode".to_string(),
+            run_id: "2026-03-25-002".to_string(),
+            prompt: UiJourneyPromptParams {
+                scenario_id: Some("core-home-session".to_string()),
+                base_url: DEFAULT_BASE_URL.to_string(),
+                artifact_dir: artifact_dir.clone(),
+                run_id: Some("2026-03-25-002".to_string()),
+            },
+        };
+        let metrics = UiJourneyRunMetrics {
+            attempts: 2,
+            provider_timeout_ms: Some(5000),
+            provider_retries: 1,
+            elapsed_ms: 2200,
+            initialization_elapsed_ms: Some(450),
+        };
+
+        let output_dir = std::path::Path::new(&artifact_dir)
+            .join("core-home-session")
+            .join("2026-03-25-002");
+        fs::create_dir_all(output_dir.join("screenshots")).unwrap();
+        fs::write(
+            output_dir.join("evaluation.json"),
+            r#"{
+  "scenario_id": "core-home-session",
+  "run_id": "2026-03-25-002",
+  "task_fit_score": 85,
+  "verdict": "Good Fit",
+  "findings": [],
+  "evidence_summary": "Journey completed."
+}"#,
+        )
+        .unwrap();
+        fs::write(output_dir.join("summary.md"), "# Summary\n").unwrap();
+        fs::write(output_dir.join("screenshots").join("step-01.png"), "png").unwrap();
+
+        validate_ui_journey_success_artifacts(&context, &metrics).unwrap();
+
+        let evaluation: Value =
+            serde_json::from_str(&fs::read_to_string(output_dir.join("evaluation.json")).unwrap())
+                .unwrap();
+        assert_eq!(
+            evaluation.get("provider").and_then(Value::as_str),
+            Some("opencode")
+        );
+        assert_eq!(
+            evaluation
+                .get("run_metadata")
+                .and_then(|value| value.get("attempts"))
+                .and_then(Value::as_u64),
+            Some(2)
+        );
+        assert!(evaluation
+            .get("run_metadata")
+            .and_then(|value| value.get("failure_stage"))
+            .is_some());
+    }
+
+    #[test]
+    fn rejects_ui_journey_success_artifacts_without_screenshots() {
+        let base_dir = tempdir().unwrap();
+        let artifact_dir = base_dir
+            .path()
+            .join("artifacts")
+            .to_string_lossy()
+            .to_string();
+        let context = UiJourneyRunContext {
+            specialist_id: "ui-journey-evaluator".to_string(),
+            provider: "opencode".to_string(),
+            run_id: "2026-03-25-003".to_string(),
+            prompt: UiJourneyPromptParams {
+                scenario_id: Some(DEFAULT_SCENARIO_ID.to_string()),
+                base_url: DEFAULT_BASE_URL.to_string(),
+                artifact_dir: artifact_dir.clone(),
+                run_id: Some("2026-03-25-003".to_string()),
+            },
+        };
+        let metrics = UiJourneyRunMetrics {
+            attempts: 1,
+            provider_timeout_ms: None,
+            provider_retries: 0,
+            elapsed_ms: 900,
+            initialization_elapsed_ms: Some(120),
+        };
+
+        let output_dir = std::path::Path::new(&artifact_dir)
+            .join(DEFAULT_SCENARIO_ID)
+            .join("2026-03-25-003");
+        fs::create_dir_all(output_dir.join("screenshots")).unwrap();
+        fs::write(
+            output_dir.join("evaluation.json"),
+            r#"{
+  "scenario_id": "unknown-scenario",
+  "run_id": "2026-03-25-003",
+  "task_fit_score": 65,
+  "verdict": "Partial Fit",
+  "findings": [],
+  "evidence_summary": "No screenshot saved."
+}"#,
+        )
+        .unwrap();
+        fs::write(output_dir.join("summary.md"), "# Summary\n").unwrap();
+
+        let error = validate_ui_journey_success_artifacts(&context, &metrics).unwrap_err();
+        assert!(error.contains("produced no screenshots"));
+    }
+
+    #[test]
+    fn writes_ui_journey_baseline_artifacts() {
+        let base_dir = tempdir().unwrap();
+        let artifact_dir = base_dir
+            .path()
+            .join("artifacts")
+            .to_string_lossy()
+            .to_string();
+        let context = UiJourneyRunContext {
+            specialist_id: "ui-journey-evaluator".to_string(),
+            provider: "opencode".to_string(),
+            run_id: "2026-03-25-aggregate".to_string(),
+            prompt: UiJourneyPromptParams {
+                scenario_id: Some("core-home-session".to_string()),
+                base_url: DEFAULT_BASE_URL.to_string(),
+                artifact_dir: artifact_dir.clone(),
+                run_id: Some("2026-03-25-aggregate".to_string()),
+            },
+        };
+        let aggregate_runs = vec![
+            UiJourneyAggregateRun {
+                run_id: "run-a".to_string(),
+                result: "completed".to_string(),
+                task_fit_score: 82,
+                verdict: "Good Fit".to_string(),
+                failure_stage: None,
+                artifact_dir: std::path::Path::new(&artifact_dir)
+                    .join("core-home-session")
+                    .join("run-a"),
+            },
+            UiJourneyAggregateRun {
+                run_id: "run-b".to_string(),
+                result: "incomplete".to_string(),
+                task_fit_score: 0,
+                verdict: "Incomplete".to_string(),
+                failure_stage: Some("provider_readiness".to_string()),
+                artifact_dir: std::path::Path::new(&artifact_dir)
+                    .join("core-home-session")
+                    .join("run-b"),
+            },
+        ];
+
+        let baseline_path =
+            write_ui_journey_baseline_artifacts(&context, "batch-001", &aggregate_runs, 2).unwrap();
+        assert!(baseline_path.exists());
+        assert!(baseline_path.with_extension("md").exists());
+
+        let baseline: Value =
+            serde_json::from_str(&fs::read_to_string(&baseline_path).unwrap()).unwrap();
+        assert_eq!(
+            baseline.get("completed_runs").and_then(Value::as_u64),
+            Some(1)
+        );
+        assert_eq!(
+            baseline
+                .get("failure_stage_counts")
+                .and_then(|value| value.get("provider_readiness"))
+                .and_then(Value::as_u64),
+            Some(1)
+        );
     }
 }
