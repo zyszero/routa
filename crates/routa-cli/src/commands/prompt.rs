@@ -15,6 +15,7 @@ use routa_core::orchestration::{OrchestratorConfig, RoutaOrchestrator, Specialis
 use routa_core::rpc::RpcRouter;
 use routa_core::state::AppState;
 
+use super::review::stream_parser::{extract_update_text, update_contains_turn_complete};
 use super::tui::TuiRenderer;
 
 /// Run the full Routa coordinator flow for a user prompt.
@@ -185,35 +186,96 @@ pub async fn run(
     println!("🚀 Sending requirement to coordinator...");
     println!();
 
-    state
-        .acp_manager
-        .prompt(&session_id, &coordinator_prompt)
-        .await
-        .map_err(|e| format!("Failed to send prompt: {}", e))?;
-
-    // ── 8. Stream updates until completion ──────────────────────────────
     let mut renderer = TuiRenderer::new();
     let mut idle_count = 0u32;
     let max_idle = 600; // 10 minutes at 1s intervals
+    let initial_wait_notice_threshold = 3;
+    let prompt_finished_idle_threshold = 3;
+    let mut prompt_finished = false;
+    let mut prompt_error: Option<String> = None;
+    let mut saw_output = false;
+    let mut waiting_notice_shown = false;
+    let prompt_future = state.acp_manager.prompt(&session_id, &coordinator_prompt);
+    tokio::pin!(prompt_future);
 
     loop {
-        match tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv()).await {
-            Ok(Ok(update)) => {
-                idle_count = 0;
-                renderer.handle_update(&update);
+        let tick = tokio::time::sleep(std::time::Duration::from_secs(1));
+        tokio::pin!(tick);
+
+        tokio::select! {
+            prompt_result = &mut prompt_future, if !prompt_finished => {
+                prompt_finished = true;
+                if let Err(err) = prompt_result {
+                    renderer.finish();
+                    prompt_error = Some(format!("Failed to send prompt: {}", err));
+                    break;
+                }
             }
-            Ok(Err(_)) => {
-                renderer.finish();
-                println!("═══ Coordinator session ended ═══");
-                break;
+            recv_result = rx.recv() => {
+                match recv_result {
+                    Ok(update) => {
+                        idle_count = 0;
+                        let update_payload = update
+                            .get("params")
+                            .and_then(|params| params.get("update"))
+                            .and_then(|value| value.as_object());
+                        if let Some(update_payload) = update_payload {
+                            if let Some(text) = extract_update_text(update_payload) {
+                                if !text.trim().is_empty() {
+                                    saw_output = true;
+                                }
+                            }
+                        }
+                        let is_done = update
+                            .get("params")
+                            .and_then(|params| params.get("update"))
+                            .and_then(|value| value.get("sessionUpdate"))
+                            .and_then(|value| value.as_str())
+                            == Some("turn_complete");
+                        renderer.handle_update(&update);
+                        if is_done {
+                            renderer.finish();
+                            println!("═══ Coordinator turn complete ═══");
+                            break;
+                        }
+                    }
+                    Err(_) => {
+                        renderer.finish();
+                        println!("═══ Coordinator session ended ═══");
+                        break;
+                    }
+                }
             }
-            Err(_) => {
+            _ = &mut tick => {
                 idle_count += 1;
+                if !waiting_notice_shown
+                    && !saw_output
+                    && idle_count >= initial_wait_notice_threshold
+                {
+                    println!("… Waiting for coordinator output");
+                    waiting_notice_shown = true;
+                }
+
+                if let Some(history) = state.acp_manager.get_session_history(&session_id).await {
+                    if update_contains_turn_complete(&history) {
+                        renderer.finish();
+                        println!("═══ Coordinator turn complete ═══");
+                        break;
+                    }
+                }
+
+                if prompt_finished && idle_count >= prompt_finished_idle_threshold {
+                    renderer.finish();
+                    println!("═══ Coordinator response complete ═══");
+                    break;
+                }
+
                 if idle_count >= max_idle {
                     renderer.finish();
                     println!("⏰ Timeout: no activity for {} seconds", max_idle);
                     break;
                 }
+
                 if !state.acp_manager.is_alive(&session_id).await {
                     renderer.finish();
                     println!("═══ Coordinator process exited ═══");
@@ -221,6 +283,12 @@ pub async fn run(
                 }
             }
         }
+    }
+
+    if let Some(error) = prompt_error {
+        state.acp_manager.kill_session(&session_id).await;
+        orchestrator.cleanup(&session_id).await;
+        return Err(error);
     }
 
     // ── 9. Print summary ────────────────────────────────────────────────
