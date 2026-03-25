@@ -7,9 +7,15 @@ export type CommandResult = {
   output: string;
 };
 
+export type CommandOutputEvent = {
+  stream: "stdout" | "stderr";
+  text: string;
+};
+
 type RunCommandOptions = {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
+  onOutput?: (event: CommandOutputEvent) => void;
   stream?: boolean;
 };
 
@@ -30,6 +36,7 @@ export function runCommand(command: string, options: RunCommandOptions = {}): Pr
   child.stdout.on("data", (chunk) => {
     const text = chunk.toString();
     output += text;
+    options.onOutput?.({ stream: "stdout", text });
     if (options.stream !== false) {
       process.stdout.write(text);
     }
@@ -38,6 +45,7 @@ export function runCommand(command: string, options: RunCommandOptions = {}): Pr
   child.stderr.on("data", (chunk) => {
     const text = chunk.toString();
     output += text;
+    options.onOutput?.({ stream: "stderr", text });
     if (options.stream !== false) {
       process.stderr.write(text);
     }

@@ -1,16 +1,16 @@
 import { HookMetric } from "./metrics.js";
-import { runCommand, tailOutput } from "./process.js";
+import { runCommand, tailOutput, type CommandOutputEvent } from "./process.js";
 
 export type MetricExecution = {
   durationMs: number;
+  exitCode: number;
   metric: HookMetric;
   output: string;
   passed: boolean;
 };
 
 export type MetricRunOptions = {
-  streamOutput?: boolean;
-  outputMode?: "human" | "jsonl";
+  onOutput?: (event: CommandOutputEvent) => void;
 };
 
 export type MetricFailureSummary = {
@@ -20,7 +20,7 @@ export type MetricFailureSummary = {
   outputTail: string;
 };
 
-function formatDuration(durationMs: number): string {
+export function formatDuration(durationMs: number): string {
   return `${(durationMs / 1000).toFixed(1)}s`;
 }
 
@@ -35,36 +35,18 @@ function evaluateMetric(metric: HookMetric, exitCode: number, output: string): b
 
 export async function runMetric(
   metric: HookMetric,
-  index: number,
-  total: number,
   options: MetricRunOptions = {},
 ): Promise<MetricExecution> {
-  const outputMode = options.outputMode ?? "human";
-  const streamOutput = options.streamOutput ?? outputMode === "human";
-
-  if (outputMode === "human") {
-    console.log(`[fitness ${index}/${total}] ${metric.name}`);
-    console.log(`  source: ${metric.sourceFile}`);
-    if (metric.description) {
-      console.log(`  note: ${metric.description}`);
-    }
-    console.log("");
-  }
-
-  const result = await runCommand(metric.command, { stream: streamOutput });
+  const result = await runCommand(metric.command, {
+    stream: false,
+    onOutput: options.onOutput,
+  });
   const passed = evaluateMetric(metric, result.exitCode, result.output);
-
-  if (outputMode === "human") {
-    console.log("");
-    console.log(
-      `[fitness ${index}/${total}] ${metric.name} ${passed ? "PASS" : "FAIL"} in ${formatDuration(result.durationMs)}`,
-    );
-    console.log("");
-  }
 
   return {
     metric,
     durationMs: result.durationMs,
+    exitCode: result.exitCode,
     passed,
     output: result.output,
   };

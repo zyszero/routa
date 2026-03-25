@@ -4,22 +4,31 @@ import { spawn } from "node:child_process";
 
 import { isAiAgent } from "./ai.js";
 import {
+  DEFAULT_PARALLEL_JOBS,
+  DEFAULT_PRE_PUSH_METRICS,
+  DEFAULT_TAIL_LINES,
+  parsePositiveInt,
+} from "./config.js";
+import {
   MetricExecution,
   printFailureSummary,
   runMetric,
   summarizeFailures,
-  type MetricRunOptions,
 } from "./fitness.js";
 import { loadHookMetrics } from "./metrics.js";
 import { runCommand, tailOutput } from "./process.js";
 import { promptYesNo } from "./prompt.js";
+import { createHumanMetricReporter } from "./renderer.js";
 import { type ReviewPhaseResult, runReviewTriggerPhase } from "./review.js";
+import { runMetrics } from "./scheduler.js";
 
 type CliOptions = {
   autoFix: boolean;
   dryRun: boolean;
   failFast: boolean;
+  jobs: number;
   outputMode: "human" | "jsonl";
+  tailLines: number;
 };
 
 type HookPhaseResult = {
@@ -28,8 +37,6 @@ type HookPhaseResult = {
   durationMs: number;
   details?: string;
 };
-
-const LOCAL_METRICS = ["eslint_pass", "ts_typecheck_pass", "ts_test_pass"];
 
 function parseOutputMode(raw: string | undefined): "human" | "jsonl" {
   if (raw === "jsonl") {
@@ -43,7 +50,9 @@ function parseArgs(argv: string[]): CliOptions {
     autoFix: false,
     dryRun: false,
     failFast: true,
+    jobs: parsePositiveInt(process.env.ROUTA_HOOK_RUNTIME_JOBS, DEFAULT_PARALLEL_JOBS),
     outputMode: parseOutputMode(process.env.ROUTA_HOOK_RUNTIME_OUTPUT_MODE),
+    tailLines: parsePositiveInt(process.env.ROUTA_HOOK_RUNTIME_TAIL_LINES, DEFAULT_TAIL_LINES),
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -64,6 +73,15 @@ function parseArgs(argv: string[]): CliOptions {
       options.outputMode = "jsonl";
       continue;
     }
+    if (arg === "--jobs" && i + 1 < argv.length) {
+      options.jobs = parsePositiveInt(argv[i + 1], options.jobs);
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith("--jobs=")) {
+      options.jobs = parsePositiveInt(arg.slice("--jobs=".length), options.jobs);
+      continue;
+    }
     if (arg === "--output" && i + 1 < argv.length) {
       options.outputMode = parseOutputMode(argv[i + 1]);
       i += 1;
@@ -71,6 +89,15 @@ function parseArgs(argv: string[]): CliOptions {
     }
     if (arg.startsWith("--output=")) {
       options.outputMode = parseOutputMode(arg.slice("--output=".length));
+      continue;
+    }
+    if (arg === "--tail-lines" && i + 1 < argv.length) {
+      options.tailLines = parsePositiveInt(argv[i + 1], options.tailLines);
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith("--tail-lines=")) {
+      options.tailLines = parsePositiveInt(arg.slice("--tail-lines=".length), options.tailLines);
       continue;
     }
   }
@@ -91,13 +118,6 @@ function logPhaseHeader(phase: string, step: number, outputMode: "human" | "json
   if (outputMode === "human") {
     console.log(`[phase ${step}/${total}] ${phase}`);
   }
-}
-
-function createMetricOptions(outputMode: "human" | "jsonl"): MetricRunOptions {
-  return {
-    outputMode,
-    streamOutput: outputMode === "human",
-  };
 }
 
 function buildFixPrompt(results: MetricExecution[]): string {
@@ -225,12 +245,15 @@ async function runFitnessPhase(options: CliOptions): Promise<MetricExecution[]> 
     event: "phase.start",
     phase: "fitness",
     index: 2,
+    jobs: options.jobs,
   });
 
   if (options.dryRun) {
-    const metrics = await loadHookMetrics(LOCAL_METRICS);
+    const metrics = await loadHookMetrics([...DEFAULT_PRE_PUSH_METRICS]);
     if (options.outputMode === "human") {
-      console.log("[fitness] Metrics: eslint_pass, ts_typecheck_pass, ts_test_pass");
+      console.log(
+        `[fitness] Metrics (${options.jobs} workers): ${DEFAULT_PRE_PUSH_METRICS.join(", ")}`,
+      );
       for (const metric of metrics) {
         console.log(`[dry-run] ${metric.name} -> ${metric.command}`);
       }
@@ -245,53 +268,108 @@ async function runFitnessPhase(options: CliOptions): Promise<MetricExecution[]> 
       status: "skipped",
       durationMs: 0,
       reason: "dry_run",
-      metrics: LOCAL_METRICS,
+      jobs: options.jobs,
+      metrics: DEFAULT_PRE_PUSH_METRICS,
     });
     return [];
   }
 
-  const metrics = await loadHookMetrics(LOCAL_METRICS);
-  const results: MetricExecution[] = [];
-  const metricOptions = createMetricOptions(options.outputMode);
+  const metrics = await loadHookMetrics([...DEFAULT_PRE_PUSH_METRICS]);
+  const reporter =
+    options.outputMode === "human"
+      ? createHumanMetricReporter(metrics, {
+          concurrency: options.jobs,
+          stream: process.stdout,
+          tailLines: options.tailLines,
+        })
+      : null;
   const startedAt = Date.now();
+  let reporterClosed = false;
 
-  for (const [index, metric] of metrics.entries()) {
-    const result = await runMetric(metric, index + 1, metrics.length, metricOptions);
-    results.push(result);
+  reporter?.start();
+
+  try {
+    const batch = await runMetrics(
+      metrics,
+      async (metric) =>
+        runMetric(metric, {
+          onOutput: (event) => reporter?.onMetricOutput(metric.name, event),
+        }),
+      {
+        concurrency: options.jobs,
+        failFast: options.failFast,
+        onMetricStart: (metric, index, total) => {
+          reporter?.onMetricStart(metric, index, total);
+          emitEvent(options.outputMode, {
+            event: "metric.start",
+            phase: "fitness",
+            name: metric.name,
+            index,
+            total,
+            sourceFile: metric.sourceFile,
+            command: metric.command,
+          });
+        },
+        onMetricComplete: (result, index, total) => {
+          reporter?.onMetricComplete(result, index, total);
+          emitEvent(options.outputMode, {
+            event: "metric.complete",
+            phase: "fitness",
+            name: result.metric.name,
+            index,
+            total,
+            passed: result.passed,
+            durationMs: result.durationMs,
+            exitCode: result.exitCode,
+            sourceFile: result.metric.sourceFile,
+            command: result.metric.command,
+            outputTail: tailOutput(result.output, 6_000),
+          });
+        },
+      },
+    );
+    reporter?.close();
+    reporterClosed = true;
+
+    if (batch.skippedMetrics.length > 0) {
+      emitEvent(options.outputMode, {
+        event: "metric.skip",
+        phase: "fitness",
+        reason: "fail_fast",
+        metrics: batch.skippedMetrics.map((metric) => metric.name),
+      });
+      if (options.outputMode === "human") {
+        console.log(
+          `[fitness] fail-fast left ${batch.skippedMetrics.length} queued metrics unstarted: ${batch.skippedMetrics
+            .map((metric) => metric.name)
+            .join(", ")}`,
+        );
+        console.log("");
+      }
+    }
+
+    const durationMs = Date.now() - startedAt;
     emitEvent(options.outputMode, {
-      event: "metric.complete",
+      event: "phase.complete",
       phase: "fitness",
-      name: result.metric.name,
-      index: index + 1,
-      total: metrics.length,
-      passed: result.passed,
-      durationMs: result.durationMs,
-      exitCode: result.passed ? 0 : 1,
-      sourceFile: result.metric.sourceFile,
-      command: result.metric.command,
-      outputTail: tailOutput(result.output, 6_000),
+      status: batch.results.every((result) => result.passed) ? "passed" : "failed",
+      durationMs,
+      totalMetrics: metrics.length,
+      runMetrics: batch.results.length,
+      skippedMetrics: batch.skippedMetrics.map((metric) => metric.name),
+      metricFailures: summarizeFailures(batch.results),
     });
-    if (!result.passed && options.failFast) {
-      break;
+
+    if (batch.results.some((result) => !result.passed)) {
+      await handleFitnessFailure(batch.results, options);
+    }
+
+    return batch.results;
+  } finally {
+    if (!reporterClosed) {
+      reporter?.close();
     }
   }
-
-  const durationMs = Date.now() - startedAt;
-  emitEvent(options.outputMode, {
-    event: "phase.complete",
-    phase: "fitness",
-    status: results.every((result) => result.passed) ? "passed" : "failed",
-    durationMs,
-    totalMetrics: metrics.length,
-    runMetrics: results.length,
-    metricFailures: summarizeFailures(results),
-  });
-
-  if (results.some((result) => !result.passed)) {
-    await handleFitnessFailure(results, options);
-  }
-
-  return results;
 }
 
 async function runReviewPhase(dryRun: boolean, outputMode: "human" | "jsonl"): Promise<ReviewPhaseResult | null> {
@@ -345,6 +423,8 @@ async function main(): Promise<void> {
     dryRun: options.dryRun,
     autoFix: options.autoFix,
     failFast: options.failFast,
+    jobs: options.jobs,
+    tailLines: options.tailLines,
   });
 
   await runSubmodulePhase(options.dryRun, options.outputMode);
