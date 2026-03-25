@@ -39,6 +39,10 @@ pub(crate) struct UiJourneyRunMetrics {
     pub(crate) provider_retries: u8,
     pub(crate) elapsed_ms: u128,
     pub(crate) initialization_elapsed_ms: Option<u128>,
+    pub(crate) session_id: Option<String>,
+    pub(crate) prompt_status: Option<String>,
+    pub(crate) history_entry_count: usize,
+    pub(crate) output_chars: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -270,12 +274,16 @@ pub(crate) fn write_artifact_set(
             "provider_retries": metrics.provider_retries,
             "elapsed_ms": metrics.elapsed_ms,
             "initialize_elapsed_ms": metrics.initialization_elapsed_ms,
+            "session_id": metrics.session_id,
+            "prompt_status": metrics.prompt_status,
+            "history_entry_count": metrics.history_entry_count,
+            "output_chars": metrics.output_chars,
             "failure_stage": stage,
         }
     });
 
     let summary = format!(
-        "# UI Journey Evaluation\n\n- Specialist: {specialist}\n- Provider: {provider}\n- Scenario: {scenario}\n- Run ID: {run_id}\n- Stage: {stage}\n- Base URL: {base_url}\n- Status: {status}\n- Message: {message}\n- Attempts: {attempts}\n- Provider timeout (ms): {timeout}\n- Retries: {retries}\n- Total elapsed (ms): {elapsed}\n",
+        "# UI Journey Evaluation\n\n- Specialist: {specialist}\n- Provider: {provider}\n- Scenario: {scenario}\n- Run ID: {run_id}\n- Stage: {stage}\n- Base URL: {base_url}\n- Status: {status}\n- Message: {message}\n- Attempts: {attempts}\n- Provider timeout (ms): {timeout}\n- Retries: {retries}\n- Total elapsed (ms): {elapsed}\n- Session ID: {session_id}\n- Prompt status: {prompt_status}\n- History entries: {history_entries}\n- Output chars: {output_chars}\n",
         specialist = context.specialist_id,
         provider = context.provider,
         scenario = scenario_id.as_str(),
@@ -289,7 +297,11 @@ pub(crate) fn write_artifact_set(
             .provider_timeout_ms
             .map_or_else(|| "unset".to_string(), |value| value.to_string()),
         retries = metrics.provider_retries,
-        elapsed = metrics.elapsed_ms
+        elapsed = metrics.elapsed_ms,
+        session_id = metrics.session_id.as_deref().unwrap_or("unknown"),
+        prompt_status = metrics.prompt_status.as_deref().unwrap_or("unknown"),
+        history_entries = metrics.history_entry_count,
+        output_chars = metrics.output_chars,
     );
 
     let evaluation_path = artifact_dir.join("evaluation.json");
@@ -551,6 +563,10 @@ pub(crate) fn validate_success_artifacts(
             "provider_retries": metrics.provider_retries,
             "elapsed_ms": metrics.elapsed_ms,
             "initialize_elapsed_ms": metrics.initialization_elapsed_ms,
+            "session_id": metrics.session_id,
+            "prompt_status": metrics.prompt_status,
+            "history_entry_count": metrics.history_entry_count,
+            "output_chars": metrics.output_chars,
             "failure_stage": serde_json::Value::Null,
         }),
     );
@@ -935,6 +951,10 @@ mod tests {
             provider_retries: 1,
             elapsed_ms: 1200,
             initialization_elapsed_ms: Some(100),
+            session_id: None,
+            prompt_status: None,
+            history_entry_count: 0,
+            output_chars: 0,
         };
 
         write_artifact_set(
@@ -1014,6 +1034,10 @@ mod tests {
             provider_retries: 1,
             elapsed_ms: 2200,
             initialization_elapsed_ms: Some(450),
+            session_id: None,
+            prompt_status: None,
+            history_entry_count: 0,
+            output_chars: 0,
         };
 
         let output_dir = std::path::Path::new(&artifact_dir)
@@ -1082,6 +1106,10 @@ mod tests {
             provider_retries: 0,
             elapsed_ms: 900,
             initialization_elapsed_ms: Some(120),
+            session_id: None,
+            prompt_status: None,
+            history_entry_count: 0,
+            output_chars: 0,
         };
 
         let output_dir = std::path::Path::new(&artifact_dir)
@@ -1131,6 +1159,10 @@ mod tests {
             provider_retries: 0,
             elapsed_ms: 900,
             initialization_elapsed_ms: Some(120),
+            session_id: None,
+            prompt_status: None,
+            history_entry_count: 0,
+            output_chars: 0,
         };
 
         let output_dir = std::path::Path::new(&artifact_dir)
@@ -1185,6 +1217,10 @@ mod tests {
             provider_retries: 0,
             elapsed_ms: 900,
             initialization_elapsed_ms: Some(120),
+            session_id: None,
+            prompt_status: None,
+            history_entry_count: 0,
+            output_chars: 0,
         };
 
         let output_dir = std::path::Path::new(&artifact_dir)
@@ -1235,6 +1271,10 @@ mod tests {
             provider_retries: 0,
             elapsed_ms: 900,
             initialization_elapsed_ms: Some(120),
+            session_id: None,
+            prompt_status: None,
+            history_entry_count: 0,
+            output_chars: 0,
         };
 
         let output_dir = std::path::Path::new(&artifact_dir)
@@ -1285,6 +1325,10 @@ mod tests {
             provider_retries: 0,
             elapsed_ms: 900,
             initialization_elapsed_ms: Some(120),
+            session_id: None,
+            prompt_status: None,
+            history_entry_count: 0,
+            output_chars: 0,
         };
 
         let output_dir = std::path::Path::new(&artifact_dir)

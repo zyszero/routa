@@ -296,6 +296,10 @@ async fn execute_specialist_run(
         provider_retries,
         elapsed_ms: 0,
         initialization_elapsed_ms: None,
+        session_id: None,
+        prompt_status: None,
+        history_entry_count: 0,
+        output_chars: 0,
     };
 
     if let Some(context) = journey_context.as_ref() {
@@ -441,6 +445,7 @@ async fn execute_specialist_run(
             max_attempts, last_session_error
         )
     })?;
+    metrics.session_id = Some(session_id.clone());
 
     let acp = Arc::new(state.acp_manager.clone());
     let orchestrator = RoutaOrchestrator::new(
@@ -498,6 +503,7 @@ async fn execute_specialist_run(
     let mut prompt_response = serde_json::Value::Null;
     let mut prompt_error: Option<String> = None;
     let mut prompt_finished = false;
+    metrics.prompt_status = Some("pending".to_string());
     let prompt_future = state.acp_manager.prompt(&session_id, &initial_prompt);
     tokio::pin!(prompt_future);
 
@@ -523,6 +529,7 @@ async fn execute_specialist_run(
                 match prompt_result {
                     Ok(response) => {
                         prompt_response = response;
+                        metrics.prompt_status = Some("acknowledged".to_string());
                     }
                     Err(err)
                         if journey_context.is_some()
@@ -530,11 +537,13 @@ async fn execute_specialist_run(
                                 .to_string()
                                 .contains("Timeout waiting for session/prompt") =>
                     {
+                        metrics.prompt_status = Some("rpc_timeout".to_string());
                         println!(
                             "⚠️  Prompt submission timed out waiting for RPC response; continuing to monitor session output..."
                         );
                     }
                     Err(err) => {
+                        metrics.prompt_status = Some("error".to_string());
                         prompt_error = Some(format!("Failed to send prompt: {}", err));
                     }
                 }
@@ -602,6 +611,7 @@ async fn execute_specialist_run(
         .get_session_history(&session_id)
         .await
         .unwrap_or_default();
+    metrics.history_entry_count = history.len();
     let specialist_output = if collected_output.trim().is_empty() {
         extract_agent_output_from_history(&history)
     } else {
@@ -617,6 +627,7 @@ async fn execute_specialist_run(
     } else {
         specialist_output
     };
+    metrics.output_chars = specialist_output.chars().count();
 
     if prompt_error.is_some() && specialist_output.trim().is_empty() && failure_reason.is_none() {
         let error = prompt_error.unwrap_or_else(|| "Failed to send prompt".to_string());
