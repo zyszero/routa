@@ -1,5 +1,5 @@
 # Pre-push hook: Run full checks (lint + typecheck + tests)
-# Uses smart-check.sh for AI-aware error handling
+# Uses hook-runtime for AI-aware, non-blocking error handling
 
 # Skip if SKIP_HOOKS is set (for emergency pushes)
 if [ -n "$SKIP_HOOKS" ]; then
@@ -7,5 +7,5 @@ if [ -n "$SKIP_HOOKS" ]; then
   exit 0
 fi
 
-# Run hook runtime via smart-check compatibility wrapper.
-./scripts/smart-check.sh
+# Run hook runtime directly for full pre-push checks.
+node --import tsx tools/hook-runtime/src/cli.ts "$@"

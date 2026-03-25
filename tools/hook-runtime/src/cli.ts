@@ -17,6 +17,7 @@ import {
 } from "./fitness.js";
 import { loadHookMetrics } from "./metrics.js";
 import { runCommand, tailOutput } from "./process.js";
+import { runSubmoduleRefsCheck } from "./check-submodule-refs.js";
 import { promptYesNo } from "./prompt.js";
 import { createHumanMetricReporter } from "./renderer.js";
 import { type ReviewPhaseResult, runReviewTriggerPhase } from "./review.js";
@@ -211,28 +212,30 @@ async function runSubmodulePhase(dryRun: boolean, outputMode: "human" | "jsonl")
       phase: "submodule",
       durationMs: Date.now() - startedAt,
       reason: "dry_run",
-      command: "./scripts/check-submodule-refs.sh",
+      command: "tools/hook-runtime/src/check-submodule-refs.ts",
     });
     if (outputMode === "human") {
-      console.log("[dry-run] ./scripts/check-submodule-refs.sh");
+      console.log("[dry-run] tools/hook-runtime/src/check-submodule-refs.ts");
       console.log("");
     }
     return { phase: "submodule", status: "skipped", durationMs: Date.now() - startedAt };
   }
 
-  const result = await runCommand("./scripts/check-submodule-refs.sh", { stream: outputMode === "human" });
+  const passed = await runSubmoduleRefsCheck();
   const durationMs = Date.now() - startedAt;
+
+  const status = passed ? 0 : 1;
 
   emitEvent(outputMode, {
     event: "phase.complete",
     phase: "submodule",
-    status: result.exitCode === 0 ? "passed" : "failed",
+    status: status === 0 ? "passed" : "failed",
     durationMs,
-    command: "./scripts/check-submodule-refs.sh",
-    exitCode: result.exitCode,
+    command: "tools/hook-runtime/src/check-submodule-refs.ts",
+    exitCode: status,
   });
 
-  if (result.exitCode !== 0) {
+  if (!passed) {
     throw new Error("Submodule ref check failed.");
   }
 

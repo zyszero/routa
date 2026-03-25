@@ -222,7 +222,7 @@ metrics:
     description: "ESLint 必须通过"
 
   - name: ts_typecheck_pass
-    command: ./scripts/typecheck-smart.sh 2>&1
+    command: node --import tsx tools/hook-runtime/src/typecheck-smart.ts 2>&1
     hard_gate: true
     tier: fast
     description: "TypeScript 类型检查必须通过；若检测到 stale .next types，会自动清理后重试一次"
