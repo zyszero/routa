@@ -45,7 +45,7 @@ jobs:
 
       - name: Build routa CLI
         run: |
-          cargo build --locked --release --package routa-cli --target ${{ matrix.target }}
+          cargo build --release --package routa-cli --target ${{ matrix.target }}
 
       - name: Prepare artifact
         shell: bash
