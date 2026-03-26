@@ -54,10 +54,18 @@ function parseProfileFromArgv(argv: string[]): HookProfileName | undefined {
   return undefined;
 }
 
+function normalizeRuntimeArgv(argv: string[]): string[] {
+  if (argv[0] === "run") {
+    return argv.slice(1);
+  }
+  return argv;
+}
+
 export function parseArgs(argv: string[]): CliOptions {
-  const profileFromArg = parseProfileFromArgv(argv);
+  const runtimeArgv = normalizeRuntimeArgv(argv);
+  const normalizedProfileFromArg = parseProfileFromArgv(runtimeArgv);
   const envProfile = normalizeProfile(process.env.ROUTA_HOOK_RUNTIME_PROFILE);
-  const requestedProfile = profileFromArg ?? envProfile ?? PROFILE_DEFAULT;
+  const requestedProfile = normalizedProfileFromArg ?? envProfile ?? PROFILE_DEFAULT;
   const profileDefinition = resolveRuntimeProfile(requestedProfile);
 
   const options: CliOptions = {
@@ -73,10 +81,10 @@ export function parseArgs(argv: string[]): CliOptions {
   };
   let hasExplicitMetrics = Boolean(process.env.ROUTA_HOOK_RUNTIME_METRICS);
 
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg === "--profile" && i + 1 < argv.length) {
-      options.profile = normalizeProfile(argv[i + 1]);
+  for (let i = 0; i < runtimeArgv.length; i += 1) {
+    const arg = runtimeArgv[i];
+    if (arg === "--profile" && i + 1 < runtimeArgv.length) {
+      options.profile = normalizeProfile(runtimeArgv[i + 1]);
       const selectedProfile = resolveRuntimeProfile(options.profile);
       options.profilePhases = selectedProfile.phases;
 
@@ -112,8 +120,8 @@ export function parseArgs(argv: string[]): CliOptions {
       options.outputMode = "jsonl";
       continue;
     }
-    if (arg === "--metrics" && i + 1 < argv.length) {
-      options.metricNames = parseMetricNames(argv[i + 1]);
+    if (arg === "--metrics" && i + 1 < runtimeArgv.length) {
+      options.metricNames = parseMetricNames(runtimeArgv[i + 1]);
       hasExplicitMetrics = true;
       i += 1;
       continue;
@@ -123,8 +131,8 @@ export function parseArgs(argv: string[]): CliOptions {
       hasExplicitMetrics = true;
       continue;
     }
-    if (arg === "--jobs" && i + 1 < argv.length) {
-      options.jobs = parsePositiveInt(argv[i + 1], options.jobs);
+    if (arg === "--jobs" && i + 1 < runtimeArgv.length) {
+      options.jobs = parsePositiveInt(runtimeArgv[i + 1], options.jobs);
       i += 1;
       continue;
     }
@@ -132,8 +140,8 @@ export function parseArgs(argv: string[]): CliOptions {
       options.jobs = parsePositiveInt(arg.slice("--jobs=".length), options.jobs);
       continue;
     }
-    if (arg === "--output" && i + 1 < argv.length) {
-      options.outputMode = parseOutputMode(argv[i + 1]);
+    if (arg === "--output" && i + 1 < runtimeArgv.length) {
+      options.outputMode = parseOutputMode(runtimeArgv[i + 1]);
       i += 1;
       continue;
     }
@@ -141,8 +149,8 @@ export function parseArgs(argv: string[]): CliOptions {
       options.outputMode = parseOutputMode(arg.slice("--output=".length));
       continue;
     }
-    if (arg === "--tail-lines" && i + 1 < argv.length) {
-      options.tailLines = parsePositiveInt(argv[i + 1], options.tailLines);
+    if (arg === "--tail-lines" && i + 1 < runtimeArgv.length) {
+      options.tailLines = parsePositiveInt(runtimeArgv[i + 1], options.tailLines);
       i += 1;
       continue;
     }

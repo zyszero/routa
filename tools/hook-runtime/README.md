@@ -195,6 +195,7 @@ tools/
 
 ```bash
 pnpm exec tsx tools/hook-runtime/src/cli.ts --jobs 4
+pnpm exec tsx tools/hook-runtime/src/cli.ts run --profile local-validate --dry-run
 pnpm exec tsx tools/hook-runtime/src/cli.ts --no-fail-fast
 pnpm exec tsx tools/hook-runtime/src/cli.ts --jsonl
 pnpm exec tsx tools/hook-runtime/src/cli.ts --dry-run
@@ -207,6 +208,7 @@ pnpm exec tsx tools/hook-runtime/src/cli.ts --tail-lines 20
 - `--jobs <n>`：并发 worker 上限
 - `--no-fail-fast`：关闭 fail-fast，保留全部执行结果
 - `--jsonl` / `--output jsonl`：机器可读输出
+- `run --profile <pre-push|pre-commit|local-validate>`：显示直接运行时入口（同 `hook` 适配器的 profile 入口）
 - `--dry-run`：不执行真实检查
 - `--fix`：失败后提示触发 Claude 修复（交互）
 - `--tail-lines <n>`：失败输出截断长度控制
@@ -254,4 +256,3 @@ parallel fitness checks, rendering results, routing failures, and handing off re
 developer-side commit and push workflows.
 
 Routa Hook Runtime 是 Routa 接入 Git Hook 生命周期的本地执行运行时，用于并行编排 fitness checks、统一结果呈现、处理失败分流，并在提交与推送时承接 review gate。
-
