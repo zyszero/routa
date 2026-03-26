@@ -2,6 +2,36 @@ import { formatDuration, type MetricExecution } from "./fitness.js";
 import type { HookMetric } from "./metrics.js";
 import type { CommandOutputEvent } from "./process.js";
 
+const ANSI_RESET = "\u001B[0m";
+const ANSI_YELLOW = "\u001B[33m";
+const ANSI_GREEN = "\u001B[32m";
+const ANSI_RED = "\u001B[31m";
+const ANSI_CYAN = "\u001B[36m";
+
+function shouldUseColor(stream?: NodeJS.WriteStream): boolean {
+  if (!stream?.isTTY) {
+    return false;
+  }
+
+  if (process.env.NO_COLOR === "1") {
+    return false;
+  }
+
+  if (process.env.FORCE_COLOR === "0") {
+    return false;
+  }
+
+  return true;
+}
+
+function colorize(stream: NodeJS.WriteStream | undefined, colorCode: string, text: string): string {
+  if (!shouldUseColor(stream)) {
+    return text;
+  }
+
+  return `${colorCode}${text}${ANSI_RESET}`;
+}
+
 type MetricStatus = "queued" | "running" | "passed" | "failed";
 
 type ReporterOptions = {
@@ -254,19 +284,28 @@ class PlainHumanMetricReporter implements HumanMetricReporter {
   ) {}
 
   start(): void {
-    console.log(`[fitness] Running ${this.metrics.length} metrics with ${this.options.concurrency} workers`);
+    const totalLine = colorize(
+      this.options.stream,
+      ANSI_CYAN,
+      `[fitness] Running ${this.metrics.length} metrics with ${this.options.concurrency} workers`,
+    );
+    console.log(totalLine);
     console.log("");
   }
 
   onMetricStart(metric: HookMetric, index: number, total: number): void {
-    console.log(`[fitness ${index}/${total}] ${metric.name} RUN`);
+    const status = colorize(this.options.stream, ANSI_YELLOW, "RUN");
+    console.log(`[fitness ${index}/${total}] ${metric.name} ${status}`);
   }
 
   onMetricOutput(): void {}
 
   onMetricComplete(result: MetricExecution, index: number, total: number): void {
+    const status = result.passed
+      ? colorize(this.options.stream, ANSI_GREEN, "PASS")
+      : colorize(this.options.stream, ANSI_RED, "FAIL");
     console.log(
-      `[fitness ${index}/${total}] ${result.metric.name} ${result.passed ? "PASS" : "FAIL"} in ${formatDuration(result.durationMs)}`,
+      `[fitness ${index}/${total}] ${result.metric.name} ${status} in ${formatDuration(result.durationMs)}`,
     );
   }
 
