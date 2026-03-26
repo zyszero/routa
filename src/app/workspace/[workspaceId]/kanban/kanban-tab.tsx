@@ -7,7 +7,13 @@ import type { UseAcpState, UseAcpActions } from "@/client/hooks/use-acp";
 import {
   resolveEffectiveTaskAutomation,
 } from "@/core/kanban/effective-task-automation";
-import type { KanbanBoardInfo, SessionInfo, TaskInfo, WorktreeInfo } from "../types";
+import type {
+  KanbanAgentPromptOptions,
+  KanbanBoardInfo,
+  SessionInfo,
+  TaskInfo,
+  WorktreeInfo,
+} from "../types";
 import { EMPTY_DRAFT, type DraftIssue } from "../kanban-create-modal";
 import { KanbanSettingsModal, type ColumnAutomationConfig } from "./kanban-settings-modal";
 import { scheduleKanbanRefreshBurst } from "./kanban-agent-input";
@@ -22,7 +28,6 @@ import { createKanbanSpecialistResolver } from "./kanban-card-session-utils";
 import { normalizeKanbanAutomation } from "@/core/models/kanban";
 import type { RepoSelection } from "@/client/components/repo-picker";
 import type { RepoSyncState } from "./kanban-repo-sync-status";
-import type { McpServerProfile } from "@/core/mcp/mcp-server-profiles";
 import {
   applySpecialistLanguageToBoardColumns,
   extractSessionLiveTail,
@@ -68,13 +73,7 @@ interface KanbanTabProps {
   /** Handler for agent prompt - creates session and sends prompt */
   onAgentPrompt?: (
     prompt: string,
-    options?: {
-      provider?: string;
-      role?: string;
-      toolMode?: "essential" | "full";
-      allowedNativeTools?: string[];
-      mcpProfile?: McpServerProfile;
-    },
+    options?: KanbanAgentPromptOptions,
   ) => Promise<string | null>;
 }
 
@@ -293,7 +292,7 @@ export function KanbanTab({
 
     setAgentLoading(true);
     try {
-      const systemPrompt = buildKanbanTaskAgentPrompt({
+      const planningPrompt = buildKanbanTaskAgentPrompt({
         workspaceId,
         boardId: selectedBoardId ?? defaultBoardId ?? "default",
         repoPath: defaultCodebase?.repoPath,
@@ -301,12 +300,13 @@ export function KanbanTab({
         language: specialistLanguage,
       });
 
-      const sessionId = await onAgentPrompt(systemPrompt, {
+      const sessionId = await onAgentPrompt(agentInput, {
         provider: acp?.selectedProvider,
         role: "CRAFTER",
         toolMode: "full",
         allowedNativeTools: [],
         mcpProfile: "kanban-planning",
+        systemPrompt: planningPrompt,
       });
       if (sessionId) {
         openAgentPanel(sessionId);

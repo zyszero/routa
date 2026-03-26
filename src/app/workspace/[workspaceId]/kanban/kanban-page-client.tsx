@@ -15,9 +15,13 @@ import {
   type KanbanSpecialistLanguage,
 } from "./kanban-specialist-language";
 import type { RepoSyncState } from "./kanban-repo-sync-status";
-import type { KanbanBoardInfo, TaskInfo, SessionInfo } from "../types";
+import type {
+  KanbanAgentPromptOptions,
+  KanbanBoardInfo,
+  TaskInfo,
+  SessionInfo,
+} from "../types";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
-import type { McpServerProfile } from "@/core/mcp/mcp-server-profiles";
 import { resolveKanbanAutomationStep } from "@/core/kanban/effective-task-automation";
 import { createKanbanSpecialistResolver } from "./kanban-card-session-utils";
 
@@ -27,14 +31,6 @@ interface SpecialistOption {
   role: string;
   displayName?: string;
   defaultProvider?: string;
-}
-
-interface KanbanAgentPromptOptions {
-  provider?: string;
-  role?: string;
-  toolMode?: "essential" | "full";
-  allowedNativeTools?: string[];
-  mcpProfile?: McpServerProfile;
 }
 
 export function KanbanPageClient() {
@@ -394,6 +390,7 @@ export function KanbanPageClient() {
       options?.toolMode,
       options?.allowedNativeTools,
       options?.mcpProfile,
+      options?.systemPrompt,
     );
 
     if (!result?.sessionId) {

@@ -1,5 +1,7 @@
 // Shared types for workspace dashboard components
 
+import type { McpServerProfile } from "@/core/mcp/mcp-server-profiles";
+
 export interface SessionInfo {
   sessionId: string;
   name?: string;
@@ -18,11 +20,21 @@ export interface SessionInfo {
   createdAt: string;
 }
 
+export interface KanbanAgentPromptOptions {
+  provider?: string;
+  role?: string;
+  toolMode?: "essential" | "full";
+  allowedNativeTools?: string[];
+  mcpProfile?: McpServerProfile;
+  systemPrompt?: string;
+}
+
 export type KanbanDevSessionSupervisionMode = "disabled" | "watchdog_retry" | "ralph_loop";
 export type KanbanDevSessionCompletionRequirement =
   | "turn_complete"
   | "completion_summary"
   | "verification_report";
+export type KanbanTransportInfo = "acp" | "a2a";
 
 export interface KanbanDevSessionSupervisionInfo {
   mode: KanbanDevSessionSupervisionMode;
@@ -86,6 +98,9 @@ export interface TaskInfo {
     role?: string;
     specialistId?: string;
     specialistName?: string;
+    transport?: KanbanTransportInfo;
+    externalTaskId?: string;
+    contextId?: string;
     attempt?: number;
     loopMode?: "watchdog_retry" | "ralph_loop";
     completionRequirement?: "turn_complete" | "completion_summary" | "verification_report";
@@ -130,17 +145,25 @@ export interface KanbanColumnAutomationInfo {
   enabled: boolean;
   steps?: Array<{
     id: string;
+    transport?: KanbanTransportInfo;
     providerId?: string;
     role?: string;
     specialistId?: string;
     specialistName?: string;
     specialistLocale?: string;
+    agentCardUrl?: string;
+    skillId?: string;
+    authConfigId?: string;
   }>;
+  transport?: KanbanTransportInfo;
   providerId?: string;
   role?: string;
   specialistId?: string;
   specialistName?: string;
   specialistLocale?: string;
+  agentCardUrl?: string;
+  skillId?: string;
+  authConfigId?: string;
   transitionType?: "entry" | "exit" | "both";
   requiredArtifacts?: ("screenshot" | "test_results" | "code_diff")[];
   autoAdvanceOnSuccess?: boolean;
