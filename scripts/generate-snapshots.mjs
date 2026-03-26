@@ -2,16 +2,12 @@
 
 import {
   captureSnapshot,
-  createSnapshotRuntime,
-  createBrowser,
-  isServerReachable,
+  createSnapshotScriptSession,
   loadRegistry,
   parseCliArgs,
   resolveWorkspacePath,
   selectSnapshotTargets,
   shouldUpdateTarget,
-  startDevServer,
-  waitForServer,
 } from "./page-snapshot-lib.mjs";
 
 async function main() {
@@ -23,25 +19,15 @@ async function main() {
     process.exit(1);
   }
 
-  let devServer = null;
-  const snapshotRuntime = await createSnapshotRuntime();
-  const serverReachable = await isServerReachable(options.baseUrl);
-  if (snapshotRuntime.requiresManagedServer && serverReachable) {
-    throw new Error(
+  const session = await createSnapshotScriptSession({
+    baseUrl: options.baseUrl,
+    timeoutMs: options.timeoutMs,
+    headed: options.headed,
+    useSnapshotFixtures: true,
+    managedServerConflictMessage:
       `Snapshot fixtures require an isolated dev server, but ${options.baseUrl} is already in use. ` +
-      "Stop the existing server or disable fixtures before generating snapshots."
-    );
-  }
-  const serverAlreadyRunning = snapshotRuntime.requiresManagedServer
-    ? false
-    : serverReachable;
-  if (!serverAlreadyRunning) {
-    console.log(`Starting dev server at ${options.baseUrl}...`);
-    devServer = startDevServer(options.baseUrl, snapshotRuntime.env);
-    await waitForServer(options.baseUrl, options.timeoutMs, devServer.getLogs);
-  }
-
-  const browser = await createBrowser(options.headed);
+      "Stop the existing server or disable fixtures before generating snapshots.",
+  });
 
   let generated = 0;
   let skipped = 0;
@@ -49,10 +35,7 @@ async function main() {
   try {
     for (const target of registry) {
       const snapshotPath = resolveWorkspacePath(target.snapshotFile);
-      const context = await browser.newContext({
-        viewport: { width: 1440, height: 960 },
-      });
-      const page = await context.newPage();
+      const { context, page } = await session.createPageSession();
 
       try {
         if (!options.update && !shouldUpdateTarget(target)) {
@@ -82,11 +65,7 @@ async function main() {
       }
     }
   } finally {
-    await browser.close();
-    if (devServer) {
-      devServer.child.kill("SIGTERM");
-    }
-    snapshotRuntime.cleanup();
+    await session.close();
   }
 
   console.log(`\nGenerated ${generated} snapshots, skipped ${skipped}.`);

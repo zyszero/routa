@@ -5,12 +5,9 @@ import path from "node:path";
 
 import {
   captureSnapshot,
-  createBrowser,
-  isServerReachable,
-  loadRegistry,
+  createSnapshotScriptSession,
+  getSnapshotTargetsByIds,
   resolveWorkspacePath,
-  startDevServer,
-  waitForServer,
 } from "./page-snapshot-lib.mjs";
 
 const ACCESSIBILITY_PAGE_IDS = ["workspace", "kanban", "traces", "session-detail"];
@@ -36,14 +33,7 @@ function extractAccessibilitySignature(content) {
 }
 
 function getTargets() {
-  const registry = loadRegistry();
-  return ACCESSIBILITY_PAGE_IDS.map((id) => {
-    const target = registry.find((entry) => entry.id === id);
-    if (!target) {
-      throw new Error(`Missing page snapshot registry entry for "${id}"`);
-    }
-    return target;
-  });
+  return getSnapshotTargetsByIds(ACCESSIBILITY_PAGE_IDS);
 }
 
 async function collectAccessibilityIssues(page, targetId) {
@@ -132,18 +122,11 @@ async function collectAccessibilityIssues(page, targetId) {
 
 async function main() {
   const targets = getTargets();
-
-  let devServer = null;
-  if (!(await isServerReachable(BASE_URL))) {
-    devServer = startDevServer(BASE_URL);
-    await waitForServer(BASE_URL, TIMEOUT_MS, devServer.getLogs);
-  }
-
-  const browser = await createBrowser(false);
-  const context = await browser.newContext({
-    viewport: { width: 1440, height: 960 },
+  const session = await createSnapshotScriptSession({
+    baseUrl: BASE_URL,
+    timeoutMs: TIMEOUT_MS,
   });
-  const page = await context.newPage();
+  const { context, page } = await session.createPageSession();
 
   let failed = false;
 
@@ -191,10 +174,7 @@ async function main() {
   } finally {
     await page.close();
     await context.close();
-    await browser.close();
-    if (devServer) {
-      devServer.child.kill("SIGTERM");
-    }
+    await session.close();
   }
 
   if (failed) {

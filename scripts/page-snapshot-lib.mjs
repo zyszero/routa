@@ -27,6 +27,16 @@ export function loadRegistry() {
   return entries;
 }
 
+export function getSnapshotTargetsByIds(ids, registry = loadRegistry()) {
+  return ids.map((id) => {
+    const target = registry.find((entry) => entry.id === id);
+    if (!target) {
+      throw new Error(`Missing page snapshot registry entry for "${id}"`);
+    }
+    return target;
+  });
+}
+
 export function parseCliArgs(argv) {
   const options = {
     page: null,
@@ -138,6 +148,61 @@ export async function createSnapshotRuntime() {
     requiresManagedServer: true,
     env: fixtureRuntime.env,
     cleanup: fixtureRuntime.cleanup,
+  };
+}
+
+export async function createSnapshotScriptSession({
+  baseUrl,
+  timeoutMs,
+  headed = false,
+  viewport = { width: 1440, height: 960 },
+  useSnapshotFixtures = false,
+  managedServerConflictMessage,
+  extraEnv = {},
+}) {
+  let devServer = null;
+  let snapshotRuntime = {
+    requiresManagedServer: false,
+    env: {},
+    cleanup: () => {},
+  };
+
+  const serverReachable = await isServerReachable(baseUrl);
+  if (useSnapshotFixtures) {
+    snapshotRuntime = await createSnapshotRuntime();
+    if (snapshotRuntime.requiresManagedServer && serverReachable) {
+      throw new Error(
+        managedServerConflictMessage ??
+          `Snapshot fixtures require an isolated dev server, but ${baseUrl} is already in use.`,
+      );
+    }
+  }
+
+  const mustStartManagedServer = useSnapshotFixtures && snapshotRuntime.requiresManagedServer;
+  if (mustStartManagedServer || !serverReachable) {
+    devServer = startDevServer(baseUrl, {
+      ...snapshotRuntime.env,
+      ...extraEnv,
+    });
+    await waitForServer(baseUrl, timeoutMs, devServer.getLogs);
+  }
+
+  const browser = await createBrowser(headed);
+
+  return {
+    browser,
+    async createPageSession() {
+      const context = await browser.newContext({ viewport });
+      const page = await context.newPage();
+      return { context, page };
+    },
+    async close() {
+      await browser.close();
+      if (devServer) {
+        devServer.child.kill("SIGTERM");
+      }
+      snapshotRuntime.cleanup();
+    },
   };
 }
 

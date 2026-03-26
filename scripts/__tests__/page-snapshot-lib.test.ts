@@ -1,11 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { captureSnapshot, parseCliArgs } from "../page-snapshot-lib.mjs";
+import { captureSnapshot, getSnapshotTargetsByIds, parseCliArgs } from "../page-snapshot-lib.mjs";
 
 describe("page-snapshot-lib", () => {
   it("parses --page in both supported CLI forms", () => {
     expect(parseCliArgs(["--page=workspace"]).page).toBe("workspace");
     expect(parseCliArgs(["--page", "kanban"]).page).toBe("kanban");
+  });
+
+  it("resolves configured targets by id", () => {
+    expect(
+      getSnapshotTargetsByIds(["home", "kanban"], [
+        { id: "home", route: "/" },
+        { id: "kanban", route: "/workspace/default/kanban" },
+      ]),
+    ).toEqual([
+      { id: "home", route: "/" },
+      { id: "kanban", route: "/workspace/default/kanban" },
+    ]);
   });
 
   it("waits for a configured snapshot selector before taking the aria snapshot", async () => {
