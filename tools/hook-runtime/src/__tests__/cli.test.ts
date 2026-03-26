@@ -5,6 +5,7 @@ import { formatReviewPhaseLabel, handleCliError, parseArgs } from "../cli.js";
 describe("handleCliError", () => {
   const originalOutputMode = process.env.ROUTA_HOOK_RUNTIME_OUTPUT_MODE;
   const originalMetrics = process.env.ROUTA_HOOK_RUNTIME_METRICS;
+  const originalProfile = process.env.ROUTA_HOOK_RUNTIME_PROFILE;
 
   afterEach(() => {
     process.exitCode = undefined;
@@ -17,6 +18,11 @@ describe("handleCliError", () => {
       delete process.env.ROUTA_HOOK_RUNTIME_METRICS;
     } else {
       process.env.ROUTA_HOOK_RUNTIME_METRICS = originalMetrics;
+    }
+    if (originalProfile === undefined) {
+      delete process.env.ROUTA_HOOK_RUNTIME_PROFILE;
+    } else {
+      process.env.ROUTA_HOOK_RUNTIME_PROFILE = originalProfile;
     }
     vi.restoreAllMocks();
   });
@@ -42,6 +48,40 @@ describe("handleCliError", () => {
 });
 
 describe("parseArgs", () => {
+  it("defaults profile and metrics from pre-push profile by default", () => {
+    const options = parseArgs([]);
+    expect(options.profile).toBe("pre-push");
+    expect(options.profilePhases).toEqual(["submodule", "fitness", "review"]);
+    expect(options.metricNames).toEqual([
+      "eslint_pass",
+      "ts_typecheck_pass",
+      "ts_test_pass",
+      "clippy_pass",
+      "rust_test_pass",
+    ]);
+  });
+
+  it("defaults profile and metrics for pre-commit", () => {
+    const options = parseArgs(["--profile", "pre-commit"]);
+    expect(options.profile).toBe("pre-commit");
+    expect(options.profilePhases).toEqual(["fitness"]);
+    expect(options.metricNames).toEqual(["eslint_pass"]);
+  });
+
+  it("uses profile name from environment when no explicit argument is given", () => {
+    process.env.ROUTA_HOOK_RUNTIME_PROFILE = "local-validate";
+    const options = parseArgs([]);
+    expect(options.profile).toBe("local-validate");
+    expect(options.profilePhases).toEqual(["fitness", "review"]);
+  });
+
+  it("lets explicit --metrics override profile fallback metrics", () => {
+    const options = parseArgs(["--profile", "pre-commit", "--metrics", "clippy_pass,rust_test_pass"]);
+
+    expect(options.profile).toBe("pre-commit");
+    expect(options.metricNames).toEqual(["clippy_pass", "rust_test_pass"]);
+  });
+
   it("uses metric names from environment by default", () => {
     process.env.ROUTA_HOOK_RUNTIME_METRICS = "eslint_pass,ts_test_pass";
 

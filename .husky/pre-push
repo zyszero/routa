@@ -8,4 +8,4 @@ if [ -n "$SKIP_HOOKS" ]; then
 fi
 
 # Run hook runtime directly for full pre-push checks.
-node --import tsx tools/hook-runtime/src/cli.ts "$@"
+node --import tsx tools/hook-runtime/src/cli.ts --profile pre-push "$@"
