@@ -10,15 +10,22 @@ import { ConnectionDot, OnboardingCard } from "@/client/components/home-page-sec
 import { useAcp } from "@/client/hooks/use-acp";
 import { useCodebases, useWorkspaces } from "@/client/hooks/use-workspaces";
 import { NotificationBell, NotificationProvider } from "@/client/components/notification-center";
-import { SettingsPanel, loadDefaultProviders, loadProviderConnections } from "@/client/components/settings-panel";
+import {
+  SettingsPanel,
+  loadDefaultProviders,
+  loadDockerOpencodeAuthJson,
+  loadProviderConnections,
+} from "@/client/components/settings-panel";
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
 import {
+  clearOnboardingState,
   ONBOARDING_COMPLETED_KEY,
   ONBOARDING_MODE_KEY,
   hasSavedProviderConfiguration,
   parseOnboardingMode,
   type OnboardingMode,
 } from "@/client/utils/onboarding";
+import { loadCustomAcpProviders } from "@/client/utils/custom-acp-providers";
 import { useTranslation } from "@/i18n";
 
 export default function HomePage() {
@@ -103,6 +110,16 @@ export default function HomePage() {
     }
   }, []);
 
+  const handleResetOnboarding = useCallback(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    clearOnboardingState(window.localStorage);
+    setOnboardingCompleted(false);
+    setPreferredMode(null);
+  }, []);
+
   const handleAddCodebase = useCallback(async (selection: RepoSelection) => {
     if (!activeWorkspaceId) {
       return false;
@@ -131,8 +148,10 @@ export default function HomePage() {
   const hasWorkspace = workspaceCount > 0;
   const hasCodebase = codebases.length > 0;
   const hasProviderConfig =
-    hasSavedProviderConfiguration(loadDefaultProviders(), loadProviderConnections()) ||
-    acp.providers.some((provider) => provider.status === "available");
+    hasSavedProviderConfiguration(loadDefaultProviders(), loadProviderConnections(), {
+      dockerOpencodeAuthJson: loadDockerOpencodeAuthJson(),
+      customProviderCount: loadCustomAcpProviders().length,
+    });
   const needsInlineOnboarding =
     hasWorkspace &&
     (!hasProviderConfig || !hasCodebase || preferredMode === null) &&
@@ -282,6 +301,7 @@ export default function HomePage() {
                     <HomeInput
                       variant="hero"
                       workspaceId={activeWorkspaceId ?? undefined}
+                      defaultAgentRole={preferredMode ?? "ROUTA"}
                       onWorkspaceChange={(workspaceId) => {
                         setActiveWorkspaceId(workspaceId);
                       }}
@@ -320,6 +340,7 @@ export default function HomePage() {
           onClose={() => setShowSettingsPanel(false)}
           providers={acp.providers}
           initialTab={settingsInitialTab}
+          onResetOnboarding={handleResetOnboarding}
         />
 
         {showWorkspacesMenu && (

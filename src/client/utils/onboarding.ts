@@ -17,6 +17,10 @@ export function parseOnboardingMode(value: string | null): OnboardingMode | null
 export function hasSavedProviderConfiguration(
   defaults: DefaultProviderSettings,
   connections: ProviderConnectionsStorage,
+  options?: {
+    dockerOpencodeAuthJson?: string;
+    customProviderCount?: number;
+  },
 ): boolean {
   for (const config of Object.values(defaults)) {
     if (config?.provider || config?.model) {
@@ -30,5 +34,18 @@ export function hasSavedProviderConfiguration(
     }
   }
 
+  if (options?.dockerOpencodeAuthJson?.trim()) {
+    return true;
+  }
+
+  if ((options?.customProviderCount ?? 0) > 0) {
+    return true;
+  }
+
   return false;
+}
+
+export function clearOnboardingState(storage: Storage): void {
+  storage.removeItem(ONBOARDING_COMPLETED_KEY);
+  storage.removeItem(ONBOARDING_MODE_KEY);
 }

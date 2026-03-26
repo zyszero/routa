@@ -25,6 +25,10 @@ import { ModelsTab } from "./settings-panel-models-tab";
 import { McpServersTab } from "./settings-panel-mcp-tab";
 import { SpecialistsTab } from "./settings-panel-specialists-tab";
 import { LanguageSwitcher } from "./language-switcher";
+import {
+  clearOnboardingState,
+  ONBOARDING_COMPLETED_KEY,
+} from "../utils/onboarding";
 import { useTranslation } from "@/i18n";
 import {
   AGENT_ROLES,
@@ -65,6 +69,52 @@ export type {
   ProviderConnectionsStorage,
   SettingsPanelProps,
 } from "./settings-panel-shared";
+
+function OnboardingSettingsSection({ onResetOnboarding }: { onResetOnboarding?: () => void }) {
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    return window.localStorage.getItem(ONBOARDING_COMPLETED_KEY) === "true";
+  });
+
+  const handleReset = useCallback(() => {
+    if (typeof window !== "undefined") {
+      clearOnboardingState(window.localStorage);
+    }
+    setHasCompletedOnboarding(false);
+    onResetOnboarding?.();
+  }, [onResetOnboarding]);
+
+  return (
+    <div className={settingsCardCls}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className={sectionHeadCls}>Onboarding</p>
+          <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
+            Reopen the home-page setup checklist if you want to walk through workspace setup again.
+          </p>
+        </div>
+        <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${
+          hasCompletedOnboarding
+            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/12 dark:text-emerald-300"
+            : "bg-amber-100 text-amber-700 dark:bg-amber-500/12 dark:text-amber-300"
+        }`}>
+          {hasCompletedOnboarding ? "completed" : "available"}
+        </span>
+      </div>
+      <div className="mt-3 flex justify-start">
+        <button
+          type="button"
+          onClick={handleReset}
+          className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+        >
+          Show onboarding again
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ─── System Info Footer ─────────────────────────────────────────────────────
 function SystemInfoFooter() {
@@ -788,12 +838,12 @@ function DockerConfigModalContent({ open: _open, errorMessage, onClose, onSaved 
 }
 
 // ─── Main Settings Panel ───────────────────────────────────────────────────
-export function SettingsPanel({ open, onClose, providers, initialTab }: SettingsPanelProps) {
+export function SettingsPanel({ open, onClose, providers, initialTab, onResetOnboarding }: SettingsPanelProps) {
   if (!open) return null;
-  return <SettingsPanelContent onClose={onClose} providers={providers} initialTab={initialTab} />;
+  return <SettingsPanelContent onClose={onClose} providers={providers} initialTab={initialTab} onResetOnboarding={onResetOnboarding} />;
 }
 
-function SettingsPanelContent({ onClose, providers, initialTab }: Omit<SettingsPanelProps, "open">) {
+function SettingsPanelContent({ onClose, providers, initialTab, onResetOnboarding }: Omit<SettingsPanelProps, "open">) {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<DefaultProviderSettings>(() => loadDefaultProviders());
   const [modelDefs, setModelDefs] = useState<ModelDefinition[]>(() => loadModelDefinitions());
@@ -930,6 +980,8 @@ function SettingsPanelContent({ onClose, providers, initialTab }: Omit<SettingsP
                   Manage detected ACP providers, install additional agents, hide noisy entries, and configure provider-specific credentials.
                 </p>
               </div>
+
+              <OnboardingSettingsSection onResetOnboarding={onResetOnboarding} />
 
               <ProviderCatalogSection allProviders={providers} />
 

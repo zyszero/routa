@@ -155,6 +155,7 @@ export interface SettingsPanelProps {
   onClose: () => void;
   providers: ProviderOption[];
   initialTab?: SettingsTab;
+  onResetOnboarding?: () => void;
 }
 
 export type SettingsTab =

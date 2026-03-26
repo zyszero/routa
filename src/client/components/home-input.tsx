@@ -21,7 +21,7 @@ import { storePendingPrompt } from "../utils/pending-prompt";
 import { loadProviderConnectionConfig, getModelDefinitionByAlias, DockerConfigModal } from "./settings-panel";
 import { desktopAwareFetch } from "../utils/diagnostics";
 
-type AgentRole = "ROUTA" | "DEVELOPER";
+type AgentRole = "ROUTA" | "CRAFTER" | "DEVELOPER";
 
 interface SpecialistSummary {
   id: string;
@@ -50,6 +50,8 @@ interface HomeInputProps {
   lockedSpecialistId?: string;
   /** Override the destination route after session creation */
   buildSessionUrl?: (workspaceId: string | null, sessionId: string) => string;
+  /** Default built-in role to preselect on load */
+  defaultAgentRole?: Extract<AgentRole, "ROUTA" | "CRAFTER">;
   /** When true, block session creation until a repository is explicitly selected */
   requireRepoSelection?: boolean;
   /** Externally triggered skill (e.g. from grid card click) */
@@ -70,6 +72,7 @@ export function HomeInput({
   onSessionCreated,
   lockedSpecialistId,
   buildSessionUrl,
+  defaultAgentRole = "ROUTA",
   requireRepoSelection = false,
   externalPendingSkill,
   onExternalSkillConsumed,
@@ -84,7 +87,7 @@ export function HomeInput({
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(propWorkspaceId ?? null);
   const { codebases } = useCodebases(selectedWorkspaceId ?? "");
 
-  const [selectedRole, setSelectedRole] = useState<AgentRole>("ROUTA");
+  const [selectedRole, setSelectedRole] = useState<AgentRole>(defaultAgentRole);
   const [repoSelection, setRepoSelection] = useState<RepoSelection | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
@@ -113,6 +116,10 @@ export function HomeInput({
       setSelectedSpecialistId(lockedSpecialistId);
     }
   }, [lockedSpecialistId]);
+
+  useEffect(() => {
+    setSelectedRole(defaultAgentRole);
+  }, [defaultAgentRole]);
 
   // Auto-select first workspace if none selected
   useEffect(() => {
@@ -397,17 +404,17 @@ export function HomeInput({
                     </svg>
                     Multi-Agent
                   </button>
-                  <button type="button" onClick={() => setSelectedRole("DEVELOPER")}
-                    title="Single-agent direct coding — best for focused, simple tasks (Developer)"
+                  <button type="button" onClick={() => setSelectedRole("CRAFTER")}
+                    title="Single-agent implementation — best for focused coding tasks (Crafter)"
                     className={`flex items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-xs font-medium transition-all ${
-                      selectedRole === "DEVELOPER"
+                      selectedRole === "CRAFTER"
                         ? "bg-amber-500 text-white shadow-[0_14px_26px_-18px_rgba(245,158,11,0.65)] dark:bg-amber-500 dark:text-white"
                         : "text-slate-500 hover:bg-amber-50/70 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-300"
                     }`}>
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={selectedRole === "DEVELOPER" ? 2.5 : 2}>
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={selectedRole === "CRAFTER" ? 2.5 : 2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
                     </svg>
-                    Direct
+                    Crafter
                   </button>
                 </div>
 
