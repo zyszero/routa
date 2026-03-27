@@ -1,16 +1,21 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useRouter } from "next/navigation";
 
 import { DesktopAppShell } from "./desktop-app-shell";
+import { SettingsCenterNav } from "./settings-center-nav";
 
 interface SettingsRouteShellProps {
   title: string;
   description: string;
   children: ReactNode;
+  route: string;
 }
 
-export function SettingsRouteShell({ title, description, children }: SettingsRouteShellProps) {
+export function SettingsRouteShell({ title, description, children, route }: SettingsRouteShellProps) {
+  const router = useRouter();
+
   return (
     <DesktopAppShell
       workspaceSwitcher={(
@@ -22,13 +27,17 @@ export function SettingsRouteShell({ title, description, children }: SettingsRou
         </div>
       )}
     >
-      <div className="flex h-full min-h-0 flex-col bg-desktop-bg-primary">
-        <header className="border-b border-desktop-border px-6 py-5">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-desktop-text-tertiary">Workspace Tools</p>
-          <h1 className="mt-2 text-2xl font-semibold text-desktop-text-primary">{title}</h1>
-          <p className="mt-1 max-w-2xl text-sm text-desktop-text-secondary">{description}</p>
-        </header>
-        <main className="flex-1 min-h-0 overflow-hidden">{children}</main>
+      <div className="flex h-full min-h-0 bg-desktop-bg-primary text-desktop-text-primary">
+        <SettingsCenterNav activeRoute={route} onBack={() => router.push("/")} />
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="border-b border-desktop-border px-8 py-8">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-desktop-text-tertiary">Workspace Tools</p>
+            <h1 className="mt-2 text-3xl font-semibold text-desktop-text-primary">{title}</h1>
+            <p className="mt-2 max-w-2xl text-sm text-desktop-text-secondary">{description}</p>
+          </header>
+          <main className="flex-1 min-h-0 overflow-hidden">{children}</main>
+        </div>
       </div>
     </DesktopAppShell>
   );

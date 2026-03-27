@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useId } from "react";
 import { desktopAwareFetch } from "../utils/diagnostics";
 import { GitHubWebhookPanel } from "./github-webhook-panel";
 import { AgentInstallPanel } from "./agent-install-panel";
+import { SettingsCenterNav } from "./settings-center-nav";
 import {
   loadCustomAcpProviders,
   saveCustomAcpProviders,
@@ -861,11 +862,6 @@ function SettingsPanelContent({ onClose, providers, initialTab, onResetOnboardin
     { key: "webhooks", label: t.settings.webhooks },
   ];
 
-  const TAB_GROUPS: Array<{ label: string; tabs: typeof TAB_DEFS }> = [
-    { label: "General", tabs: [TAB_DEFS[0], TAB_DEFS[1]] },
-    { label: "Advanced", tabs: [TAB_DEFS[2], TAB_DEFS[3]] },
-  ];
-
   const activeTabMeta = TAB_DEFS.find((tab) => tab.key === activeTab) ?? TAB_DEFS[0];
 
   const renderTabContent = () => (
@@ -920,47 +916,7 @@ function SettingsPanelContent({ onClose, providers, initialTab, onResetOnboardin
   if (isPageVariant) {
     return (
       <div className="flex h-full min-h-0 bg-desktop-bg-primary text-desktop-text-primary">
-        <aside className="flex w-64 shrink-0 flex-col border-r border-desktop-border bg-desktop-bg-secondary px-4 py-5">
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex items-center gap-2 rounded-lg px-2 py-2 text-sm text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-            </svg>
-            <span>Back to app</span>
-          </button>
-
-          <div className="mt-8 space-y-6">
-            {TAB_GROUPS.map((group) => (
-              <div key={group.label}>
-                <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-desktop-text-tertiary">
-                  {group.label}
-                </p>
-                <div className="mt-2 space-y-1">
-                  {group.tabs.map((tab) => {
-                    const active = activeTab === tab.key;
-                    return (
-                      <button
-                        key={tab.key}
-                        type="button"
-                        onClick={() => handleTabChange(tab.key)}
-                        className={`flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition-colors ${
-                          active
-                            ? "bg-desktop-bg-active text-desktop-accent"
-                            : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
-                        }`}
-                      >
-                        {tab.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        </aside>
+        <SettingsCenterNav onBack={onClose} activeConfigTab={activeTab} activeRoute="/settings" />
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="border-b border-desktop-border px-8 py-8">
