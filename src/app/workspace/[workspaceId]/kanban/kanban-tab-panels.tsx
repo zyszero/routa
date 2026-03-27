@@ -451,6 +451,7 @@ function A2ASessionPane({
   sessions,
   specialists,
   specialistLanguage,
+  refreshSignal,
   currentSessionId,
   onSelectSession,
   onCloseSession,
@@ -460,6 +461,7 @@ function A2ASessionPane({
   sessions: SessionInfo[];
   specialists: SpecialistOption[];
   specialistLanguage: KanbanSpecialistLanguage;
+  refreshSignal?: number;
   currentSessionId?: string;
   onSelectSession: (sessionId: string) => void;
   onCloseSession: () => void;
@@ -516,6 +518,7 @@ function A2ASessionPane({
           </section>
           <KanbanCardActivityPanel
             task={task}
+            refreshSignal={refreshSignal}
             sessions={sessions}
             specialists={specialists}
             specialistLanguage={specialistLanguage}
@@ -719,6 +722,7 @@ export function KanbanTaskDetailOverlay({
                     sessions={combinedSessions}
                     specialists={specialists}
                     specialistLanguage={specialistLanguage}
+                    refreshSignal={refreshSignal}
                     currentSessionId={activeSessionId ?? undefined}
                     onSelectSession={(sessionId) => selectTaskSession(activeTask, sessionId)}
                     onCloseSession={closeTaskDetail}

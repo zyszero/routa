@@ -176,7 +176,7 @@ export function KanbanCardDetail({
     return primaryCodebase?.repoPath ?? null;
   };
 
-  const sessionCwdMismatch = sessionInfo && task.triggerSessionId ? (() => {
+  const sessionCwdMismatch = sessionInfo && activeRunSessionId ? (() => {
     const taskRepoPath = getTaskRepositoryPath();
     if (!taskRepoPath) return false;
     return sessionInfo.cwd !== taskRepoPath;
@@ -192,6 +192,8 @@ export function KanbanCardDetail({
   );
   const canonicalStory = useMemo(() => parseCanonicalStory(task.objective ?? ""), [task.objective]);
   const orderedSessionIds = useMemo(() => getOrderedSessionIds(task), [task]);
+  const activeRunSessionId = task.triggerSessionId
+    ?? (orderedSessionIds.length > 0 ? orderedSessionIds[orderedSessionIds.length - 1] : undefined);
   const splitMode = !fullWidth;
   const compactMode = splitMode;
 
@@ -382,7 +384,7 @@ export function KanbanCardDetail({
               sessions={sessions ?? []}
               specialists={specialists}
               specialistLanguage={specialistLanguage}
-              currentSessionId={task.triggerSessionId}
+              currentSessionId={activeRunSessionId}
               onSelectSession={onSelectSession}
               compact={compactMode}
             />
@@ -608,8 +610,10 @@ function ExecutionSection({
   const cardSpecialist = getSpecialistName(task.assignedSpecialistId, task.assignedSpecialistName, specialists);
   const effectiveRunTarget = formatEffectiveAutomationTarget(effectiveAutomation, availableProviders, specialists);
   const failureMessage = getPromptFailureMessage(task, sessionInfo);
-  const activeLaneSession = task.triggerSessionId
-    ? task.laneSessions?.find((entry) => entry.sessionId === task.triggerSessionId)
+  const activeRunSessionId = task.triggerSessionId
+    ?? (task.laneSessions && task.laneSessions.length > 0 ? task.laneSessions[task.laneSessions.length - 1]?.sessionId : undefined);
+  const activeLaneSession = activeRunSessionId
+    ? task.laneSessions?.find((entry) => entry.sessionId === activeRunSessionId)
     : undefined;
   const failedRunLabel = activeLaneSession?.transport === "a2a" || effectiveAutomation.transport === "a2a"
     ? "current A2A run"
@@ -763,7 +767,7 @@ function ExecutionSection({
       </details>
       {canRunTask && (
         <div className={`mt-2 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-900/40 dark:bg-sky-900/10 dark:text-sky-200 ${compact ? "leading-[1.125rem]" : "leading-[1.2rem]"}`}>
-          Manual {task.triggerSessionId ? "reruns" : "runs"} use {effectiveAutomation.source === "card" ? "this card override" : "the current lane default"}:
+          Manual {hasRecordedRuns ? "reruns" : "runs"} use {effectiveAutomation.source === "card" ? "this card override" : "the current lane default"}:
           {" "}
           {effectiveRunTarget}
         </div>
@@ -809,7 +813,7 @@ function ExecutionSection({
             data-testid="kanban-detail-run"
             className={`rounded-xl bg-emerald-500 px-4 text-sm font-medium text-white transition-colors hover:bg-emerald-600 ${hasCardOverride ? "ml-auto" : ""} ${compact ? "py-2" : "py-2.5"}`}
           >
-            {task.triggerSessionId ? "Rerun" : "Run"}
+            {hasRecordedRuns ? "Rerun" : "Run"}
           </button>
         )}
       </div>
@@ -939,13 +943,13 @@ function RepositoriesWorktreeRow({
               </div>
               {sessionCwdMismatch && (
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {task.triggerSessionId && onSelectSession && (
+                  {(sessionInfo?.sessionId ?? task.triggerSessionId) && onSelectSession && (
                     <button
                       type="button"
-                      onClick={() => onSelectSession(task.triggerSessionId!)}
+                      onClick={() => onSelectSession((sessionInfo?.sessionId ?? task.triggerSessionId)!)}
                       className="rounded-xl border border-amber-200 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:border-amber-300 hover:bg-amber-100 dark:border-amber-900/50 dark:bg-[#121620] dark:text-amber-300 dark:hover:bg-amber-900/20"
                     >
-                      Open active session
+                      Open selected run
                     </button>
                   )}
                   {canAdoptSessionRepo && sessionRepoCodebase && (
