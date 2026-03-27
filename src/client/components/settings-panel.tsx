@@ -243,7 +243,7 @@ function RolesTab({
                   </optgroup>
                 )}
                 {registryProviders.length > 0 && (
-                  <optgroup label="ACP Registry">
+                  <optgroup label="Agent 注册中心（ACP）">
                     {registryProviders.map((provider) => (
                       <option
                         key={provider.id}
@@ -494,7 +494,7 @@ function ProviderCatalogSection({ allProviders }: ProviderCatalogSectionProps) {
       <div>
         <p className={sectionHeadCls}>Provider Catalog</p>
         <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-3">
-          Built-in, ACP Registry, and custom providers are listed together here. Hide a provider to remove it from app pickers without deleting its configuration.
+          Built-in, Agent 注册中心（ACP）, and custom providers are listed together here. Hide a provider to remove it from app pickers without deleting its configuration.
         </p>
       </div>
 
@@ -857,6 +857,7 @@ function SettingsPanelContent({ onClose, providers, initialTab, onResetOnboardin
 
   const TAB_DEFS: { key: SettingsTab; label: string }[] = [
     { key: "providers", label: t.settings.providers },
+    { key: "registry", label: t.settings.registry },
     { key: "roles", label: t.settings.roles },
     { key: "models", label: t.settings.models },
     { key: "webhooks", label: t.settings.webhooks },
@@ -885,12 +886,15 @@ function SettingsPanelContent({ onClose, providers, initialTab, onResetOnboardin
           </div>
 
           <CustomAcpProvidersSection />
-
+        </div>
+      )}
+      {activeTab === "registry" && (
+        <div className="px-4 py-4 overflow-y-auto h-full">
           <div className={settingsCardCls}>
             <div className="mb-3">
-              <p className={sectionHeadCls}>ACP Registry</p>
+              <p className={sectionHeadCls}>{t.settings.registry}</p>
               <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
-                Browse and install ACP agents from the registry.
+                {t.settings.registryDesc}
               </p>
             </div>
             <AgentInstallPanel embedded={true} />
@@ -920,13 +924,14 @@ function SettingsPanelContent({ onClose, providers, initialTab, onResetOnboardin
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="border-b border-desktop-border px-8 py-8">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-desktop-text-tertiary">Preferences</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-desktop-text-tertiary">{t.settings.preferences}</p>
             <h1 className="mt-2 text-3xl font-semibold text-desktop-text-primary">{activeTabMeta.label}</h1>
             <p className="mt-2 max-w-2xl text-sm text-desktop-text-secondary">
-              {activeTab === "providers" && "Configure providers, credentials, onboarding, and agent installation defaults."}
-              {activeTab === "roles" && "Set default provider and model behavior for each built-in Routa role."}
-              {activeTab === "models" && "Manage custom model aliases, base URLs, and shared model definitions."}
-              {activeTab === "webhooks" && "Review GitHub webhook triggers and development-oriented automation hooks."}
+              {activeTab === "providers" && t.settings.providersDesc}
+              {activeTab === "registry" && t.settings.registryDesc}
+              {activeTab === "roles" && t.settings.rolesDesc}
+              {activeTab === "models" && t.settings.modelsDesc}
+              {activeTab === "webhooks" && t.settings.webhooksDesc}
             </p>
           </header>
 

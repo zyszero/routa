@@ -73,6 +73,13 @@ const en: TranslationDictionary = {
 
   settings: {
     title: "Settings",
+    preferences: "Preferences",
+    config: "Config",
+    backToApp: "Back to app",
+    workspaceTools: "Workspace Tools",
+    standaloneTool: "Standalone tool",
+    focusedConfigDescription:
+      "Use this page for focused configuration without mixing it back into the main Config screen.",
     theme: "Theme",
     light: "Light",
     dark: "Dark",
@@ -88,11 +95,18 @@ const en: TranslationDictionary = {
     roleDefaults: "Role Defaults",
     roleDefaultsDesc:
       "Configure default provider and model override per Routa role. ROUTA-specific settings live here instead of the Providers tab.",
+    providersDesc:
+      "Configure providers, credentials, onboarding, and agent installation defaults.",
+    registryDesc:
+      "Browse Agent Registry (ACP) entries and install or remove agents independently from provider configuration.",
+    rolesDesc: "Set default provider and model behavior for each built-in Routa role.",
+    modelsDesc: "Manage custom model aliases, base URLs, and shared model definitions.",
+    webhooksDesc: "Review GitHub webhook triggers and development-oriented automation hooks.",
     provider: "Provider",
     modelOverride: "Model Override",
     builtIn: "Built-in",
     custom: "Custom",
-    registry: "Registry",
+    registry: "Agent Registry (ACP)",
     systemInfo: "System Info",
     memory: "Memory",
     sessions: "Sessions",

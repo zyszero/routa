@@ -302,7 +302,7 @@ export function AgentInstallPanel({ embedded = false }: AgentInstallPanelProps) 
           <div className="flex items-center gap-2">
             {!embedded && <AgentIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />}
             <h2 className={`${embedded ? "text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" : "text-base font-semibold text-slate-900 dark:text-slate-100"}`}>
-              ACP Registry
+              Agent 注册中心（ACP）
             </h2>
             {agents.length > 0 && (
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 dark:bg-slate-800">

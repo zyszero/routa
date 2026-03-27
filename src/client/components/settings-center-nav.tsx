@@ -1,39 +1,30 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslation } from "@/i18n";
 
 import type { SettingsTab } from "./settings-panel-shared";
 
 interface SettingsCenterNavProps {
   activeConfigTab?: SettingsTab;
-  onBack: () => void;
 }
 
-const CONFIG_ITEMS: Array<{ key: SettingsTab; label: string; href: string }> = [
-  { key: "providers", label: "Providers", href: "/settings?tab=providers" },
-  { key: "roles", label: "Roles", href: "/settings?tab=roles" },
-  { key: "models", label: "Models", href: "/settings?tab=models" },
-  { key: "webhooks", label: "Webhooks", href: "/settings?tab=webhooks" },
-];
+export function SettingsCenterNav({ activeConfigTab }: SettingsCenterNavProps) {
+  const { t } = useTranslation();
+  const configItems: Array<{ key: SettingsTab; label: string; href: string }> = [
+    { key: "providers", label: t.settings.providers, href: "/settings?tab=providers" },
+    { key: "registry", label: t.settings.registry, href: "/settings?tab=registry" },
+    { key: "roles", label: t.settings.roleDefaults, href: "/settings?tab=roles" },
+    { key: "models", label: t.settings.models, href: "/settings?tab=models" },
+    { key: "webhooks", label: t.settings.webhooks, href: "/settings?tab=webhooks" },
+  ];
 
-export function SettingsCenterNav({ activeConfigTab, onBack }: SettingsCenterNavProps) {
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-desktop-border bg-desktop-bg-secondary px-4 py-5">
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex items-center gap-2 rounded-lg px-2 py-2 text-sm text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
-      >
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-        </svg>
-        <span>Back to app</span>
-      </button>
-
-      <div className="mt-8 space-y-6">
+      <div className="mt-4 space-y-6">
         <NavGroup
-          label="Config"
-          items={CONFIG_ITEMS.map((item) => ({
+          label={t.settings.config}
+          items={configItems.map((item) => ({
             ...item,
             active: activeConfigTab === item.key,
           }))}

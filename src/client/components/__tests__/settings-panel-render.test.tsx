@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { desktopAwareFetch } = vi.hoisted(() => ({
@@ -108,68 +108,29 @@ describe("SettingsPanel render", () => {
     });
   });
 
-  it("renders the specialists tab through the extracted component", async () => {
-    desktopAwareFetch.mockImplementation(async (url: string) => {
-      if (url.startsWith("/api/memory")) {
-        return {
-          ok: true,
-          json: async () => ({
-            current: {
-              heapUsedMB: 10,
-              heapTotalMB: 20,
-              externalMB: 1,
-              rssMB: 30,
-              arrayBuffersMB: 1,
-              usagePercentage: 50,
-              level: "normal",
-              timestamp: new Date().toISOString(),
-            },
-            peaks: { heapUsedMB: 10, rssMB: 30 },
-            growthRateMBPerMinute: 0,
-            sessionStore: {
-              sessionCount: 1,
-              activeSseCount: 0,
-              streamingCount: 0,
-              totalHistoryMessages: 0,
-              totalPendingNotifications: 0,
-              staleSessionCount: 0,
-            },
-            recommendations: [],
-          }),
-        };
-      }
-      return {
-        ok: true,
-        json: async () => ({
-          specialists: [
-            {
-              id: "custom-planner",
-              name: "Planner",
-              role: "ROUTA",
-              source: "user",
-              defaultModelTier: "BALANCED",
-              systemPrompt: "Plan work",
-              roleReminder: "Coordinate",
-            },
-          ],
-        }),
-      };
-    });
+  it("renders ACP registry in its own tab instead of the providers tab", async () => {
+    render(
+      <SettingsPanel
+        open
+        onClose={() => {}}
+        providers={[]}
+        initialTab="providers"
+      />,
+    );
+
+    expect(screen.queryByText("Agent Install Panel")).toBeNull();
+
+    cleanup();
 
     render(
       <SettingsPanel
         open
         onClose={() => {}}
         providers={[]}
-        initialTab="specialists"
+        initialTab="registry"
       />,
     );
 
-    await waitFor(() => {
-      expect(screen.getByText("Planner")).not.toBeNull();
-    });
-    await waitFor(() => {
-      expect(screen.getByText(/Memory 10\/20 MB/)).not.toBeNull();
-    });
+    expect(screen.getByText("Agent Install Panel")).not.toBeNull();
   });
 });

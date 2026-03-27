@@ -161,6 +161,7 @@ export interface SettingsPanelProps {
 
 export type SettingsTab =
   | "providers"
+  | "registry"
   | "roles"
   | "specialists"
   | "models"
