@@ -261,104 +261,6 @@ export default function HomePage() {
       )}
     >
         <div className="flex h-full min-h-0 bg-[#f6f4ef] dark:bg-[#0c1118]">
-          <aside className="hidden w-[290px] shrink-0 border-r border-black/6 bg-[#efede6] dark:border-white/8 dark:bg-[#11161f] xl:flex xl:flex-col">
-            <div className="border-b border-black/6 px-5 py-4 dark:border-white/8">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-500">
-                工作区
-              </div>
-              <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                从左侧统一入口切换空间和最近工作。
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-4 py-4">
-              <div className="space-y-2">
-                {workspacesHook.workspaces.map((workspace) => {
-                  const active = workspace.id === activeWorkspaceId;
-                  return (
-                    <button
-                      key={workspace.id}
-                      type="button"
-                      onClick={() => setActiveWorkspaceId(workspace.id)}
-                      className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
-                        active
-                          ? "border-[#9ec88e] bg-[#f6fbf2] text-slate-900 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.35)] dark:border-emerald-800/40 dark:bg-emerald-950/20 dark:text-slate-100"
-                          : "border-black/6 bg-white/70 text-slate-700 hover:bg-white dark:border-white/8 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/8"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold">{workspace.title}</div>
-                          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                            更新于 {formatRelativeTime(workspace.updatedAt)}
-                          </div>
-                        </div>
-                        {active && (
-                          <span className="rounded-full bg-[#e8f3e1] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#537149] dark:bg-emerald-900/40 dark:text-emerald-200">
-                            当前
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <section className="mt-6">
-                <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-500">
-                  最近会话
-                </div>
-                <div className="space-y-2">
-                  {recentSessions.length > 0 ? recentSessions.map((session) => (
-                    <Link
-                      key={session.sessionId}
-                      href={`/workspace/${session.workspaceId}/sessions/${session.sessionId}`}
-                      className="block rounded-2xl border border-black/6 bg-white/66 px-4 py-3 transition-colors hover:bg-white dark:border-white/8 dark:bg-white/5 dark:hover:bg-white/8"
-                    >
-                      <div className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-                        {getSessionLabel(session)}
-                      </div>
-                      <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                        {formatRelativeTime(session.createdAt)}
-                      </div>
-                    </Link>
-                  )) : (
-                    <div className="rounded-2xl border border-dashed border-black/10 px-4 py-6 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
-                      还没有最近会话。先创建一个需求，执行记录会显示在这里。
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              <section className="mt-6 rounded-[24px] border border-black/6 bg-white/70 p-4 dark:border-white/8 dark:bg-white/5">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-500">
-                  运行状态
-                </div>
-                <div className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                  <div className="flex items-center justify-between gap-3">
-                    <span>运行时</span>
-                    <span className={acp.connected ? "text-emerald-600 dark:text-emerald-300" : "text-amber-600 dark:text-amber-300"}>
-                      {acp.connected ? "在线" : "离线"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span>模型配置</span>
-                    <span className={hasProviderConfig ? "text-emerald-600 dark:text-emerald-300" : "text-amber-600 dark:text-amber-300"}>
-                      {hasProviderConfig ? "已就绪" : "待配置"}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleOpenProviders}
-                  className="mt-4 inline-flex rounded-full border border-black/8 bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/8 dark:bg-white/6 dark:text-slate-200 dark:hover:bg-white/10"
-                >
-                  打开模型设置
-                </button>
-              </section>
-            </div>
-          </aside>
-
           <main className="flex min-w-0 flex-1 flex-col">
             {!hasWorkspace ? (
               <div className="flex min-h-0 flex-1 items-center justify-center p-6">
@@ -570,6 +472,104 @@ export default function HomePage() {
               </>
             )}
           </main>
+
+          <aside className="hidden w-[320px] shrink-0 border-l border-black/6 bg-[#efede6] dark:border-white/8 dark:bg-[#11161f] xl:flex xl:flex-col">
+            <div className="border-b border-black/6 px-5 py-4 dark:border-white/8">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-500">
+                工作区
+              </div>
+              <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                当前空间、最近会话和运行状态集中放在这里。
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-4 py-4">
+              <div className="space-y-2">
+                {workspacesHook.workspaces.map((workspace) => {
+                  const active = workspace.id === activeWorkspaceId;
+                  return (
+                    <button
+                      key={workspace.id}
+                      type="button"
+                      onClick={() => setActiveWorkspaceId(workspace.id)}
+                      className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
+                        active
+                          ? "border-[#9ec88e] bg-[#f6fbf2] text-slate-900 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.35)] dark:border-emerald-800/40 dark:bg-emerald-950/20 dark:text-slate-100"
+                          : "border-black/6 bg-white/70 text-slate-700 hover:bg-white dark:border-white/8 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/8"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold">{workspace.title}</div>
+                          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                            更新于 {formatRelativeTime(workspace.updatedAt)}
+                          </div>
+                        </div>
+                        {active && (
+                          <span className="rounded-full bg-[#e8f3e1] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#537149] dark:bg-emerald-900/40 dark:text-emerald-200">
+                            当前
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <section className="mt-6">
+                <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-500">
+                  最近会话
+                </div>
+                <div className="space-y-2">
+                  {recentSessions.length > 0 ? recentSessions.map((session) => (
+                    <Link
+                      key={session.sessionId}
+                      href={`/workspace/${session.workspaceId}/sessions/${session.sessionId}`}
+                      className="block rounded-2xl border border-black/6 bg-white/66 px-4 py-3 transition-colors hover:bg-white dark:border-white/8 dark:bg-white/5 dark:hover:bg-white/8"
+                    >
+                      <div className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+                        {getSessionLabel(session)}
+                      </div>
+                      <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                        {formatRelativeTime(session.createdAt)}
+                      </div>
+                    </Link>
+                  )) : (
+                    <div className="rounded-2xl border border-dashed border-black/10 px-4 py-6 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+                      还没有最近会话。先创建一个需求，执行记录会显示在这里。
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="mt-6 rounded-[24px] border border-black/6 bg-white/70 p-4 dark:border-white/8 dark:bg-white/5">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-500">
+                  运行状态
+                </div>
+                <div className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                  <div className="flex items-center justify-between gap-3">
+                    <span>运行时</span>
+                    <span className={acp.connected ? "text-emerald-600 dark:text-emerald-300" : "text-amber-600 dark:text-amber-300"}>
+                      {acp.connected ? "在线" : "离线"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>模型配置</span>
+                    <span className={hasProviderConfig ? "text-emerald-600 dark:text-emerald-300" : "text-amber-600 dark:text-amber-300"}>
+                      {hasProviderConfig ? "已就绪" : "待配置"}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenProviders}
+                  className="mt-4 inline-flex rounded-full border border-black/8 bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/8 dark:bg-white/6 dark:text-slate-200 dark:hover:bg-white/10"
+                >
+                  打开模型设置
+                </button>
+              </section>
+            </div>
+          </aside>
         </div>
 
         <SettingsPanel

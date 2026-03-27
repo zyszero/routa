@@ -22,10 +22,14 @@ interface NavItem {
 
 interface DesktopSidebarProps {
   workspaceId?: string | null;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export function DesktopSidebar({
   workspaceId,
+  collapsed = false,
+  onToggleCollapse,
 }: DesktopSidebarProps) {
   const pathname = usePathname();
   const normalizedWorkspaceId = workspaceId?.trim() || null;
@@ -95,24 +99,47 @@ export function DesktopSidebar({
 
   return (
     <aside
-      className="h-full w-14 shrink-0 flex flex-col border-r border-desktop-border bg-desktop-bg-secondary"
+      className={`h-full shrink-0 flex flex-col border-r border-desktop-border bg-desktop-bg-secondary transition-[width] duration-200 ${
+        collapsed ? "w-14" : "w-48"
+      }`}
       data-testid="desktop-shell-sidebar"
     >
-      <nav className="flex-1 flex flex-col items-center py-3 gap-1">
+      <div className={`border-b border-desktop-border px-2 py-2 ${collapsed ? "flex justify-center" : ""}`}>
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          className={`flex items-center rounded-xl text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary ${
+            collapsed ? "h-10 w-10 justify-center" : "w-full gap-2 px-3 py-2 text-sm"
+          }`}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            {collapsed ? (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 6 12l7.5 7.5M18 4.5 10.5 12 18 19.5" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 4.5 18 12l-7.5 7.5M6 4.5 13.5 12 6 19.5" />
+            )}
+          </svg>
+          {!collapsed && <span>导航</span>}
+        </button>
+      </div>
+
+      <nav className={`flex-1 py-3 ${collapsed ? "flex flex-col items-center gap-1" : "px-2 space-y-1"}`}>
         {navItems.map((item) => {
           const disabled = item.id !== "home" && !workspaceBaseHref;
           const active = isActive(item.href);
-          const className = `relative flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
+          const className = `relative flex items-center rounded-xl transition-colors ${
             disabled
               ? "cursor-default text-desktop-text-secondary/40"
               : active
                 ? "bg-desktop-bg-active text-desktop-accent"
                 : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
-          }`;
+          } ${collapsed ? "h-10 w-10 justify-center" : "h-11 w-full gap-3 px-3 text-sm font-medium"}`;
 
           return disabled ? (
             <div key={item.id} className={className} title={`${item.label} unavailable`} aria-disabled="true">
               {item.icon}
+              {!collapsed && <span className="truncate">{item.label}</span>}
             </div>
           ) : (
             <Link
@@ -123,26 +150,28 @@ export function DesktopSidebar({
             >
               {active && <div className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-desktop-accent" />}
               {item.icon}
+              {!collapsed && <span className="truncate">{item.label}</span>}
             </Link>
           );
         })}
       </nav>
 
-      <div className="mx-3 border-t border-desktop-border" />
+      <div className={`${collapsed ? "mx-3" : "mx-2"} border-t border-desktop-border`} />
 
-      <div className="flex flex-col items-center py-3 gap-1">
+      <div className={`py-3 ${collapsed ? "flex flex-col items-center gap-1" : "px-2"}`}>
         <Link
           href="/settings"
-          className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${pathname === "/settings"
+          className={`flex items-center rounded-xl transition-colors ${pathname === "/settings"
             ? "bg-desktop-bg-active text-desktop-accent"
             : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
-          }`}
+          } ${collapsed ? "h-10 w-10 justify-center" : "h-11 w-full gap-3 px-3 text-sm font-medium"}`}
           title="Settings"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.991l1.004.827c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
+          {!collapsed && <span className="truncate">Settings</span>}
         </Link>
       </div>
     </aside>

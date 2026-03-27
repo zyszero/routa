@@ -12,9 +12,11 @@
  * workspace hooks - it accepts all data as props.
  */
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { DesktopShellHeader } from "./desktop-shell-header";
 import { DesktopSidebar } from "./desktop-sidebar";
+
+const DESKTOP_SIDEBAR_COLLAPSED_KEY = "routa.desktop.sidebar-collapsed";
 
 interface DesktopAppShellProps {
   children: React.ReactNode;
@@ -34,6 +36,22 @@ export function DesktopAppShell({
   titleBarRight,
   workspaceSwitcher,
 }: DesktopAppShellProps) {
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return window.localStorage.getItem(DESKTOP_SIDEBAR_COLLAPSED_KEY) === "true";
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(DESKTOP_SIDEBAR_COLLAPSED_KEY, String(isSidebarCollapsed));
+  }, [isSidebarCollapsed]);
+
   return (
     <div
       className="desktop-theme h-screen flex flex-col overflow-hidden bg-desktop-bg-primary"
@@ -48,7 +66,11 @@ export function DesktopAppShell({
 
       {/* Main Content Area */}
       <div className="flex-1 flex min-h-0" data-testid="desktop-shell-body">
-        <DesktopSidebar workspaceId={workspaceId} />
+        <DesktopSidebar
+          workspaceId={workspaceId}
+          collapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed((current) => !current)}
+        />
 
         {/* Content */}
         <main className="flex-1 min-w-0 overflow-hidden bg-desktop-bg-primary" data-testid="desktop-shell-main">

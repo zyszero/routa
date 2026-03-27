@@ -4,6 +4,8 @@ import React from "react";
 import Image from "next/image";
 import Link from "next/link";
 
+import { DockerStatusIndicator } from "./docker-status-indicator";
+import { LanguageSwitcher } from "./language-switcher";
 import { ThemeSwitcher } from "./theme-switcher";
 
 interface DesktopShellHeaderProps {
@@ -60,7 +62,11 @@ export function DesktopShellHeader({
 
       <div className="flex-1 app-drag-region h-full" />
 
-      <div className="px-2">
+      <div className="flex items-center gap-2 px-2">
+        <div className="hidden lg:flex">
+          <DockerStatusIndicator />
+        </div>
+        <LanguageSwitcher />
         <ThemeSwitcher compact />
       </div>
 
