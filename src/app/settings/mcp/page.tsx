@@ -1,6 +1,7 @@
 "use client";
 
 import { SettingsRouteShell } from "@/client/components/settings-route-shell";
+import { SettingsPageHeader } from "@/client/components/settings-page-header";
 import { McpServersTab } from "@/client/components/settings-panel-mcp-tab";
 
 export default function McpSettingsPage() {
@@ -19,8 +20,18 @@ export default function McpSettingsPage() {
         { label: "Scope", value: "Workspace integrations" },
       ]}
     >
-      <div className="rounded-2xl border border-desktop-border bg-desktop-bg-secondary/70 shadow-sm">
-        <McpServersTab />
+      <div className="space-y-4">
+        <SettingsPageHeader
+          title="MCP Servers"
+          description="Manage Model Context Protocol servers, transports, and local integration points for your workspace."
+          metadata={[
+            { label: "Transport", value: "stdio / http / sse" },
+            { label: "Scope", value: "Workspace integrations" },
+          ]}
+        />
+        <div className="rounded-2xl border border-desktop-border bg-desktop-bg-secondary/70 shadow-sm">
+          <McpServersTab />
+        </div>
       </div>
     </SettingsRouteShell>
   );

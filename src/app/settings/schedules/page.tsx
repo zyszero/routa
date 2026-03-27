@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { SettingsRouteShell } from "@/client/components/settings-route-shell";
+import { SettingsPageHeader } from "@/client/components/settings-page-header";
 import { useWorkspaces } from "@/client/hooks/use-workspaces";
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
 import { SchedulePanel } from "@/client/components/schedule-panel";
@@ -42,6 +43,14 @@ export default function SchedulesSettingsPage() {
       ]}
     >
       <div className="space-y-6">
+        <SettingsPageHeader
+          title="Schedules"
+          description="Run agents automatically on a recurring cron schedule. Jobs are scoped to the selected workspace."
+          metadata={[
+            { label: "Trigger", value: "Cron-driven automation" },
+            { label: "Runtime", value: "Background execution" },
+          ]}
+        />
         <div className="rounded-2xl border border-blue-100 bg-blue-50 px-5 py-4 text-sm text-blue-700 shadow-sm dark:border-blue-900/30 dark:bg-blue-900/10 dark:text-blue-400">
           <span className="font-semibold">Tick endpoint:</span>{" "}
           <code className="rounded bg-blue-100 px-1 py-0.5 font-mono dark:bg-blue-900/30">/api/schedules/tick</code>
