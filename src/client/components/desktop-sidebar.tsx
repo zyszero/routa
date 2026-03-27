@@ -18,6 +18,7 @@ interface NavItem {
   label: string;
   icon: React.ReactNode;
   href: string;
+  requiresWorkspace?: boolean;
 }
 
 interface DesktopSidebarProps {
@@ -35,7 +36,7 @@ export function DesktopSidebar({
   const normalizedWorkspaceId = workspaceId?.trim() || null;
   const workspaceBaseHref = normalizedWorkspaceId ? `/workspace/${normalizedWorkspaceId}` : null;
 
-  const navItems: NavItem[] = [
+  const primaryItems: NavItem[] = [
     {
       id: "home",
       label: "Home",
@@ -48,8 +49,9 @@ export function DesktopSidebar({
     },
     {
       id: "overview",
-      label: "Overview",
+      label: "Workspace",
       href: workspaceBaseHref ?? "/",
+      requiresWorkspace: true,
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
@@ -60,6 +62,7 @@ export function DesktopSidebar({
       id: "kanban",
       label: "Kanban",
       href: workspaceBaseHref ? `${workspaceBaseHref}/kanban` : "/",
+      requiresWorkspace: true,
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
@@ -70,6 +73,7 @@ export function DesktopSidebar({
       id: "team",
       label: "Team",
       href: workspaceBaseHref ? `${workspaceBaseHref}/team` : "/",
+      requiresWorkspace: true,
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
           <circle cx="7.5" cy="8" r="2.25" />
@@ -79,9 +83,65 @@ export function DesktopSidebar({
         </svg>
       ),
     },
+  ];
+
+  const toolItems: NavItem[] = [
     {
-      id: "traces",
-      label: "Traces",
+      id: "config",
+      label: "Config",
+      href: "/settings",
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 3.75h1.5m-1.5 0a2.25 2.25 0 00-2.25 2.25v.75h6V6a2.25 2.25 0 00-2.25-2.25m-1.5 0v3m-6.75 4.5h15m-15 0V18A2.25 2.25 0 006 20.25h12A2.25 2.25 0 0020.25 18v-6.75m-15 0h15" />
+        </svg>
+      ),
+    },
+    {
+      id: "mcp",
+      label: "MCP Servers",
+      href: "/settings/mcp",
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 7.5h10.5M6.75 12h10.5M6.75 16.5h6.75M4.5 4.5h15A2.25 2.25 0 0121.75 6.75v10.5A2.25 2.25 0 0119.5 19.5h-15A2.25 2.25 0 012.25 17.25V6.75A2.25 2.25 0 014.5 4.5z" />
+        </svg>
+      ),
+    },
+    {
+      id: "schedules",
+      label: "Schedules",
+      href: "/settings/schedules",
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3.75v3m10.5-3v3M4.5 8.25h15m-14.25 9h5.25m-5.25 0V6.75A2.25 2.25 0 016.75 4.5h10.5a2.25 2.25 0 012.25 2.25v10.5a2.25 2.25 0 01-2.25 2.25H6.75a2.25 2.25 0 01-2.25-2.25z" />
+        </svg>
+      ),
+    },
+    {
+      id: "workflows",
+      label: "Workflows",
+      href: "/settings/workflows",
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 5.25h3.75V9H6V5.25zm8.25 0H18V9h-3.75V5.25zM6 15h3.75v3.75H6V15zm8.25 0H18v3.75h-3.75V15zM9.75 7.125h4.5m-2.25 1.5v5.25m2.25 0h-4.5" />
+        </svg>
+      ),
+    },
+    {
+      id: "specialists",
+      label: "Specialists",
+      href: "/settings/specialists",
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6.75a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 19.5a7.5 7.5 0 1115 0" />
+        </svg>
+      ),
+    },
+  ];
+
+  const secondaryItems: NavItem[] = [
+    {
+      id: "debug",
+      label: "Debug",
       href: "/traces",
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -95,6 +155,36 @@ export function DesktopSidebar({
     if (href === "/") return pathname === "/";
     if (href === workspaceBaseHref) return pathname === href;
     return pathname === href || pathname.startsWith(`${href}/`);
+  };
+
+  const renderNavItem = (item: NavItem) => {
+    const disabled = !!item.requiresWorkspace && !workspaceBaseHref;
+    const active = isActive(item.href);
+    const className = `relative flex items-center rounded-xl transition-colors ${
+      disabled
+        ? "cursor-default text-desktop-text-secondary/40"
+        : active
+          ? "bg-desktop-bg-active text-desktop-accent"
+          : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
+    } ${collapsed ? "h-10 w-10 justify-center" : "h-11 w-full gap-3 px-3 text-sm font-medium"}`;
+
+    return disabled ? (
+      <div key={item.id} className={className} title={`${item.label} unavailable`} aria-disabled="true">
+        {item.icon}
+        {!collapsed && <span className="truncate">{item.label}</span>}
+      </div>
+    ) : (
+      <Link
+        key={item.id}
+        href={item.href}
+        className={className}
+        title={item.label}
+      >
+        {active && <div className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-desktop-accent" />}
+        {item.icon}
+        {!collapsed && <span className="truncate">{item.label}</span>}
+      </Link>
+    );
   };
 
   return (
@@ -125,54 +215,15 @@ export function DesktopSidebar({
       </div>
 
       <nav className={`flex-1 py-3 ${collapsed ? "flex flex-col items-center gap-1" : "px-2 space-y-1"}`}>
-        {navItems.map((item) => {
-          const disabled = item.id !== "home" && !workspaceBaseHref;
-          const active = isActive(item.href);
-          const className = `relative flex items-center rounded-xl transition-colors ${
-            disabled
-              ? "cursor-default text-desktop-text-secondary/40"
-              : active
-                ? "bg-desktop-bg-active text-desktop-accent"
-                : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
-          } ${collapsed ? "h-10 w-10 justify-center" : "h-11 w-full gap-3 px-3 text-sm font-medium"}`;
-
-          return disabled ? (
-            <div key={item.id} className={className} title={`${item.label} unavailable`} aria-disabled="true">
-              {item.icon}
-              {!collapsed && <span className="truncate">{item.label}</span>}
-            </div>
-          ) : (
-            <Link
-              key={item.id}
-              href={item.href}
-              className={className}
-              title={item.label}
-            >
-              {active && <div className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-desktop-accent" />}
-              {item.icon}
-              {!collapsed && <span className="truncate">{item.label}</span>}
-            </Link>
-          );
-        })}
+        {primaryItems.map(renderNavItem)}
+        {!collapsed && <div className="mx-1 my-2 border-t border-desktop-border" />}
+        {toolItems.map(renderNavItem)}
       </nav>
 
       <div className={`${collapsed ? "mx-3" : "mx-2"} border-t border-desktop-border`} />
 
-      <div className={`py-3 ${collapsed ? "flex flex-col items-center gap-1" : "px-2"}`}>
-        <Link
-          href="/settings"
-          className={`flex items-center rounded-xl transition-colors ${pathname === "/settings"
-            ? "bg-desktop-bg-active text-desktop-accent"
-            : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
-          } ${collapsed ? "h-10 w-10 justify-center" : "h-11 w-full gap-3 px-3 text-sm font-medium"}`}
-          title="Settings"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.991l1.004.827c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          {!collapsed && <span className="truncate">Settings</span>}
-        </Link>
+      <div className={`py-3 ${collapsed ? "flex flex-col items-center gap-1" : "px-2 space-y-1"}`}>
+        {secondaryItems.map(renderNavItem)}
       </div>
     </aside>
   );

@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { SettingsPanel } from "@/client/components/settings-panel";
+import type { SettingsTab } from "@/client/components/settings-panel-shared";
 
 interface ProviderOption {
   id: string;
@@ -13,7 +14,10 @@ interface ProviderOption {
 
 export function SettingsPageClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [providers, setProviders] = useState<ProviderOption[]>([]);
+  const requestedTab = searchParams.get("tab");
+  const initialTab = isSettingsTab(requestedTab) ? requestedTab : undefined;
 
   useEffect(() => {
     const fetchProviders = async () => {
@@ -42,10 +46,23 @@ export function SettingsPageClient() {
   return (
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-[#0f1117]">
       <SettingsPanel
+        key={initialTab ?? "providers"}
         open={true}
         onClose={handleClose}
         providers={providers}
+        initialTab={initialTab}
       />
     </div>
   );
+}
+
+function isSettingsTab(value: string | null): value is SettingsTab {
+  return value === "providers"
+    || value === "roles"
+    || value === "specialists"
+    || value === "models"
+    || value === "mcp"
+    || value === "webhooks"
+    || value === "schedules"
+    || value === "workflows";
 }
