@@ -34,6 +34,16 @@ const DEFAULT_SEARCH_LIMIT = 30;
 const DEFAULT_GITHUB_REPO = "openai/skills";
 const DEFAULT_GITHUB_PATH = "skills/.curated";
 const DEFAULT_REF = "main";
+const INSTALLED_PROJECT_SKILL_DIRS = [".agents/skills", ".codex/skills"] as const;
+const INSTALLED_GLOBAL_SKILL_DIRS = [".codex/skills", ".agents/skills"] as const;
+const REPO_SKILL_SEARCH_DIRS = [
+  ".",
+  "skills",
+  ".agents/skills",
+  ".opencode/skills",
+  ".claude/skills",
+  ".codex/skills",
+] as const;
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -61,6 +71,36 @@ function getGitHubToken(): string | undefined {
   return process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 }
 
+function resolveFsPath(...segments: string[]): string {
+  return path.resolve(...segments);
+}
+
+function getInstalledSkillDirs(): string[] {
+  const cwd = process.cwd();
+  const homeDir = os.homedir();
+  return [
+    ...INSTALLED_PROJECT_SKILL_DIRS.map((dir) => resolveFsPath(cwd, dir)),
+    ...INSTALLED_GLOBAL_SKILL_DIRS.map((dir) => resolveFsPath(homeDir, dir)),
+  ];
+}
+
+function getRepoSkillCandidates(repoRoot: string, skillName: string): string[] {
+  return REPO_SKILL_SEARCH_DIRS.map((dir) => resolveFsPath(repoRoot, dir, skillName));
+}
+
+function findExistingSkillDir(candidates: string[]): string | null {
+  for (const candidate of candidates) {
+    if (!fs.existsSync(candidate) || !fs.statSync(candidate).isDirectory()) {
+      continue;
+    }
+    if (!fs.existsSync(resolveFsPath(candidate, "SKILL.md"))) {
+      continue;
+    }
+    return candidate;
+  }
+  return null;
+}
+
 /**
  * Get the destination directory for installing skills.
  * On serverless environments (Vercel), falls back to a temp directory since
@@ -73,11 +113,11 @@ function getSkillsDestDir(): string {
   if (isServerless) {
     // On serverless, use /tmp which is the only writable location
     // Note: This is ephemeral and won't persist across invocations
-    return path.join(os.tmpdir(), ".codex/skills");
+    return resolveFsPath(os.tmpdir(), ".codex/skills");
   }
 
   // On local/traditional servers, use the home directory
-  return path.join(os.homedir(), ".codex/skills");
+  return resolveFsPath(os.homedir(), ".codex/skills");
 }
 
 async function githubFetch(url: string): Promise<Response> {
@@ -94,12 +134,7 @@ async function githubFetch(url: string): Promise<Response> {
 
 function getInstalledSkillNamesFromFs(): Set<string> {
   const installed = new Set<string>();
-  const skillDirs = [
-    path.join(process.cwd(), ".agents/skills"),
-    path.join(process.cwd(), ".codex/skills"),
-    path.join(os.homedir(), ".codex/skills"),
-    path.join(os.homedir(), ".agents/skills"),
-  ];
+  const skillDirs = getInstalledSkillDirs();
 
   for (const dir of skillDirs) {
     if (!fs.existsSync(dir)) continue;
@@ -434,15 +469,6 @@ async function handleSkillsShInstall(body: {
 
       // Search for each skill in common skill directories
       // Note: "." is for repos where skills are at root level (e.g., mindrally/skills)
-      const searchDirs = [
-        ".",
-        "skills",
-        ".agents/skills",
-        ".opencode/skills",
-        ".claude/skills",
-        ".codex/skills",
-      ];
-
       for (const skillName of skillNames) {
         const destDir = path.join(destBase, skillName);
         if (fs.existsSync(destDir)) {
@@ -450,20 +476,7 @@ async function handleSkillsShInstall(body: {
           continue;
         }
 
-        let foundSrc: string | null = null;
-
-        // Search in all common locations
-        for (const searchDir of searchDirs) {
-          const candidate = path.join(repoRoot, searchDir, skillName);
-          if (
-            fs.existsSync(candidate) &&
-            fs.statSync(candidate).isDirectory() &&
-            fs.existsSync(path.join(candidate, "SKILL.md"))
-          ) {
-            foundSrc = candidate;
-            break;
-          }
-        }
+        const foundSrc = findExistingSkillDir(getRepoSkillCandidates(repoRoot, skillName));
 
         if (!foundSrc) {
           errors.push(`Skill "${skillName}" not found in ${repoSource}`);
@@ -572,14 +585,14 @@ async function handleGithubInstall(body: {
 
     for (const skillName of skillNames) {
       try {
-        const skillSrc = path.join(repoRoot, catalogPath, skillName);
+        const skillSrc = resolveFsPath(repoRoot, catalogPath, skillName);
 
         if (!fs.existsSync(skillSrc) || !fs.statSync(skillSrc).isDirectory()) {
           errors.push(`Skill not found in catalog: ${skillName}`);
           continue;
         }
 
-        if (!fs.existsSync(path.join(skillSrc, "SKILL.md"))) {
+        if (!fs.existsSync(resolveFsPath(skillSrc, "SKILL.md"))) {
           errors.push(`No SKILL.md in ${skillName}`);
           continue;
         }
@@ -746,8 +759,6 @@ async function handleSkillsShInstallToDb(body: {
 
       const repoRoot = path.join(tmpDir, topDirs[0].name);
       // Note: "." is for repos where skills are at root level (e.g., mindrally/skills)
-      const searchDirs = [".", "skills", ".agents/skills", ".opencode/skills", ".claude/skills", ".codex/skills"];
-
       for (const skillName of skillNames) {
         // Check if already installed
         const existing = await skillStore.get(skillName);
@@ -756,15 +767,7 @@ async function handleSkillsShInstallToDb(body: {
           continue;
         }
 
-        let foundSrc: string | null = null;
-        for (const searchDir of searchDirs) {
-          const candidate = path.join(repoRoot, searchDir, skillName);
-          if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory() &&
-              fs.existsSync(path.join(candidate, "SKILL.md"))) {
-            foundSrc = candidate;
-            break;
-          }
-        }
+        const foundSrc = findExistingSkillDir(getRepoSkillCandidates(repoRoot, skillName));
 
         if (!foundSrc) {
           errors.push(`Skill "${skillName}" not found in ${repoSource}`);
@@ -866,12 +869,12 @@ async function handleGithubInstallToDb(body: {
           continue;
         }
 
-        const skillSrc = path.join(repoRoot, catalogPath, skillName);
+        const skillSrc = resolveFsPath(repoRoot, catalogPath, skillName);
         if (!fs.existsSync(skillSrc) || !fs.statSync(skillSrc).isDirectory()) {
           errors.push(`Skill not found in catalog: ${skillName}`);
           continue;
         }
-        if (!fs.existsSync(path.join(skillSrc, "SKILL.md"))) {
+        if (!fs.existsSync(resolveFsPath(skillSrc, "SKILL.md"))) {
           errors.push(`No SKILL.md in ${skillName}`);
           continue;
         }

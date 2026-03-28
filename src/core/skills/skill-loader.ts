@@ -34,23 +34,38 @@ export interface SkillDefinition {
 
 const SKILL_NAME_REGEX = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
-const SKILL_SEARCH_DIRS = [
-  ".opencode/skills",
-  ".claude/skills",
-  ".agents/skills",
-  ".codex/skills",
-  ".cursor/skills",
-  ".gemini/skills",
-];
+function resolveSkillDir(root: string, subdir: string): string {
+  return path.resolve(root, subdir);
+}
 
-const GLOBAL_SKILL_DIRS = [
-  ".config/opencode/skills",
-  ".claude/skills",
-  ".agents/skills",
-  ".codex/skills",
-  ".cursor/skills",
-  ".gemini/skills",
-];
+function getProjectSkillDirs(projectDir: string): string[] {
+  return [
+    resolveSkillDir(projectDir, ".opencode/skills"),
+    resolveSkillDir(projectDir, ".claude/skills"),
+    resolveSkillDir(projectDir, ".agents/skills"),
+    resolveSkillDir(projectDir, ".codex/skills"),
+    resolveSkillDir(projectDir, ".cursor/skills"),
+    resolveSkillDir(projectDir, ".gemini/skills"),
+  ];
+}
+
+function getGlobalSkillDirs(homeDir: string): string[] {
+  return [
+    resolveSkillDir(homeDir, ".config/opencode/skills"),
+    resolveSkillDir(homeDir, ".claude/skills"),
+    resolveSkillDir(homeDir, ".agents/skills"),
+    resolveSkillDir(homeDir, ".codex/skills"),
+    resolveSkillDir(homeDir, ".cursor/skills"),
+    resolveSkillDir(homeDir, ".gemini/skills"),
+  ];
+}
+
+function getRepoSkillDirs(repoDir: string): string[] {
+  return [
+    resolveSkillDir(repoDir, "skills"),
+    ...getProjectSkillDirs(repoDir),
+  ];
+}
 
 /**
  * Discover all skills from project and global directories
@@ -62,8 +77,7 @@ export function discoverSkills(projectDir?: string): SkillDefinition[] {
 
   // Project-local skills
   if (projectDir) {
-    for (const searchDir of SKILL_SEARCH_DIRS) {
-      const dir = path.join(projectDir, searchDir);
+    for (const dir of getProjectSkillDirs(projectDir)) {
       const found = loadSkillsFromDir(dir);
       for (const skill of found) {
         if (!seen.has(skill.name)) {
@@ -77,8 +91,7 @@ export function discoverSkills(projectDir?: string): SkillDefinition[] {
   // Global skills
   const homeDir = bridge.env.getEnv("HOME") ?? bridge.env.getEnv("USERPROFILE") ?? bridge.env.homeDir();
   if (homeDir) {
-    for (const globalDir of GLOBAL_SKILL_DIRS) {
-      const dir = path.join(homeDir, globalDir);
+    for (const dir of getGlobalSkillDirs(homeDir)) {
       const found = loadSkillsFromDir(dir);
       for (const skill of found) {
         if (!seen.has(skill.name)) {
@@ -101,14 +114,7 @@ export function discoverSkillsFromPath(repoDir: string): SkillDefinition[] {
   const skills: SkillDefinition[] = [];
   const seen = new Set<string>();
 
-  // Scan multiple possible skill locations in the repo
-  const searchDirs = [
-    "skills",           // e.g. vercel-labs/agent-skills uses skills/
-    ...SKILL_SEARCH_DIRS, // .opencode/skills, .claude/skills, .agents/skills
-  ];
-
-  for (const searchDir of searchDirs) {
-    const dir = path.join(repoDir, searchDir);
+  for (const dir of getRepoSkillDirs(repoDir)) {
     const found = loadSkillsFromDir(dir);
     for (const skill of found) {
       if (!seen.has(skill.name)) {

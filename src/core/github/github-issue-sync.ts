@@ -77,6 +77,10 @@ function renderYamlArray(values: string[]): string {
   return `[${values.map((value) => JSON.stringify(value)).join(", ")}]`;
 }
 
+function readTextFileIfExists(filePath: string): string | null {
+  return existsSync(filePath) ? readFileSync(filePath, "utf-8") : null;
+}
+
 function normalizeTag(value: string): string {
   return value
     .toLowerCase()
@@ -170,8 +174,9 @@ export function syncGitHubIssueToDirectory(
   const existingPath = findExistingSyncedGitHubIssueFile(issuesDir, issue.number);
   const renamedFrom = existingPath && existingPath !== desiredPath ? basename(existingPath) : undefined;
   const content = buildSyncedGitHubIssueDocument(issue);
-  const currentPath = existingPath ?? desiredPath;
-  const previousContent = existsSync(currentPath) ? readFileSync(currentPath, "utf-8") : null;
+  const previousContent = existingPath
+    ? readTextFileIfExists(existingPath)
+    : readTextFileIfExists(desiredPath);
 
   if (!options.dryRun) {
     mkdirSync(issuesDir, { recursive: true });

@@ -1,7 +1,7 @@
 ---
 title: "Next build emits persistent skills path and route config warnings"
 date: "2026-03-19"
-status: open
+status: resolved
 severity: medium
 area: "build"
 tags: [nextjs, turbopack, build, skills, github-webhook, warnings]
@@ -57,3 +57,16 @@ The result is a noisy build output where real regressions are harder to spot, an
 ## References
 
 - Local validation run on 2026-03-19 with `npm run build`
+
+## Resolution
+
+- Narrowed the skills catalog filesystem path expansion by replacing repeated dynamic search loops with stable helper-based candidate resolution in `src/app/api/skills/catalog/route.ts`.
+- Narrowed shared skill discovery path construction in `src/core/skills/skill-loader.ts` so project/global/repo scans no longer build paths through generic loop variables that widened Turbopack tracing.
+- Reduced unrelated build-graph pull-in by changing `src/app/api/github/tree/route.ts` to import `getCachedWorkspace` directly from `github-workspace` instead of the `@/core/github` barrel.
+- Simplified prior-content lookup in `src/core/github/github-issue-sync.ts` so file existence and read checks no longer depend on a merged dynamic path variable.
+- Confirmed the earlier webhook `config` warning referenced in this issue was stale; `src/app/api/webhooks/github/route.ts` already only exports `dynamic = "force-dynamic"`.
+
+## Verification
+
+- `npm run build` completed on 2026-03-28 without the previous Turbopack skills path warnings.
+- `entrix run --tier normal` completed with overall `PASS` on 2026-03-28.
