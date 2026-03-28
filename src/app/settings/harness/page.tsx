@@ -5,6 +5,7 @@ import { SettingsRouteShell } from "@/client/components/settings-route-shell";
 import { SettingsPageHeader } from "@/client/components/settings-page-header";
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
 import { CodeViewer } from "@/client/components/codemirror/code-viewer";
+import { HarnessGitHubActionsFlowPanel } from "@/client/components/harness-github-actions-flow-panel";
 import { HarnessHookRuntimePanel } from "@/client/components/harness-hook-runtime-panel";
 import { useCodebases, useWorkspaces } from "@/client/hooks/use-workspaces";
 
@@ -309,7 +310,7 @@ export default function HarnessSettingsPage() {
   return (
     <SettingsRouteShell
       title="Harness"
-      description="Harness visualization placeholder."
+      description="Harness flows, hook runtime, and fitness orchestration."
       badgeLabel="AI Health"
       workspaceId={workspaceId}
       workspaceTitle={activeWorkspaceTitle}
@@ -336,14 +337,14 @@ export default function HarnessSettingsPage() {
         </svg>
       )}
       summary={[
-        { label: "Status", value: "Fitness + hook runtime" },
-        { label: "Runtime", value: "Git hook pipeline map" },
+        { label: "Status", value: "Flow + fitness + hook runtime" },
+        { label: "Runtime", value: "GitHub Actions style pipeline map" },
       ]}
     >
       <div className="space-y-6">
         <SettingsPageHeader
           title="Harness"
-          description="Entrix fitness specs for the selected repository."
+          description="GitHub Actions shaped harness flow plus Entrix fitness specs for the selected repository."
           metadata={[
             { label: "specs", value: specsState.loading ? "..." : `${dimensionSpecs.length}` },
             { label: "plan", value: planState.loading ? "..." : `${planState.plan?.metricCount ?? 0}` },
@@ -399,6 +400,13 @@ export default function HarnessSettingsPage() {
             ) : null}
           </div>
         </section>
+
+        <HarnessGitHubActionsFlowPanel
+          workspaceId={workspaceId}
+          codebaseId={activeCodebase?.id}
+          repoPath={activeCodebase?.repoPath}
+          repoLabel={selectedRepoLabel}
+        />
 
         <HarnessHookRuntimePanel
           workspaceId={workspaceId}
