@@ -64,6 +64,11 @@ type SummaryState<T> = {
   loadedContextKey: string;
 };
 
+type LoopDetailSection = {
+  title: string;
+  items: string[];
+};
+
 type HarnessGovernanceLoopGraphProps = {
   workspaceId: string;
   codebaseId?: string;
@@ -427,6 +432,59 @@ function buildGraph(args: {
   return { nodes, edges, minHeight: 610 };
 }
 
+function buildDetailSections(args: {
+  selectedNodeId: string;
+  hooksData: HooksResponse | null;
+  workflowData: GitHubActionsFlowsResponse | null;
+  instructionSummary: InstructionSummary | null;
+  dimensionCount: number;
+  metricCount: number;
+}) {
+  const {
+    selectedNodeId,
+    hooksData,
+    workflowData,
+    instructionSummary,
+    dimensionCount,
+    metricCount,
+  } = args;
+
+  const hookNames = (hooksData?.hookFiles ?? []).map((file) => file.name);
+  const profileNames = (hooksData?.profiles ?? []).map((profile) => profile.name);
+  const uniquePhases = [...new Set((hooksData?.profiles ?? []).flatMap((profile) => profile.phases ?? []))];
+  const workflowNames = (workflowData?.flows ?? []).map((flow) => flow.name);
+  const workflowJobs = (workflowData?.flows ?? []).flatMap((flow) => flow.jobs?.map((job) => `${flow.name}: ${job.id}`) ?? []);
+
+  switch (selectedNodeId) {
+    case "precommit":
+      return [
+        { title: "Hook files", items: hookNames.length ? hookNames : ["当前页未发现 hook file"] },
+        { title: "Profiles", items: profileNames.length ? profileNames : ["当前页未发现 profile"] },
+      ] satisfies LoopDetailSection[];
+    case "post-commit":
+      return [
+        { title: "Actions", items: workflowNames.length ? workflowNames.slice(0, 8) : ["当前页未发现 action"] },
+        { title: "Jobs", items: workflowJobs.length ? workflowJobs.slice(0, 8) : ["当前页未发现 job"] },
+      ] satisfies LoopDetailSection[];
+    case "lint":
+    case "review":
+    case "test":
+      return [
+        { title: "Fitness", items: [`${dimensionCount} dimensions`, `${metricCount} metrics`] },
+        { title: "Hook phases", items: uniquePhases.length ? uniquePhases : ["当前页未发现 phase"] },
+      ] satisfies LoopDetailSection[];
+    case "coding":
+      return [
+        { title: "Instruction source", items: [instructionSummary?.fileName ?? "AGENTS.md"] },
+        { title: "Context", items: ["当前节点受 instructions 面板支撑"] },
+      ] satisfies LoopDetailSection[];
+    default:
+      return [
+        { title: "Current page signals", items: ["点击 `预提交` 查看 pre-commit / pre-push", "点击 `提交后阶段` 查看 actions / jobs"] },
+      ] satisfies LoopDetailSection[];
+  }
+}
+
 export function HarnessGovernanceLoopGraph({
   workspaceId,
   codebaseId,
@@ -457,6 +515,17 @@ export function HarnessGovernanceLoopGraph({
     error: null,
     loadedContextKey: "",
   });
+  const [hooksRawState, setHooksRawState] = useState<SummaryState<HooksResponse>>({
+    data: null,
+    error: null,
+    loadedContextKey: "",
+  });
+  const [workflowRawState, setWorkflowRawState] = useState<SummaryState<GitHubActionsFlowsResponse>>({
+    data: null,
+    error: null,
+    loadedContextKey: "",
+  });
+  const [selectedNodeId, setSelectedNodeId] = useState("precommit");
 
   useEffect(() => {
     if (!hasContext) {
@@ -500,12 +569,22 @@ export function HarnessGovernanceLoopGraph({
           error: null,
           loadedContextKey: contextKey,
         });
+        setHooksRawState({
+          data,
+          error: null,
+          loadedContextKey: contextKey,
+        });
       })
       .catch((error: unknown) => {
         if (cancelled) {
           return;
         }
         setHookState({
+          data: null,
+          error: error instanceof Error ? error.message : String(error),
+          loadedContextKey: contextKey,
+        });
+        setHooksRawState({
           data: null,
           error: error instanceof Error ? error.message : String(error),
           loadedContextKey: contextKey,
@@ -534,12 +613,22 @@ export function HarnessGovernanceLoopGraph({
           error: null,
           loadedContextKey: contextKey,
         });
+        setWorkflowRawState({
+          data,
+          error: null,
+          loadedContextKey: contextKey,
+        });
       })
       .catch((error: unknown) => {
         if (cancelled) {
           return;
         }
         setWorkflowState({
+          data: null,
+          error: error instanceof Error ? error.message : String(error),
+          loadedContextKey: contextKey,
+        });
+        setWorkflowRawState({
           data: null,
           error: error instanceof Error ? error.message : String(error),
           loadedContextKey: contextKey,
@@ -583,6 +672,8 @@ export function HarnessGovernanceLoopGraph({
   const hookSummary = hookState.loadedContextKey === contextKey ? hookState.data : null;
   const workflowSummary = workflowState.loadedContextKey === contextKey ? workflowState.data : null;
   const instructionSummary = instructionsState.loadedContextKey === contextKey ? instructionsState.data : null;
+  const hooksRaw = hooksRawState.loadedContextKey === contextKey ? hooksRawState.data : null;
+  const workflowRaw = workflowRawState.loadedContextKey === contextKey ? workflowRawState.data : null;
 
   const graph = useMemo(
     () => buildGraph({
@@ -596,6 +687,17 @@ export function HarnessGovernanceLoopGraph({
   );
 
   const graphIssues = [specsError, planError, hookState.error, workflowState.error, instructionsState.error].filter(Boolean);
+  const detailSections = useMemo(
+    () => buildDetailSections({
+      selectedNodeId,
+      hooksData: hooksRaw,
+      workflowData: workflowRaw,
+      instructionSummary,
+      dimensionCount,
+      metricCount,
+    }),
+    [selectedNodeId, hooksRaw, workflowRaw, instructionSummary, dimensionCount, metricCount],
+  );
 
   return (
     <section className="rounded-2xl border border-desktop-border bg-desktop-bg-secondary/55 p-4 shadow-sm">
@@ -646,42 +748,68 @@ export function HarnessGovernanceLoopGraph({
             </span>
           </div>
 
-          <div className="relative overflow-hidden rounded-2xl border border-desktop-border bg-[linear-gradient(180deg,rgba(248,250,252,0.98),rgba(241,245,249,0.98))]">
-            <div className="pointer-events-none absolute inset-0">
-              <div className="absolute left-[104px] top-[44px] h-[152px] w-[842px] rounded-[36px] border border-emerald-300/70 bg-emerald-50/35" />
-              <div className="absolute left-[104px] top-[214px] h-[152px] w-[842px] rounded-[36px] border border-sky-300/70 bg-sky-50/35" />
-              <div className="absolute left-[20px] top-[386px] h-[152px] w-[1068px] rounded-[36px] border border-violet-300/65 bg-violet-50/35" />
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="relative overflow-hidden rounded-2xl border border-desktop-border bg-[linear-gradient(180deg,rgba(248,250,252,0.98),rgba(241,245,249,0.98))]">
+              <div className="pointer-events-none absolute inset-0">
+                <div className="absolute left-[104px] top-[44px] h-[152px] w-[842px] rounded-[36px] border border-emerald-300/70 bg-emerald-50/35" />
+                <div className="absolute left-[104px] top-[214px] h-[152px] w-[842px] rounded-[36px] border border-sky-300/70 bg-sky-50/35" />
+                <div className="absolute left-[20px] top-[386px] h-[152px] w-[1068px] rounded-[36px] border border-violet-300/65 bg-violet-50/35" />
 
-              <div className="absolute left-[126px] top-[54px] max-w-[180px] text-left text-slate-600">
-                <div className="text-[11px] font-semibold tracking-[0.06em]">内部反馈环</div>
+                <div className="absolute left-[126px] top-[54px] max-w-[180px] text-left text-slate-600">
+                  <div className="text-[11px] font-semibold tracking-[0.06em]">内部反馈环</div>
+                </div>
+
+                <div className="absolute left-[126px] top-[220px] max-w-[180px] text-left text-slate-600">
+                  <div className="text-[11px] font-semibold tracking-[0.06em]">提交反馈环</div>
+                </div>
+
+                <div className="absolute left-[42px] top-[392px] max-w-[180px] text-left text-slate-600">
+                  <div className="text-[11px] font-semibold tracking-[0.06em]">外部反馈环</div>
+                </div>
               </div>
-
-              <div className="absolute left-[126px] top-[220px] max-w-[180px] text-left text-slate-600">
-                <div className="text-[11px] font-semibold tracking-[0.06em]">提交反馈环</div>
-              </div>
-
-              <div className="absolute left-[42px] top-[392px] max-w-[180px] text-left text-slate-600">
-                <div className="text-[11px] font-semibold tracking-[0.06em]">外部反馈环</div>
+              <div style={{ height: graph.minHeight }}>
+                <ReactFlow
+                  nodes={graph.nodes}
+                  edges={graph.edges}
+                  nodeTypes={nodeTypes}
+                  nodesDraggable={false}
+                  nodesConnectable={false}
+                  elementsSelectable={false}
+                  zoomOnScroll={false}
+                  panOnDrag={false}
+                  minZoom={1}
+                  maxZoom={1}
+                  defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+                  onNodeClick={(_event, node) => {
+                    setSelectedNodeId(node.id);
+                  }}
+                  proOptions={{ hideAttribution: true }}
+                >
+                  <Background color="#d7dee7" gap={20} size={1} />
+                </ReactFlow>
               </div>
             </div>
-            <div style={{ height: graph.minHeight }}>
-              <ReactFlow
-                nodes={graph.nodes}
-                edges={graph.edges}
-                nodeTypes={nodeTypes}
-                nodesDraggable={false}
-                nodesConnectable={false}
-                elementsSelectable={false}
-                zoomOnScroll={false}
-                panOnDrag={false}
-                minZoom={1}
-                maxZoom={1}
-                defaultViewport={{ x: 0, y: 0, zoom: 1 }}
-                proOptions={{ hideAttribution: true }}
-              >
-                <Background color="#d7dee7" gap={20} size={1} />
-              </ReactFlow>
-            </div>
+
+            <aside className="rounded-2xl border border-desktop-border bg-desktop-bg-secondary/55 p-4 shadow-sm">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Node details</div>
+              <div className="mt-1 text-sm font-semibold text-desktop-text-primary">
+                {graph.nodes.find((node) => node.id === selectedNodeId)?.data.title ?? "阶段详情"}
+              </div>
+              <div className="mt-3 space-y-3">
+                {detailSections.map((section: LoopDetailSection) => (
+                  <div key={section.title} className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80 p-3">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">{section.title}</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {section.items.map((item: string) => (
+                        <span key={item} className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-[10px] text-desktop-text-primary">
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </aside>
           </div>
 
         </div>
