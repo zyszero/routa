@@ -2,7 +2,6 @@ import { spawn } from "child_process";
 import { NextRequest, NextResponse } from "next/server";
 import {
   isContextError,
-  isHookProfileName,
   parseContext,
   resolveRepoRoot,
   type HookProfileName,
@@ -73,9 +72,7 @@ function parseJsonLines(raw: string): Record<string, unknown>[] {
 }
 
 function asRuntimePhase(value: unknown): RuntimePhase | null {
-  return value === "submodule" || value === "fitness" || value === "fitness-fast" || value === "review"
-    ? value
-    : null;
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
 function asStatus(value: unknown): "passed" | "failed" | "skipped" | null {
@@ -210,15 +207,15 @@ export async function GET(request: NextRequest) {
     const profile = request.nextUrl.searchParams.get("profile");
     const mode = parseMode(request.nextUrl.searchParams.get("mode"));
 
-    if (!isHookProfileName(profile ?? undefined)) {
+    if (typeof profile !== "string" || profile.trim().length === 0) {
       return NextResponse.json(
-        { error: "缺少或无效的 profile，允许值: pre-push, pre-commit, local-validate" },
+        { error: "缺少或无效的 profile" },
         { status: 400 },
       );
     }
 
     const repoRoot = await resolveRepoRoot(context);
-    const preview = await runHookPreview(repoRoot, profile as HookProfileName, mode);
+    const preview = await runHookPreview(repoRoot, profile, mode);
     return NextResponse.json(preview);
   } catch (error) {
     const message = toMessage(error);

@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { CodeViewer } from "@/client/components/codemirror/code-viewer";
 
-type HookProfileName = "pre-push" | "pre-commit" | "local-validate";
-type RuntimePhase = "submodule" | "fitness" | "fitness-fast" | "review";
+type HookProfileName = string;
+type RuntimePhase = string;
 
 type HookMetricSummary = {
   name: string;
@@ -60,18 +60,13 @@ type HooksState = {
   data: HooksResponse | null;
 };
 
-const PHASE_LABELS: Record<RuntimePhase, string> = {
-  submodule: "Submodule",
-  fitness: "Fitness",
-  "fitness-fast": "Fitness Fast",
-  review: "Review",
-};
-
-const PROFILE_DISPLAY_ORDER: Record<HookProfileName, number> = {
-  "pre-commit": 0,
-  "pre-push": 1,
-  "local-validate": 2,
-};
+function formatTokenLabel(value: string): string {
+  return value
+    .split(/[-_]/u)
+    .filter(Boolean)
+    .map((segment) => segment.slice(0, 1).toUpperCase() + segment.slice(1))
+    .join(" ");
+}
 
 export function HarnessHookRuntimePanel({
   workspaceId,
@@ -84,7 +79,7 @@ export function HarnessHookRuntimePanel({
     error: null,
     data: null,
   });
-  const [selectedProfileName, setSelectedProfileName] = useState<HookProfileName>("pre-push");
+  const [selectedProfileName, setSelectedProfileName] = useState<HookProfileName | null>(null);
 
   useEffect(() => {
     if (!workspaceId || !codebaseId || !repoPath) {
@@ -144,12 +139,35 @@ export function HarnessHookRuntimePanel({
     };
   }, [workspaceId, codebaseId, repoPath]);
 
-  const orderedProfiles = useMemo(
-    () => [...(hooksState.data?.profiles ?? [])].sort(
-      (left, right) => PROFILE_DISPLAY_ORDER[left.name] - PROFILE_DISPLAY_ORDER[right.name],
-    ),
-    [hooksState.data?.profiles],
-  );
+  const orderedProfiles = useMemo(() => {
+    const profiles = hooksState.data?.profiles ?? [];
+    const hookOrder = new Map((hooksState.data?.hookFiles ?? []).map((hook, index) => [hook.name, index]));
+
+    return profiles
+      .map((profile, yamlIndex) => {
+        const firstBoundHookIndex = profile.hooks
+          .map((hookName) => hookOrder.get(hookName))
+          .find((index): index is number => typeof index === "number");
+        return { profile, yamlIndex, firstBoundHookIndex };
+      })
+      .sort((left, right) => {
+        const leftIsBound = typeof left.firstBoundHookIndex === "number";
+        const rightIsBound = typeof right.firstBoundHookIndex === "number";
+        if (leftIsBound && rightIsBound) {
+          const leftBoundIndex = left.firstBoundHookIndex ?? Number.MAX_SAFE_INTEGER;
+          const rightBoundIndex = right.firstBoundHookIndex ?? Number.MAX_SAFE_INTEGER;
+          return leftBoundIndex - rightBoundIndex;
+        }
+        if (leftIsBound) {
+          return -1;
+        }
+        if (rightIsBound) {
+          return 1;
+        }
+        return left.yamlIndex - right.yamlIndex;
+      })
+      .map(({ profile }) => profile);
+  }, [hooksState.data?.hookFiles, hooksState.data?.profiles]);
 
   const defaultSelectableProfile = useMemo(
     () => orderedProfiles.find((profile) => profile.hooks.length > 0) ?? orderedProfiles[0] ?? null,
@@ -158,7 +176,7 @@ export function HarnessHookRuntimePanel({
 
   const activeProfileName = useMemo(() => {
     if (!defaultSelectableProfile) {
-      return selectedProfileName;
+      return selectedProfileName ?? "";
     }
 
     const selectedProfile = orderedProfiles.find((profile) => profile.name === selectedProfileName);
@@ -278,7 +296,7 @@ export function HarnessHookRuntimePanel({
             <div className="rounded-xl border border-desktop-border bg-desktop-bg-secondary/55 p-4">
               <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">Resolved profiles</div>
               <div className="mt-3 space-y-3">
-                {(hooksState.data?.profiles ?? []).map((profile) => (
+                {orderedProfiles.map((profile) => (
                   <div key={`config-${profile.name}`} className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-4 py-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="text-[12px] font-semibold text-desktop-text-primary">{profile.name}</div>
@@ -291,7 +309,7 @@ export function HarnessHookRuntimePanel({
                         <span key={`${profile.name}-${phase}`} className="flex items-center gap-2">
                           {index > 0 ? <span>{"->"}</span> : null}
                           <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1">
-                            {PHASE_LABELS[phase]}
+                            {formatTokenLabel(phase)}
                           </span>
                         </span>
                       ))}
@@ -334,54 +352,54 @@ export function HarnessHookRuntimePanel({
               {orderedProfiles.map((profile) => {
                 const isUnbound = profile.hooks.length === 0;
                 return (
-                <button
-                  key={profile.name}
-                  type="button"
-                  disabled={isUnbound}
-                  onClick={() => {
-                    setSelectedProfileName(profile.name);
-                  }}
-                  className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
-                    runtimeProfile?.name === profile.name
-                      ? "border-desktop-accent bg-desktop-bg-secondary text-desktop-text-primary"
-                      : isUnbound
-                        ? "cursor-not-allowed border-desktop-border bg-desktop-bg-primary/45 text-desktop-text-secondary/55"
-                        : "border-desktop-border bg-desktop-bg-primary/80 text-desktop-text-secondary hover:bg-desktop-bg-secondary"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="text-[12px] font-semibold">{profile.name}</div>
-                      <div className="mt-1 text-[10px]">{profile.phases.length} phases · {profile.fallbackMetrics.length} metrics</div>
-                    </div>
-                    <span className={`rounded-full border px-2 py-0.5 text-[10px] ${
-                      isUnbound
-                        ? "border-desktop-border bg-desktop-bg-primary text-desktop-text-secondary/60"
-                        : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    }`}>
-                      {isUnbound ? "unbound" : `${profile.hooks.length} hooks`}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-desktop-text-secondary">
-                    {profile.phases.map((phase) => (
-                      <span
-                        key={`${profile.name}-${phase}`}
-                        className={`rounded-full border px-2 py-0.5 ${
-                          isUnbound
-                            ? "border-desktop-border bg-desktop-bg-primary/60 text-desktop-text-secondary/60"
-                            : "border-desktop-border bg-desktop-bg-primary text-desktop-text-secondary"
-                        }`}
-                      >
-                        {PHASE_LABELS[phase]}
+                  <button
+                    key={profile.name}
+                    type="button"
+                    disabled={isUnbound}
+                    onClick={() => {
+                      setSelectedProfileName(profile.name);
+                    }}
+                    className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
+                      runtimeProfile?.name === profile.name
+                        ? "border-desktop-accent bg-desktop-bg-secondary text-desktop-text-primary"
+                        : isUnbound
+                          ? "cursor-not-allowed border-desktop-border bg-desktop-bg-primary/45 text-desktop-text-secondary/55"
+                          : "border-desktop-border bg-desktop-bg-primary/80 text-desktop-text-secondary hover:bg-desktop-bg-secondary"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-[12px] font-semibold">{profile.name}</div>
+                        <div className="mt-1 text-[10px]">{profile.phases.length} phases · {profile.fallbackMetrics.length} metrics</div>
+                      </div>
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] ${
+                        isUnbound
+                          ? "border-desktop-border bg-desktop-bg-primary text-desktop-text-secondary/60"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      }`}>
+                        {isUnbound ? "unbound" : `${profile.hooks.length} hooks`}
                       </span>
-                    ))}
-                  </div>
-                  {isUnbound ? (
-                    <div className="mt-2 text-[10px] text-desktop-text-secondary/60">
-                      Configured in `hooks.yaml`, but not wired by any checked-in git hook file.
                     </div>
-                  ) : null}
-                </button>
+                    <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-desktop-text-secondary">
+                      {profile.phases.map((phase) => (
+                        <span
+                          key={`${profile.name}-${phase}`}
+                          className={`rounded-full border px-2 py-0.5 ${
+                            isUnbound
+                              ? "border-desktop-border bg-desktop-bg-primary/60 text-desktop-text-secondary/60"
+                              : "border-desktop-border bg-desktop-bg-primary text-desktop-text-secondary"
+                          }`}
+                        >
+                          {formatTokenLabel(phase)}
+                        </span>
+                      ))}
+                    </div>
+                    {isUnbound ? (
+                      <div className="mt-2 text-[10px] text-desktop-text-secondary/60">
+                        Configured in `hooks.yaml`, but not wired by any checked-in git hook file.
+                      </div>
+                    ) : null}
+                  </button>
                 );
               })}
             </div>
@@ -434,8 +452,8 @@ export function HarnessHookRuntimePanel({
                   </div>
                 </div>
 
-                    <div className="grid gap-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-                    <div className="rounded-xl border border-desktop-border bg-desktop-bg-secondary/55 p-4">
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+                  <div className="rounded-xl border border-desktop-border bg-desktop-bg-secondary/55 p-4">
                       <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">Phase contract</div>
                       <div className="mt-3 space-y-2">
                         {runtimeProfile.phases.map((phase, index) => (
@@ -444,7 +462,7 @@ export function HarnessHookRuntimePanel({
                               {index + 1}
                             </div>
                             <div>
-                              <div className="font-semibold text-desktop-text-primary">{PHASE_LABELS[phase]}</div>
+                              <div className="font-semibold text-desktop-text-primary">{formatTokenLabel(phase)}</div>
                               <div className="text-desktop-text-secondary">{phase}</div>
                             </div>
                           </div>
@@ -452,7 +470,7 @@ export function HarnessHookRuntimePanel({
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-desktop-border bg-desktop-bg-secondary/55 p-4">
+                  <div className="rounded-xl border border-desktop-border bg-desktop-bg-secondary/55 p-4">
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">Mapped metrics</div>
@@ -499,8 +517,8 @@ export function HarnessHookRuntimePanel({
                           </div>
                         ))}
                       </div>
-                    </div>
                   </div>
+                </div>
               </>
             ) : null}
           </div>

@@ -8,8 +8,8 @@ export type HarnessContext = {
   repoPath?: string;
 };
 
-export type HookProfileName = "pre-push" | "pre-commit" | "local-validate";
-export type RuntimePhase = "submodule" | "fitness" | "fitness-fast" | "review";
+export type HookProfileName = string;
+export type RuntimePhase = string;
 
 export function normalizeContextValue(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -26,7 +26,7 @@ export function parseContext(searchParams: URLSearchParams): HarnessContext {
 }
 
 export function isHookProfileName(value: string | undefined): value is HookProfileName {
-  return value === "pre-push" || value === "pre-commit" || value === "local-validate";
+  return normalizeContextValue(value) !== undefined;
 }
 
 function isRoutaRepoRoot(repoRoot: string): boolean {

@@ -72,20 +72,29 @@ type HookRuntimeConfigFile = {
   }>;
 };
 
-const DEFAULT_RUNTIME_PROFILES: Record<HookProfileName, { phases: RuntimePhase[]; metrics: string[] }> = {
-  "pre-push": {
+type HookRuntimeProfileConfig = {
+  name: HookProfileName;
+  phases: RuntimePhase[];
+  metrics: string[];
+};
+
+const DEFAULT_RUNTIME_PROFILES: HookRuntimeProfileConfig[] = [
+  {
+    name: "pre-push",
     phases: ["submodule", "fitness", "review"],
     metrics: ["eslint_pass", "ts_typecheck_pass", "ts_test_pass", "clippy_pass", "rust_test_pass"],
   },
-  "pre-commit": {
+  {
+    name: "pre-commit",
     phases: ["fitness-fast"],
     metrics: ["eslint_pass"],
   },
-  "local-validate": {
+  {
+    name: "local-validate",
     phases: ["fitness", "review"],
     metrics: ["eslint_pass", "ts_typecheck_pass", "ts_test_pass", "clippy_pass", "rust_test_pass"],
   },
-};
+];
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -94,12 +103,17 @@ function toMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function detectRuntimeProfile(hookName: string, source: string): HookProfileName | undefined {
-  const explicitMatch = source.match(/--profile(?:=|\s+)(pre-push|pre-commit|local-validate)\b/u);
-  if (explicitMatch?.[1]) {
-    return explicitMatch[1] as HookProfileName;
+function detectRuntimeProfile(
+  hookName: string,
+  source: string,
+  knownProfiles: Set<HookProfileName>,
+): HookProfileName | undefined {
+  const explicitMatch = source.match(/--profile(?:=|\s+)([A-Za-z0-9_-]+)\b/u);
+  const explicitProfile = explicitMatch?.[1];
+  if (explicitProfile && knownProfiles.has(explicitProfile)) {
+    return explicitProfile;
   }
-  if (hookName === "pre-push" || hookName === "pre-commit") {
+  if (knownProfiles.has(hookName)) {
     return hookName;
   }
   return undefined;
@@ -121,41 +135,63 @@ function extractTriggerCommand(source: string): string {
   return commandLines.at(-1) ?? "(no command detected)";
 }
 
-function isRuntimePhase(value: unknown): value is RuntimePhase {
-  return value === "submodule" || value === "fitness" || value === "fitness-fast" || value === "review";
-}
-
 function normalizeStringList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0) : [];
 }
 
-async function loadHookRuntimeProfiles(repoRoot: string): Promise<Record<HookProfileName, { phases: RuntimePhase[]; metrics: string[] }>> {
+async function loadHookRuntimeProfiles(repoRoot: string): Promise<{
+  profiles: HookRuntimeProfileConfig[];
+  warnings: string[];
+}> {
   const configPath = path.join(repoRoot, "docs", "fitness", "runtime", "hooks.yaml");
+  const warnings: string[] = [];
   if (!fs.existsSync(configPath)) {
-    return DEFAULT_RUNTIME_PROFILES;
+    warnings.push("Missing docs/fitness/runtime/hooks.yaml, showing built-in hook runtime defaults.");
+    return {
+      profiles: DEFAULT_RUNTIME_PROFILES.map((profile) => ({
+        ...profile,
+        phases: [...profile.phases],
+        metrics: [...profile.metrics],
+      })),
+      warnings,
+    };
   }
 
   const raw = await fsp.readFile(configPath, "utf-8");
   const parsed = (yaml.load(raw) ?? {}) as HookRuntimeConfigFile;
   const configuredProfiles = parsed.profiles ?? {};
-  const profiles = { ...DEFAULT_RUNTIME_PROFILES };
 
-  for (const profileName of Object.keys(DEFAULT_RUNTIME_PROFILES) as HookProfileName[]) {
-    const configured = configuredProfiles[profileName];
-    if (!configured) {
-      continue;
+  const profiles = Object.entries(configuredProfiles).map(([profileName, configured]) => {
+    const phases = normalizeStringList(configured?.phases);
+    const metrics = normalizeStringList(configured?.metrics);
+
+    if (!phases.length) {
+      warnings.push(`Profile "${profileName}" has no configured phases in hooks.yaml.`);
+    }
+    if (!metrics.length) {
+      warnings.push(`Profile "${profileName}" has no configured metrics in hooks.yaml.`);
     }
 
-    const phases = Array.isArray(configured.phases) ? configured.phases.filter(isRuntimePhase) : [];
-    const metrics = normalizeStringList(configured.metrics);
+    return {
+      name: profileName,
+      phases,
+      metrics,
+    };
+  });
 
-    profiles[profileName] = {
-      phases: phases.length > 0 ? phases : [...DEFAULT_RUNTIME_PROFILES[profileName].phases],
-      metrics: metrics.length > 0 ? metrics : [...DEFAULT_RUNTIME_PROFILES[profileName].metrics],
+  if (!profiles.length) {
+    warnings.push("hooks.yaml does not define any profiles, showing built-in hook runtime defaults.");
+    return {
+      profiles: DEFAULT_RUNTIME_PROFILES.map((profile) => ({
+        ...profile,
+        phases: [...profile.phases],
+        metrics: [...profile.metrics],
+      })),
+      warnings,
     };
   }
 
-  return profiles;
+  return { profiles, warnings };
 }
 
 async function loadHookRuntimeConfigSource(repoRoot: string): Promise<HooksResponse["configFile"]> {
@@ -226,16 +262,16 @@ async function loadMetricLookup(repoRoot: string): Promise<{
 function buildProfileSummaries(
   hookFiles: HookFileSummary[],
   metricLookup: Map<string, Omit<HookMetricSummary, "resolved">>,
-  runtimeProfiles: Record<HookProfileName, { phases: RuntimePhase[]; metrics: string[] }>,
+  runtimeProfiles: HookRuntimeProfileConfig[],
 ): HookRuntimeProfileSummary[] {
-  return (Object.keys(runtimeProfiles) as HookProfileName[]).map((profileName) => {
-    const fallbackMetrics = [...runtimeProfiles[profileName].metrics];
+  return runtimeProfiles.map((profile) => {
+    const fallbackMetrics = [...profile.metrics];
     return {
-      name: profileName,
-      phases: [...runtimeProfiles[profileName].phases],
+      name: profile.name,
+      phases: [...profile.phases],
       fallbackMetrics,
       hooks: hookFiles
-        .filter((hook) => hook.runtimeProfileName === profileName)
+        .filter((hook) => hook.runtimeProfileName === profile.name)
         .map((hook) => hook.name),
       metrics: fallbackMetrics.map((metricName) => {
         const metric = metricLookup.get(metricName);
@@ -258,9 +294,10 @@ export async function GET(request: NextRequest) {
     const context = parseContext(request.nextUrl.searchParams);
     const repoRoot = await resolveRepoRoot(context);
     const hooksDir = path.join(repoRoot, ".husky");
-    const runtimeProfiles = await loadHookRuntimeProfiles(repoRoot);
+    const hookRuntime = await loadHookRuntimeProfiles(repoRoot);
     const configFile = await loadHookRuntimeConfigSource(repoRoot);
-    const warnings: string[] = [];
+    const warnings: string[] = [...hookRuntime.warnings];
+    const knownProfiles = new Set(hookRuntime.profiles.map((profile) => profile.name));
 
     if (!fs.existsSync(hooksDir) || !fs.statSync(hooksDir).isDirectory()) {
       return NextResponse.json({
@@ -269,8 +306,8 @@ export async function GET(request: NextRequest) {
         hooksDir,
         configFile,
         hookFiles: [],
-        profiles: buildProfileSummaries([], new Map(), runtimeProfiles),
-        warnings: ['No ".husky" directory found for this repository.'],
+        profiles: buildProfileSummaries([], new Map(), hookRuntime.profiles),
+        warnings: [...warnings, 'No ".husky" directory found for this repository.'],
       } satisfies HooksResponse);
     }
 
@@ -284,9 +321,15 @@ export async function GET(request: NextRequest) {
       const relativePath = path.posix.join(".husky", entry.name);
       const fullPath = path.join(hooksDir, entry.name);
       const source = await fsp.readFile(fullPath, "utf-8");
+      const explicitMatch = source.match(/--profile(?:=|\s+)([A-Za-z0-9_-]+)\b/u);
+      const explicitProfile = explicitMatch?.[1];
       const runtimeProfileName = source.includes("tools/hook-runtime/src/cli.ts")
-        ? detectRuntimeProfile(entry.name, source)
+        ? detectRuntimeProfile(entry.name, source, knownProfiles)
         : undefined;
+
+      if (source.includes("tools/hook-runtime/src/cli.ts") && explicitProfile && !knownProfiles.has(explicitProfile)) {
+        warnings.push(`Hook "${entry.name}" references unknown profile "${explicitProfile}" not defined in hooks.yaml.`);
+      }
 
       hookFiles.push({
         name: entry.name,
@@ -308,7 +351,7 @@ export async function GET(request: NextRequest) {
       hooksDir,
       configFile,
       hookFiles,
-      profiles: buildProfileSummaries(hookFiles, metricLookup.metrics, runtimeProfiles),
+      profiles: buildProfileSummaries(hookFiles, metricLookup.metrics, hookRuntime.profiles),
       warnings,
     } satisfies HooksResponse);
   } catch (error) {
