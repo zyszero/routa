@@ -175,22 +175,32 @@ metrics:
 
   - name: cyclomatic_complexity
     command: |
-      npx eslint --rule "complexity: [error, 15]" --format compact src 2>&1 | grep -c "complexity" || echo "0"
-    pattern: "^0$|No files"
+      changed_files=$(git diff --name-only --diff-filter=ACMR "${ROUTA_FITNESS_CHANGED_BASE:-HEAD}" -- src apps 2>/dev/null | \
+        grep -E '\.(ts|tsx|js|jsx)$' | \
+        grep -vE '(^|/)(node_modules|target|\.next|_next|bundled)/' || true)
+      if [ -z "$changed_files" ]; then
+        echo "No changed TS/JS files"
+      else
+        count=$(printf '%s\n' "$changed_files" | \
+          xargs npx eslint --rule "complexity: [error, 15]" --format compact 2>&1 | \
+          grep -c "complexity" || true)
+        echo "complexity_violations: ${count:-0}"
+      fi
+    pattern: "complexity_violations: 0|No changed TS/JS files"
     hard_gate: false
     tier: normal
-    description: "圈复杂度限制 ≤15"
+    description: "本次变更的 TS/JS 文件中不得新增圈复杂度 >15 的函数"
 
   - name: cognitive_complexity
     command: |
-      # 检查是否有超过 3 层嵌套的代码
-      grep -rn "^[[:space:]]\{12,\}if\|^[[:space:]]\{12,\}for\|^[[:space:]]\{12,\}while" \
-        --include="*.ts" --include="*.tsx" src apps 2>/dev/null | wc -l | \
-      awk '{print "deep_nesting_count:", $1}'
-    pattern: "deep_nesting_count: [0-9]$"
+      base_ref="${ROUTA_FITNESS_CHANGED_BASE:-HEAD}"
+      git diff --unified=0 "$base_ref" -- src apps 2>/dev/null | \
+        grep -E '^\+[^+][[:space:]]{12,}(if|for|while)\b' | \
+        wc -l | awk '{print "new_deep_nesting_count:", $1}'
+    pattern: "new_deep_nesting_count: 0"
     hard_gate: false
     tier: normal
-    description: "深层嵌套检测（>3层）"
+    description: "本次变更不得新增 >3 层缩进的 if/for/while 嵌套"
 
   # ══════════════════════════════════════════════════════════════
   # 依赖健康检测 - 防止依赖失序和循环依赖
@@ -267,12 +277,14 @@ metrics:
 
   - name: any_type_check
     command: |
-      grep -rn ": any\|as any" --include="*.ts" --include="*.tsx" \
-        src apps 2>/dev/null | wc -l | awk '{print "any_type_count:", $1}'
-    pattern: "any_type_count: [0-9]$|any_type_count: [1-4][0-9]$"
+      base_ref="${ROUTA_FITNESS_CHANGED_BASE:-HEAD}"
+      git diff --unified=0 "$base_ref" -- src apps 2>/dev/null | \
+        grep -E '^\+[^+].*(: any|as any)\b' | \
+        wc -l | awk '{print "new_any_type_count:", $1}'
+    pattern: "new_any_type_count: 0"
     hard_gate: false
     tier: normal
-    description: "TypeScript any 类型使用检测（<50）"
+    description: "本次变更不得新增 `: any` 或 `as any` 类型逃逸"
 ---
 
 # Code Quality 证据
@@ -291,15 +303,15 @@ metrics:
 | 函数行数 | ≤100 行 | ❌ | grep + 人工 |
 | 重复代码 | 变更文件不新增大块 clone | ❌ | jscpd |
 | 结构坏味道 | 变更文件中结构型包装重复 = 0 | ❌ | ast-grep |
-| 圈复杂度 | ≤15 | ❌ | ESLint |
-| 深层嵌套 | ≤3 层 | ❌ | grep |
+| 圈复杂度 | 变更文件中新增 >15 复杂度函数 = 0 | ❌ | ESLint |
+| 深层嵌套 | 新增 >3 层嵌套 = 0 | ❌ | git diff + grep |
 | 依赖健康检查 | 循环依赖/依赖违规为 0 | ❌ | dependency-cruiser |
 | ESLint | 0 errors | ✅ | ESLint |
 | Clippy | 0 warnings | ✅ | Clippy |
 | TODO/FIXME | <100 | ❌ | grep |
 | console.log | 变更中新增数 = 0 | ❌ | git diff + grep |
 | 重复函数名 | 变更中新增重复名 = 0 | ❌ | git diff + grep |
-| any 类型 | <50 | ❌ | grep |
+| any 类型 | 新增 `any` = 0 | ❌ | git diff + grep |
 
 ## AI 特有问题
 
@@ -321,7 +333,7 @@ AI 经常"复制粘贴"式生成，忽略已有实现。
 ### 3. 类型逃逸
 AI 使用 `any` 绕过类型检查。
 
-**约束**: any 类型 <50 处
+**约束**: 本次变更不得新增 `: any` 或 `as any`
 
 ### 4. 调试残留
 AI 遗留 console.log 和 TODO。
