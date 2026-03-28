@@ -380,11 +380,6 @@ export function HarnessGitHubActionsFlowPanel({
                         </button>
                       ))}
                     </div>
-                    <details className="mt-3 text-[10px] text-desktop-text-secondary">
-                      <summary className="cursor-pointer list-none">
-                        展开 {entry.group} 分组定义
-                      </summary>
-                    </details>
                   </div>
                 ))}
             </div>
