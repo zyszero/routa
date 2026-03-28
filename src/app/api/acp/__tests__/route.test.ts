@@ -129,6 +129,25 @@ describe("/api/acp GET", () => {
       { skipPending: false },
     );
   });
+
+  it("rejects SSE attach when an embedded session is owned by another instance", async () => {
+    getSessionRoutingRecord.mockResolvedValue({
+      executionMode: "embedded",
+      ownerInstanceId: "web-2",
+      leaseExpiresAt: "2099-01-01T00:00:00.000Z",
+    });
+
+    const response = await GET(
+      new NextRequest("http://localhost/api/acp?sessionId=session-1"),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining("owned by instance web-2"),
+      ownerInstanceId: "web-2",
+    });
+    expect(getHttpSessionStore().attachSse).not.toHaveBeenCalled();
+  });
 });
 
 describe("/api/acp POST", () => {
@@ -191,6 +210,44 @@ describe("/api/acp POST", () => {
       error: {
         code: -32602,
         message: "workspaceId is required",
+      },
+    });
+  });
+
+  it("rejects prompt methods when an embedded session is owned by another instance", async () => {
+    getRequiredRunnerUrl.mockReturnValue("http://runner.internal");
+    getSessionRoutingRecord.mockResolvedValue({
+      executionMode: "embedded",
+      ownerInstanceId: "web-2",
+      leaseExpiresAt: "2099-01-01T00:00:00.000Z",
+    });
+
+    const response = await POST(
+      new NextRequest("http://localhost/api/acp", {
+        method: "POST",
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 3,
+          method: "session/prompt",
+          params: {
+            sessionId: "session-1",
+            prompt: {
+              role: "user",
+              content: [{ type: "text", text: "hello" }],
+            },
+          },
+        }),
+      }),
+    );
+
+    expect(proxyRequestToRunner).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      jsonrpc: "2.0",
+      id: 3,
+      error: {
+        code: -32010,
+        message: expect.stringContaining("owned by instance web-2"),
       },
     });
   });

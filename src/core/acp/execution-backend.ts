@@ -67,3 +67,32 @@ export function refreshExecutionBinding<T extends AcpExecutionBinding>(record: T
 export function requiresRunnerProxy(mode?: AcpExecutionMode): boolean {
   return mode === "runner";
 }
+
+export function isExecutionLeaseActive(
+  leaseExpiresAt?: string,
+  now: Date = new Date(),
+): boolean {
+  if (!leaseExpiresAt) return false;
+  const expiresAt = Date.parse(leaseExpiresAt);
+  return Number.isFinite(expiresAt) && expiresAt > now.getTime();
+}
+
+export function getEmbeddedOwnershipIssue(
+  binding: AcpExecutionBinding | undefined,
+  now: Date = new Date(),
+): string | null {
+  if (!binding || binding.executionMode !== "embedded") {
+    return null;
+  }
+
+  const ownerInstanceId = binding.ownerInstanceId?.trim();
+  if (!ownerInstanceId || ownerInstanceId === getAcpInstanceId()) {
+    return null;
+  }
+
+  if (isExecutionLeaseActive(binding.leaseExpiresAt, now)) {
+    return `Session is currently owned by instance ${ownerInstanceId} until ${binding.leaseExpiresAt}.`;
+  }
+
+  return `Session ownership lease expired on instance ${ownerInstanceId} at ${binding.leaseExpiresAt ?? "unknown time"}, and embedded ACP processes cannot be resumed on a different instance.`;
+}

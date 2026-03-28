@@ -50,3 +50,22 @@ ACP CLI sessions should remain routable and observable regardless of which Next.
 ## References
 
 - `docs/ARCHITECTURE.md`
+
+## Progress
+
+- Session ownership metadata is now actively enforced in the Next.js ACP route instead of being passive persistence only.
+- `src/app/api/acp/route.ts` now rejects SSE attach and prompt-style ACP JSON-RPC requests when an `embedded` session is still leased to a different `ownerInstanceId`.
+- `src/core/acp/execution-backend.ts` now exposes reusable lease/ownership helpers so embedded session routing can make explicit decisions from persisted metadata.
+- Added ACP route regression coverage for foreign-owner rejection in `src/app/api/acp/__tests__/route.test.ts`.
+
+## Remaining Gap
+
+- This closes the silent split-brain failure mode by turning wrong-instance access into an explicit protocol error.
+- It does **not** yet provide full cross-instance continuation or proxying for embedded CLI sessions; a later phase still needs either:
+  - a dedicated execution service / runner for CLI-backed ACP sessions, or
+  - explicit owner handoff / lease takeover with resumable live process semantics.
+
+## Verification
+
+- `npx vitest run src/app/api/acp/__tests__/route.test.ts src/core/acp/__tests__/execution-backend.test.ts`
+- `entrix run --tier normal` on 2026-03-28: overall `PASS` with final score `100.0%`

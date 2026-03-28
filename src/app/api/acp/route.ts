@@ -37,6 +37,7 @@ import type { SessionUpdateNotification } from "@/core/acp/http-session-store";
 import { getTerminalManager } from "@/core/acp/terminal-manager";
 import {
   buildExecutionBinding,
+  getEmbeddedOwnershipIssue,
   requiresRunnerProxy,
   shouldUseRunnerForProvider,
 } from "@/core/acp/execution-backend";
@@ -122,12 +123,25 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  let sessionRoutingRecord: Awaited<ReturnType<typeof getSessionRoutingRecord>> | undefined;
   if (!isForwardedAcpRequest(request)) {
-    const session = await getSessionRoutingRecord(sessionId);
+    sessionRoutingRecord = await getSessionRoutingRecord(sessionId);
     const runnerUrl = getRequiredRunnerUrl();
-    if (session?.executionMode === "runner") {
+    if (sessionRoutingRecord?.executionMode === "runner") {
       if (!runnerUrl) return runnerUnavailableResponse();
       return proxyRequestToRunner(request, { runnerUrl, path: "/api/acp" });
+    }
+
+    const ownershipIssue = getEmbeddedOwnershipIssue(sessionRoutingRecord);
+    if (ownershipIssue) {
+      return NextResponse.json(
+        {
+          error: ownershipIssue,
+          ownerInstanceId: sessionRoutingRecord?.ownerInstanceId,
+          leaseExpiresAt: sessionRoutingRecord?.leaseExpiresAt,
+        },
+        { status: 409 },
+      );
     }
   }
 
@@ -359,6 +373,13 @@ export async function POST(request: NextRequest) {
               path: "/api/acp",
               method: "POST",
               body: body as Record<string, unknown>,
+            });
+          }
+          const ownershipIssue = getEmbeddedOwnershipIssue(session);
+          if (ownershipIssue) {
+            return jsonrpcResponse(id ?? null, null, {
+              code: -32010,
+              message: ownershipIssue,
             });
           }
         }
