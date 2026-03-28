@@ -303,14 +303,14 @@ function buildGraph(args: {
       note: "本地验证 / 回归检查",
       active: dimensionCount > 0 || metricCount > 0,
     }),
-    buildNode("lint", 128, 288, {
+    buildNode("lint", 128, 264, {
       layer: "commit",
       title: "Lint",
       tone: "emerald",
       note: "静态质量检查",
       active: dimensionCount > 0,
     }),
-    buildNode("precommit", 330, 288, {
+    buildNode("precommit", 330, 264, {
       layer: "commit",
       title: "预提交",
       tone: "sky",
@@ -319,57 +319,53 @@ function buildGraph(args: {
         : "本地门禁执行",
       active: Boolean(hookSummary),
     }),
-    buildNode("review", 532, 288, {
+    buildNode("review", 532, 264, {
       layer: "commit",
       title: "代码检视",
       tone: "emerald",
       note: "规则校验 + review",
       active: dimensionCount > 0,
     }),
-    buildNode("commit", 734, 288, {
+    buildNode("commit", 734, 264, {
       layer: "commit",
       title: "提交",
       tone: "neutral",
       note: "进入远程流水线",
       active: false,
     }),
-    buildNode("post-commit", 27, 480, {
+    buildNode("post-commit", 27, 430, {
       layer: "external",
       title: "提交后阶段",
       tone: "violet",
-      note: workflowSummary
-        ? `${workflowSummary.flowCount} workflows / ${workflowSummary.jobCount} jobs`
-        : "远程 CI / 自动构建",
+      note: "远程校验 / 自动构建",
       active: Boolean(workflowSummary),
     }),
-    buildNode("staging", 229, 480, {
+    buildNode("staging", 229, 430, {
       layer: "external",
       title: "预发环境",
       tone: "violet",
-      note: "合并后验证 / 环境验收",
+      note: "环境验证 / 验收",
       active: false,
     }),
-    buildNode("canary", 431, 480, {
+    buildNode("canary", 431, 430, {
       layer: "external",
       title: "金丝雀发布",
       tone: "amber",
-      note: workflowSummary?.remoteSignals.length
-        ? `信号：${workflowSummary.remoteSignals.join(" / ")}`
-        : "小流量验证 / 渐进放量",
-      active: Boolean(workflowSummary?.remoteSignals.length),
+      note: "小流量验证 / 渐进放量",
+      active: false,
     }),
-    buildNode("production", 633, 480, {
+    buildNode("production", 633, 430, {
       layer: "external",
       title: "生产环境",
       tone: "amber",
-      note: "真实流量交付与运行",
+      note: "真实流量运行",
       active: false,
     }),
-    buildNode("metrics", 835, 480, {
+    buildNode("metrics", 835, 430, {
       layer: "external",
       title: "度量",
       tone: "emerald",
-      note: "Evidence / Issues / 反馈信号",
+      note: "Evidence / Issues",
       active: false,
     }),
   ];
@@ -386,11 +382,11 @@ function buildGraph(args: {
     buildEdge("post-commit-staging", "post-commit", "staging", "source-right", "target-left", "预发", "#8b5cf6"),
     buildEdge("staging-canary", "staging", "canary", "source-right", "target-left", "放量", "#f59e0b"),
     buildEdge("canary-production", "canary", "production", "source-right", "target-left", "生产", "#f59e0b"),
-    buildEdge("production-metrics", "production", "metrics", "source-right", "target-left", "度量", "#059669"),
+    buildEdge("production-metrics", "production", "metrics", "source-right", "target-left", "", "#059669"),
 
-    buildEdge("test-lint", "test", "lint", "source-bottom", "target-top", "收敛", "#10b981", "6 4"),
-    buildEdge("commit-post-commit", "commit", "post-commit", "source-bottom", "target-top", "触发", "#8b5cf6", "6 4"),
-    buildEdge("metrics-thinking", "metrics", "thinking", "source-top", "target-bottom", "回流", "#059669", "6 4"),
+    buildEdge("test-lint", "test", "lint", "source-bottom", "target-top", "", "#10b981", "6 4"),
+    buildEdge("commit-post-commit", "commit", "post-commit", "source-bottom", "target-top", "", "#8b5cf6", "6 4"),
+    buildEdge("metrics-thinking", "metrics", "thinking", "source-top", "target-bottom", "", "#059669", "6 4"),
 
     ...(workflowSummary?.hasRepairLoop
       ? [
@@ -428,7 +424,7 @@ function buildGraph(args: {
       : []),
   ];
 
-  return { nodes, edges, minHeight: 690 };
+  return { nodes, edges, minHeight: 610 };
 }
 
 export function HarnessGovernanceLoopGraph({
@@ -606,7 +602,6 @@ export function HarnessGovernanceLoopGraph({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Governance loop</div>
-          <h3 className="mt-1 text-sm font-semibold text-desktop-text-primary">研发阶段流转与三层反馈闭环</h3>
         </div>
         <div className="flex flex-wrap gap-2 text-[10px]">
           <span className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2.5 py-1 text-desktop-text-secondary">
@@ -649,26 +644,23 @@ export function HarnessGovernanceLoopGraph({
             <span className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2.5 py-1">
               {planLoading ? "loading plan" : `${metricCount} metrics`}
             </span>
-            <span className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2.5 py-1">
-              {workflowSummary ? `${workflowSummary.flowCount} workflows` : "loading workflows"}
-            </span>
           </div>
 
           <div className="relative overflow-hidden rounded-2xl border border-desktop-border bg-[linear-gradient(180deg,rgba(248,250,252,0.98),rgba(241,245,249,0.98))]">
             <div className="pointer-events-none absolute inset-0">
-              <div className="absolute left-[104px] top-[52px] h-[168px] w-[842px] rounded-[36px] border border-emerald-300/70 bg-emerald-50/35" />
-              <div className="absolute left-[104px] top-[244px] h-[168px] w-[842px] rounded-[36px] border border-sky-300/70 bg-sky-50/35" />
-              <div className="absolute left-[20px] top-[436px] h-[168px] w-[1068px] rounded-[36px] border border-violet-300/65 bg-violet-50/35" />
+              <div className="absolute left-[104px] top-[44px] h-[152px] w-[842px] rounded-[36px] border border-emerald-300/70 bg-emerald-50/35" />
+              <div className="absolute left-[104px] top-[214px] h-[152px] w-[842px] rounded-[36px] border border-sky-300/70 bg-sky-50/35" />
+              <div className="absolute left-[20px] top-[386px] h-[152px] w-[1068px] rounded-[36px] border border-violet-300/65 bg-violet-50/35" />
 
-              <div className="absolute left-[126px] top-[76px] max-w-[180px] text-left text-slate-600">
+              <div className="absolute left-[126px] top-[66px] max-w-[180px] text-left text-slate-600">
                 <div className="text-[11px] font-semibold tracking-[0.06em]">内部反馈环</div>
               </div>
 
-              <div className="absolute left-[126px] top-[268px] max-w-[180px] text-left text-slate-600">
+              <div className="absolute left-[126px] top-[236px] max-w-[180px] text-left text-slate-600">
                 <div className="text-[11px] font-semibold tracking-[0.06em]">提交反馈环</div>
               </div>
 
-              <div className="absolute left-[42px] top-[460px] max-w-[180px] text-left text-slate-600">
+              <div className="absolute left-[42px] top-[408px] max-w-[180px] text-left text-slate-600">
                 <div className="text-[11px] font-semibold tracking-[0.06em]">外部反馈环</div>
               </div>
             </div>
