@@ -25,6 +25,12 @@ export function formatDuration(durationMs: number): string {
   return `${(durationMs / 1000).toFixed(1)}s`;
 }
 
+const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}(?:[@-Z\\\\-_]|\\[[0-?]*[ -/]*[@-~])`, "g");
+
+function stripAnsi(input: string): string {
+  return input.replace(ANSI_ESCAPE_PATTERN, "");
+}
+
 function evaluateMetric(metric: HookMetric, exitCode: number, output: string): boolean {
   if (exitCode !== 0) {
     return false;
@@ -43,7 +49,7 @@ function splitOutputLines(rawOutput: string): string[] {
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
     .split("\n")
-    .map((line) => line.trim())
+    .map((line) => stripAnsi(line).trim())
     .filter(Boolean);
 }
 

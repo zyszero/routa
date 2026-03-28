@@ -77,4 +77,27 @@ describe("summarizeFailures", () => {
     expect(summary?.outputTail).toContain("FAIL  tools/hook-runtime/src/__tests__/actual-broken.test.ts > actual broken case");
     expect(summary?.outputTail).not.toContain("Type error: Something else");
   });
+
+  it("extracts vitest failure headers from ansi-colored terminal output", () => {
+    const results = [
+      {
+        durationMs: 25,
+        exitCode: 1,
+        metric: buildMetric({ name: "ts_test_pass" }),
+        output: [
+          "stdout | src/core/acp/__tests__/session-write-buffer.test.ts > SessionWriteBuffer > error handling > continues working after a persist failure",
+          "stderr | src/core/kanban/__tests__/workflow-orchestrator-singleton.test.ts > workflow orchestrator singleton prompt path > falls back to session/prompt when agent message fails",
+          "\u001b[31mFAIL\u001b[39m  src/core/acp/__tests__/actual-broken.test.ts > actual broken case",
+          "AssertionError: expected true to be false",
+        ].join("\n"),
+        passed: false,
+      },
+    ];
+
+    const [summary] = summarizeFailures(results);
+
+    expect(summary?.outputTail).toContain("FAIL  src/core/acp/__tests__/actual-broken.test.ts > actual broken case");
+    expect(summary?.outputTail).not.toContain("continues working after a persist failure");
+    expect(summary?.outputTail).not.toContain("falls back to session/prompt when agent message fails");
+  });
 });
