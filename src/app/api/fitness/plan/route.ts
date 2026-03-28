@@ -193,6 +193,14 @@ function normalizeMetric(rawMetric: unknown): PlannedMetric {
   };
 }
 
+function parseManifestEntries(raw: string): string[] {
+  const parsed = matter(raw);
+  const data = parsed.data as Record<string, unknown>;
+  return Array.isArray(data.evidence_files)
+    ? data.evidence_files.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
 export async function GET(request: NextRequest) {
   try {
     const context = parseContext(request.nextUrl.searchParams);
@@ -201,18 +209,48 @@ export async function GET(request: NextRequest) {
     const repoRoot = await resolveRepoRoot(context);
     const fitnessDir = path.join(repoRoot, "docs", "fitness");
     const entries = await fsp.readdir(fitnessDir, { withFileTypes: true });
+    const markdownByPath = new Map<string, { name: string; raw: string }>();
+    let manifestEntries: string[] = [];
+
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (!entry.isFile()) {
+        continue;
+      }
+
+      const fullPath = path.join(fitnessDir, entry.name);
+      if (entry.name === "manifest.yaml") {
+        manifestEntries = parseManifestEntries(await fsp.readFile(fullPath, "utf-8"));
+        continue;
+      }
+
+      if (!entry.name.endsWith(".md") || entry.name === "README.md" || entry.name === "REVIEW.md") {
+        continue;
+      }
+
+      const raw = await fsp.readFile(fullPath, "utf-8");
+      markdownByPath.set(entry.name, { name: entry.name, raw });
+      markdownByPath.set(`docs/fitness/${entry.name}`, { name: entry.name, raw });
+    }
+
+    const orderedMarkdown = new Map<string, { name: string; raw: string }>();
+    for (const manifestEntry of manifestEntries) {
+      const file = markdownByPath.get(manifestEntry);
+      if (file) {
+        orderedMarkdown.set(file.name, file);
+      }
+    }
+    for (const [key, file] of markdownByPath.entries()) {
+      if (!key.startsWith("docs/fitness/")) {
+        orderedMarkdown.set(file.name, file);
+      }
+    }
+
     const dimensions: PlannedDimension[] = [];
     const runnerCounts: Record<RunnerKind, number> = { shell: 0, graph: 0, sarif: 0 };
     let metricCount = 0;
     let hardGateCount = 0;
 
-    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-      if (!entry.isFile() || !entry.name.endsWith(".md") || entry.name === "README.md" || entry.name === "REVIEW.md") {
-        continue;
-      }
-
-      const fullPath = path.join(fitnessDir, entry.name);
-      const raw = await fsp.readFile(fullPath, "utf-8");
+    for (const { name, raw } of orderedMarkdown.values()) {
       const parsed = matter(raw);
       const data = parsed.data as Record<string, unknown>;
       const rawMetrics = Array.isArray(data.metrics) ? data.metrics : [];
@@ -238,11 +276,11 @@ export async function GET(request: NextRequest) {
 
       const threshold = (data.threshold && typeof data.threshold === "object" ? data.threshold : {}) as { pass?: unknown; warn?: unknown };
       dimensions.push({
-        name: typeof data.dimension === "string" ? data.dimension : entry.name.replace(/\.md$/, ""),
+        name: typeof data.dimension === "string" ? data.dimension : name.replace(/\.md$/, ""),
         weight: typeof data.weight === "number" ? data.weight : 0,
         thresholdPass: typeof threshold.pass === "number" ? threshold.pass : 90,
         thresholdWarn: typeof threshold.warn === "number" ? threshold.warn : 80,
-        sourceFile: entry.name,
+        sourceFile: name,
         metrics,
       });
     }

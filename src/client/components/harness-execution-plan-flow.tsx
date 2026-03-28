@@ -112,8 +112,8 @@ function PlanNodeView({ data }: NodeProps<Node<PlanNodeData>>) {
 
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} className="!h-2.5 !w-2.5 !border-0 !bg-desktop-border" />
-      <Handle type="source" position={Position.Right} className="!h-2.5 !w-2.5 !border-0 !bg-desktop-border" />
+      <Handle type="target" position={Position.Top} className="!h-2.5 !w-2.5 !border-0 !bg-desktop-border" />
+      <Handle type="source" position={Position.Bottom} className="!h-2.5 !w-2.5 !border-0 !bg-desktop-border" />
       <button
         type="button"
         onClick={() => {
@@ -181,8 +181,8 @@ function buildNode(id: string, x: number, y: number, data: PlanNodeData): Node<P
     data,
     draggable: false,
     selectable: false,
-    sourcePosition: Position.Right,
-    targetPosition: Position.Left,
+    sourcePosition: Position.Bottom,
+    targetPosition: Position.Top,
   };
 }
 
@@ -194,48 +194,33 @@ function buildPlanGraph(
   const nodes: Node<PlanNodeData>[] = [];
   const edges: Edge[] = [];
 
-  const stageY = 24;
-  const rootX = 24;
-  const filterX = 320;
-  const dispatchX = 616;
-  const gatesX = 912;
-  const reportX = 1208;
-  const dimensionX = dispatchX;
-  const metricX = 940;
+  const topX = 420;
+  const dimensionsTopY = 470;
+  const dimensionX = 72;
+  const metricStartX = 384;
+  const metricColumnWidth = 272;
+  const metricRowHeight = 132;
+  const metricColumns = 3;
 
   nodes.push(
-    buildNode("root", rootX, stageY, {
+    buildNode("root", topX, 24, {
       kind: "root",
       title: "Execution Plan",
       subtitle: `${plan.dimensionCount} dimensions · ${plan.metricCount} metrics`,
       meta: [`tier ${plan.tier}`, `scope ${plan.scope}`, `${plan.hardGateCount} hard gates`],
     }),
-    buildNode("filter", filterX, stageY, {
+    buildNode("filter", topX, 168, {
       kind: "stage",
       title: "Filter",
       subtitle: "Tier and scope decide which checks survive planning.",
       meta: [`tier <= ${plan.tier}`, `scope = ${plan.scope}`, `${plan.dimensionCount} dimensions`],
       status: "pass",
     }),
-    buildNode("dispatch", dispatchX, stageY, {
+    buildNode("dispatch", topX, 312, {
       kind: "stage",
       title: "Dispatch",
       subtitle: "Metrics route to shell, graph, or sarif runners.",
       meta: [`shell ${plan.runnerCounts.shell}`, `graph ${plan.runnerCounts.graph}`, `sarif ${plan.runnerCounts.sarif}`],
-      status: "pass",
-    }),
-    buildNode("gates", gatesX, stageY, {
-      kind: "stage",
-      title: "Gates",
-      subtitle: "Hard gates can stop the report path.",
-      meta: [`${plan.hardGateCount} hard`, "warn tracked", "block on failure"],
-      status: plan.hardGateCount > 0 ? "blocked" : "pass",
-    }),
-    buildNode("report", reportX, stageY, {
-      kind: "stage",
-      title: "Report",
-      subtitle: "Weighted dimension score and final state.",
-      meta: ["weighted score", "thresholds", "final status"],
       status: "pass",
     }),
   );
@@ -246,133 +231,140 @@ function buildPlanGraph(
       source: "root",
       target: "filter",
       type: "smoothstep",
-      label: "admit plan",
       style: buildEdgeStyle("flow"),
       markerEnd: { type: MarkerType.ArrowClosed, color: "#94a3b8" },
-      labelStyle: { fontSize: 10, fill: "#64748b" },
     },
     {
       id: "filter-dispatch",
       source: "filter",
       target: "dispatch",
       type: "smoothstep",
-      label: `${plan.dimensionCount} dimensions`,
       style: buildEdgeStyle("pass"),
       markerEnd: { type: MarkerType.ArrowClosed, color: "#059669" },
-      labelStyle: { fontSize: 10, fill: "#059669" },
-    },
-    {
-      id: "dispatch-gates",
-      source: "dispatch",
-      target: "gates",
-      type: "smoothstep",
-      label: "gate evaluation",
-      style: buildEdgeStyle(plan.hardGateCount > 0 ? "blocked" : "pass"),
-      markerEnd: { type: MarkerType.ArrowClosed, color: plan.hardGateCount > 0 ? "#64748b" : "#059669" },
-      labelStyle: { fontSize: 10, fill: plan.hardGateCount > 0 ? "#64748b" : "#059669" },
-    },
-    {
-      id: "gates-report",
-      source: "gates",
-      target: "report",
-      type: "smoothstep",
-      label: plan.hardGateCount > 0 ? "blocked on hard failure" : "pass to report",
-      style: buildEdgeStyle(plan.hardGateCount > 0 ? "blocked" : "pass"),
-      markerEnd: { type: MarkerType.ArrowClosed, color: plan.hardGateCount > 0 ? "#64748b" : "#059669" },
-      labelStyle: { fontSize: 10, fill: plan.hardGateCount > 0 ? "#64748b" : "#059669" },
     },
   );
 
-  let currentY = 176;
+  let currentY = dimensionsTopY;
 
   plan.dimensions.forEach((dimension) => {
+    const dimensionY = currentY;
     const dimensionId = `dimension:${dimension.name}`;
     const expanded = expandedDimensions.has(dimension.name);
-    const visibleMetrics = expanded ? dimension.metrics : [];
-    const metricSpacing = 114;
-    const metricBlockHeight = visibleMetrics.length > 0 ? visibleMetrics.length * metricSpacing : 0;
-    const laneHeight = Math.max(108, metricBlockHeight);
-    const dimensionY = currentY;
+    const metrics = expanded ? dimension.metrics : [];
+    const hasHardMetric = dimension.metrics.some((metric) => metric.hardGate);
 
     nodes.push(buildNode(dimensionId, dimensionX, dimensionY, {
       kind: "dimension",
       title: dimension.name,
       subtitle: `${dimension.sourceFile} · pass ${dimension.thresholdPass} / warn ${dimension.thresholdWarn}`,
       meta: [`weight ${dimension.weight}`, `${dimension.metrics.length} metrics`],
-      status: dimension.metrics.some((metric) => metric.hardGate) ? "hard" : "pass",
+      status: hasHardMetric ? "hard" : "pass",
       expanded,
       onToggle: () => {
         toggleDimension(dimension.name);
       },
     }));
 
-    edges.push(
-      {
-        id: `dispatch-${dimensionId}`,
-        source: "dispatch",
-        target: dimensionId,
-        type: "smoothstep",
-        label: "pass",
-        style: buildEdgeStyle("pass"),
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#059669" },
-        labelStyle: { fontSize: 10, fill: "#059669" },
-      },
-      {
-        id: `${dimensionId}-report`,
-        source: dimensionId,
-        target: "report",
-        type: "smoothstep",
-        label: `pass ${dimension.thresholdPass} / warn ${dimension.thresholdWarn}`,
-        style: buildEdgeStyle("flow"),
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#94a3b8" },
-        labelStyle: { fontSize: 10, fill: "#64748b" },
-      },
-    );
+    edges.push({
+      id: `dispatch-${dimensionId}`,
+      source: "dispatch",
+      target: dimensionId,
+      type: "smoothstep",
+      style: buildEdgeStyle(hasHardMetric ? "hard" : "pass"),
+      markerEnd: { type: MarkerType.ArrowClosed, color: hasHardMetric ? "#dc2626" : "#059669" },
+    });
 
-    visibleMetrics.forEach((metric, index) => {
+    let rowBottomY = dimensionY + 112;
+    metrics.forEach((metric, metricIndex) => {
       const metricId = `${dimensionId}:metric:${metric.name}`;
-      const metricY = dimensionY + index * metricSpacing;
-      const status: EdgeStatus = metric.hardGate ? "hard" : metric.gate === "warn" ? "warn" : "pass";
+      const metricColumn = metricIndex % metricColumns;
+      const metricRow = Math.floor(metricIndex / metricColumns);
+      const metricX = metricStartX + metricColumn * metricColumnWidth;
+      const metricY = dimensionY + metricRow * metricRowHeight;
+      const metricStatus: EdgeStatus = metric.hardGate ? "hard" : metric.gate === "warn" ? "warn" : "pass";
 
       nodes.push(buildNode(metricId, metricX, metricY, {
         kind: "metric",
         title: metric.name,
-        subtitle: metric.description || metric.command,
+        subtitle: metric.description || undefined,
         meta: [metric.runner, metric.tier, metric.executionScope, metric.hardGate ? "hard gate" : metric.gate || "pass"],
-        status,
+        status: metricStatus,
       }));
 
-      edges.push(
-        {
-          id: `${dimensionId}-${metricId}`,
-          source: dimensionId,
-          target: metricId,
-          type: "smoothstep",
-          label: metric.runner,
-          style: buildEdgeStyle("flow"),
-          markerEnd: { type: MarkerType.ArrowClosed, color: "#94a3b8" },
-          labelStyle: { fontSize: 10, fill: "#64748b" },
-        },
-        {
-          id: `${metricId}-result`,
-          source: metricId,
-          target: metric.hardGate ? "gates" : "report",
-          type: "smoothstep",
-          label: metric.hardGate ? "hard" : metric.gate === "warn" ? "warn" : "pass",
-          style: buildEdgeStyle(status),
-          markerEnd: { type: MarkerType.ArrowClosed, color: status === "hard" ? "#dc2626" : status === "warn" ? "#d97706" : "#059669" },
-          labelStyle: { fontSize: 10, fill: status === "hard" ? "#dc2626" : status === "warn" ? "#d97706" : "#059669" },
-        },
-      );
+      edges.push({
+        id: `${dimensionId}-${metricId}`,
+        source: dimensionId,
+        target: metricId,
+        type: "smoothstep",
+        style: buildEdgeStyle(metricStatus),
+        markerEnd: { type: MarkerType.ArrowClosed, color: metricStatus === "hard" ? "#dc2626" : metricStatus === "warn" ? "#d97706" : "#059669" },
+      });
+
+      rowBottomY = Math.max(rowBottomY, metricY + 96);
     });
 
-    currentY += laneHeight + 44;
+    currentY = Math.max(rowBottomY + 44, dimensionY + 156);
+  });
+
+  const gatesY = currentY + 24;
+  const gatesX = 96;
+  const reportX = 420;
+
+  nodes.push(
+    buildNode("gates", gatesX, gatesY, {
+      kind: "stage",
+      title: "Gates",
+      subtitle: "Hard-gated dimensions can stop the report path.",
+      meta: [`${plan.hardGateCount} hard`, "blocked on failure"],
+      status: plan.hardGateCount > 0 ? "blocked" : "pass",
+    }),
+    buildNode("report", reportX, gatesY, {
+      kind: "stage",
+      title: "Report",
+      subtitle: "Weighted dimension score and final state.",
+      meta: ["weighted score", "thresholds", "final status"],
+      status: "pass",
+    }),
+  );
+
+  edges.push({
+    id: "gates-report",
+    source: "gates",
+    target: "report",
+    type: "smoothstep",
+    style: buildEdgeStyle(plan.hardGateCount > 0 ? "blocked" : "pass"),
+    markerEnd: { type: MarkerType.ArrowClosed, color: plan.hardGateCount > 0 ? "#64748b" : "#059669" },
+  });
+
+  plan.dimensions.forEach((dimension) => {
+    const dimensionId = `dimension:${dimension.name}`;
+    const hasHardMetric = dimension.metrics.some((metric) => metric.hardGate);
+
+    edges.push({
+      id: `${dimensionId}-report`,
+      source: dimensionId,
+      target: "report",
+      type: "smoothstep",
+      style: buildEdgeStyle(hasHardMetric ? "warn" : "pass"),
+      markerEnd: { type: MarkerType.ArrowClosed, color: hasHardMetric ? "#d97706" : "#059669" },
+    });
+
+    if (hasHardMetric) {
+      edges.push({
+        id: `${dimensionId}-gates`,
+        source: dimensionId,
+        target: "gates",
+        type: "smoothstep",
+        style: buildEdgeStyle("hard"),
+        markerEnd: { type: MarkerType.ArrowClosed, color: "#dc2626" },
+      });
+    }
   });
 
   return {
     nodes,
     edges,
-    minHeight: Math.max(420, Math.min(currentY + 24, 1600)),
+    minHeight: Math.max(920, gatesY + 180),
   };
 }
 
@@ -411,7 +403,7 @@ export function HarnessExecutionPlanFlow({
 
   const graph = useMemo(() => {
     if (!plan) {
-      return { nodes: [] as Node<PlanNodeData>[], edges: [] as Edge[], minHeight: 420 };
+      return { nodes: [] as Node<PlanNodeData>[], edges: [] as Edge[], minHeight: 920 };
     }
 
     return buildPlanGraph(plan, expandedDimensions, (name) => {
@@ -436,7 +428,7 @@ export function HarnessExecutionPlanFlow({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Execution plan</div>
-          <h3 className="mt-1 text-sm font-semibold text-desktop-text-primary">Filter, Dispatch, Gates, Report, dimensions, and metrics</h3>
+          <h3 className="mt-1 text-sm font-semibold text-desktop-text-primary">Top-down flow for dimensions and metrics</h3>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="rounded-full border border-desktop-border bg-desktop-bg-primary p-0.5">
@@ -459,22 +451,21 @@ export function HarnessExecutionPlanFlow({
           </div>
           <button
             type="button"
-              onClick={() => {
-                if (!plan) {
-                  return;
-                }
-                setExpandedState((current) => {
-                  const base = current.planKey === planKey ? current.names : expandedDimensions;
-                  const next = base.size === plan.dimensions.length
-                    ? new Set<string>()
-                    : new Set(plan.dimensions.map((dimension) => dimension.name));
-
-                  return {
-                    planKey,
-                    names: next,
-                  };
-                });
-              }}
+            onClick={() => {
+              if (!plan) {
+                return;
+              }
+              setExpandedState((current) => {
+                const base = current.planKey === planKey ? current.names : expandedDimensions;
+                const next = base.size === plan.dimensions.length
+                  ? new Set<string>()
+                  : new Set(plan.dimensions.map((dimension) => dimension.name));
+                return {
+                  planKey,
+                  names: next,
+                };
+              });
+            }}
             className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2.5 py-1 text-[10px] text-desktop-text-secondary"
           >
             {plan && expandedDimensions.size === plan.dimensions.length ? "Collapse metrics" : "Expand metrics"}
@@ -500,10 +491,10 @@ export function HarnessExecutionPlanFlow({
       {plan ? (
         <div className="mt-4 space-y-3">
           <div className="flex flex-wrap gap-2 text-[10px] text-desktop-text-secondary">
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-700">pass = admitted or scoring path</span>
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-700">warn = threshold downgrade</span>
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-700">pass = scoring path</span>
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-700">warn = degraded dimension</span>
             <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-red-700">hard = blocking gate</span>
-            <span className="rounded-full border border-slate-300 bg-slate-100 px-2.5 py-1 text-slate-700">blocked = report can stop on hard failure</span>
+            <span className="rounded-full border border-slate-300 bg-slate-100 px-2.5 py-1 text-slate-700">blocked = report can stop</span>
           </div>
           <div className="overflow-hidden rounded-2xl border border-desktop-border bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.08),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.08),transparent_28%)]">
             <div style={{ height: graph.minHeight }}>
@@ -517,9 +508,9 @@ export function HarnessExecutionPlanFlow({
                 zoomOnScroll
                 panOnDrag
                 minZoom={0.55}
-                maxZoom={1.35}
+                maxZoom={1.2}
                 fitView
-                fitViewOptions={{ padding: 0.14, minZoom: 0.58, maxZoom: 0.92 }}
+                fitViewOptions={{ padding: 0.12, minZoom: 0.6, maxZoom: 0.92 }}
                 proOptions={{ hideAttribution: true }}
               >
                 <Background color="#d7dee7" gap={20} size={1} />
