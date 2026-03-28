@@ -266,7 +266,7 @@ fn terminate_child(child: &mut std::process::Child) -> io::Result<()> {
     #[cfg(unix)]
     {
         terminate_process_group(child)?;
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(unix))]
@@ -321,10 +321,10 @@ fn send_signal_to_group(pid: i32, signal: i32) -> io::Result<()> {
     if status.success() {
         Ok(())
     } else {
-        let err = io::Error::new(
-            io::ErrorKind::Other,
-            format!("failed to send {} to process group {}", signal_name, pid),
-        );
+        let err = io::Error::other(format!(
+            "failed to send {} to process group {}",
+            signal_name, pid
+        ));
         if child_process_group_missing(pid) {
             Ok(())
         } else {

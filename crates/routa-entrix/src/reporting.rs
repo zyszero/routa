@@ -41,8 +41,7 @@ pub fn write_report_output(path: Option<&str>, payload: &Value) -> std::io::Resu
         None => return Ok(()),
     };
 
-    let serialized = serde_json::to_string_pretty(payload)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let serialized = serde_json::to_string_pretty(payload).map_err(std::io::Error::other)?;
 
     if path == "-" {
         println!("{}", serialized);
