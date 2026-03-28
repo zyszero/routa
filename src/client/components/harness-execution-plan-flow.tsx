@@ -130,10 +130,11 @@ function PlanNodeView({ data }: NodeProps<Node<PlanNodeData>>) {
   const subtitleClass = data.kind === "dimension"
     ? "mt-1 overflow-hidden text-[14px] leading-7 text-desktop-text-secondary"
     : "mt-1 overflow-hidden text-[13px] leading-6 text-desktop-text-secondary";
+  const contentPaddingClass = data.kind === "metric" ? "px-3 py-2" : "px-4 py-3";
   const heightClass = data.kind === "metric"
-    ? "h-[160px]"
+    ? "h-[184px]"
     : data.kind === "dimension"
-      ? "h-[184px]"
+      ? "h-[208px]"
       : data.kind === "lane"
         ? ""
       : "h-[124px]";
@@ -142,7 +143,7 @@ function PlanNodeView({ data }: NodeProps<Node<PlanNodeData>>) {
   if (data.kind === "lane") {
     return (
       <div
-        className="rounded-[28px] border border-desktop-border/70 bg-desktop-bg-primary/35 px-4 py-2 shadow-sm backdrop-blur-[1px]"
+        className="rounded-[28px] border border-desktop-border/70 bg-desktop-bg-primary/35 px-3 py-1.5 shadow-sm backdrop-blur-[1px]"
         style={{ width: data.frameWidth ?? 640, height: data.frameHeight ?? 220 }}
       >
         <Handle
@@ -185,7 +186,7 @@ function PlanNodeView({ data }: NodeProps<Node<PlanNodeData>>) {
         onClick={() => {
           data.onToggle?.();
         }}
-        className={`${widthClass} ${heightClass} flex flex-col overflow-hidden rounded-2xl border bg-desktop-bg-primary/96 px-4 py-3 text-left shadow-sm transition ${tone.border} ${tone.glow} ${interactive ? "cursor-pointer hover:bg-desktop-bg-secondary/90" : "cursor-default"}`}
+        className={`${widthClass} ${heightClass} ${contentPaddingClass} flex flex-col overflow-hidden rounded-2xl border bg-desktop-bg-primary/96 text-left shadow-sm transition ${tone.border} ${tone.glow} ${interactive ? "cursor-pointer hover:bg-desktop-bg-secondary/90" : "cursor-default"}`}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -266,38 +267,61 @@ function buildPlanGraph(
   const nodes: Node<PlanNodeData>[] = [];
   const edges: Edge[] = [];
 
-  const stageX = 420;
-  const dimensionsTopY = 492;
-  const dimensionsStartX = 72;
-  const dimensionColumnWidth = 284;
+  const stageY = 32;
+  const rootX = 96;
+  const filterX = 380;
+  const dispatchX = 696;
+  const gatesX = 1012;
+  const reportX = 1328;
+  const dispatchCenterX = dispatchX + 146;
+  const dimensionsTopY = 214;
+  const dimensionColumnWidth = 260;
   const dimensionColumns = Math.max(plan.dimensions.length, 1);
-  const dimensionRowHeight = 224;
-  const metricRowOffsetY = 56;
-  const metricSpacingX = 264;
-  const metricRowHeight = 176;
+  const dimensionsGridWidth = (dimensionColumns - 1) * dimensionColumnWidth + 252;
+  const dimensionsStartX = Math.round(Math.max(88, dispatchCenterX - dimensionsGridWidth / 2));
+  const dimensionCardHeight = 208;
+  const dimensionRowHeight = 248;
+  const metricRowOffsetY = 24;
+  const metricSpacingX = 248;
+  const metricCardHeight = 184;
+  const metricRowHeight = 196;
   const metricColumns = 6;
-  const rowContentHeight = 188;
+  const stageContentHeight = 124;
   const dimensionPositions = new Map<string, { x: number; y: number }>();
 
   nodes.push(
-    buildNode("root", stageX, 24, {
+    buildNode("root", rootX, stageY, {
       kind: "root",
       title: "Execution Plan",
       subtitle: `${plan.dimensionCount} dimensions · ${plan.metricCount} metrics`,
       meta: [`tier ${plan.tier}`, `scope ${plan.scope}`, `${plan.hardGateCount} hard gates`],
     }),
-    buildNode("filter", stageX, 168, {
+    buildNode("filter", filterX, stageY, {
       kind: "stage",
       title: "Filter",
       subtitle: "Tier and scope decide which checks survive planning.",
       meta: [`tier <= ${plan.tier}`, `scope = ${plan.scope}`, `${plan.dimensionCount} dimensions`],
       status: "pass",
     }),
-    buildNode("dispatch", stageX, 312, {
+    buildNode("dispatch", dispatchX, stageY, {
       kind: "stage",
       title: "Dispatch",
       subtitle: "Metrics route to shell, graph, or sarif runners.",
       meta: [`shell ${plan.runnerCounts.shell}`, `graph ${plan.runnerCounts.graph}`, `sarif ${plan.runnerCounts.sarif}`],
+      status: "pass",
+    }),
+    buildNode("gates", gatesX, stageY, {
+      kind: "stage",
+      title: "Gates",
+      subtitle: "Hard-gated dimensions can stop the report path.",
+      meta: [`${plan.hardGateCount} hard`, "blocked on failure"],
+      status: plan.hardGateCount > 0 ? "blocked" : "pass",
+    }),
+    buildNode("report", reportX, stageY, {
+      kind: "stage",
+      title: "Report",
+      subtitle: "Weighted dimension score and final state.",
+      meta: ["weighted score", "thresholds", "final status"],
       status: "pass",
     }),
   );
@@ -308,6 +332,8 @@ function buildPlanGraph(
       source: "root",
       target: "filter",
       type: "smoothstep",
+      sourceHandle: "right",
+      targetHandle: "left",
       style: buildEdgeStyle("flow"),
       markerEnd: { type: MarkerType.ArrowClosed, color: "#94a3b8" },
     },
@@ -316,20 +342,40 @@ function buildPlanGraph(
       source: "filter",
       target: "dispatch",
       type: "smoothstep",
+      sourceHandle: "right",
+      targetHandle: "left",
       style: buildEdgeStyle("pass"),
       markerEnd: { type: MarkerType.ArrowClosed, color: "#059669" },
     },
+    {
+      id: "dispatch-gates",
+      source: "dispatch",
+      target: "gates",
+      type: "smoothstep",
+      sourceHandle: "right",
+      targetHandle: "left",
+      style: buildEdgeStyle(plan.hardGateCount > 0 ? "blocked" : "pass"),
+      markerEnd: { type: MarkerType.ArrowClosed, color: plan.hardGateCount > 0 ? "#64748b" : "#059669" },
+    },
+    {
+      id: "gates-report",
+      source: "gates",
+      target: "report",
+      type: "smoothstep",
+      sourceHandle: "right",
+      targetHandle: "left",
+      style: buildEdgeStyle(plan.hardGateCount > 0 ? "blocked" : "pass"),
+      markerEnd: { type: MarkerType.ArrowClosed, color: plan.hardGateCount > 0 ? "#64748b" : "#059669" },
+    },
   );
 
-  let maxMetricRight = 0;
   let dimensionGridBottom = dimensionsTopY;
-
   const activeDimensionName = plan.dimensions.find((dimension) => expandedDimensions.has(dimension.name))?.name ?? null;
 
   plan.dimensions.forEach((dimension, dimensionIndex) => {
     const dimensionColumn = dimensionIndex % dimensionColumns;
     const dimensionRow = Math.floor(dimensionIndex / dimensionColumns);
-    const dimensionX = dimensionsStartX + dimensionColumn * dimensionColumnWidth;
+    const dimensionX = Math.round(dimensionsStartX + dimensionColumn * dimensionColumnWidth);
     const dimensionY = dimensionsTopY + dimensionRow * dimensionRowHeight;
     const dimensionId = `dimension:${dimension.name}`;
     const expanded = expandedDimensions.has(dimension.name);
@@ -366,32 +412,29 @@ function buildPlanGraph(
       },
     });
 
-    dimensionGridBottom = Math.max(dimensionGridBottom, dimensionY + rowContentHeight);
+    dimensionGridBottom = Math.max(dimensionGridBottom, dimensionY + dimensionCardHeight);
   });
 
   const activeDimension = plan.dimensions.find((dimension) => expandedDimensions.has(dimension.name)) ?? null;
-  let currentMetricsY = dimensionGridBottom + metricRowOffsetY;
+  let contentBottom = dimensionGridBottom;
 
   if (activeDimension) {
     const dimensionId = `dimension:${activeDimension.name}`;
     const activeDimensionPosition = dimensionPositions.get(activeDimension.name) ?? { x: dimensionsStartX, y: dimensionsTopY };
+    const activeDimensionCenterX = activeDimensionPosition.x + 126;
     const detailColumns = Math.min(metricColumns, Math.max(activeDimension.metrics.length, 1));
-    const centeredMetricStartX = Math.max(72, stageX - ((detailColumns - 1) * metricSpacingX) / 2);
-    const metricsStartY = currentMetricsY + 8;
+    const centeredMetricStartX = Math.round(Math.max(88, activeDimensionCenterX - ((detailColumns - 1) * metricSpacingX + 244) / 2));
+    const detailLaneY = dimensionGridBottom + metricRowOffsetY;
+    const metricsStartY = detailLaneY + 18;
     let metricGridBottom = metricsStartY;
     const metricRows = Math.max(1, Math.ceil(activeDimension.metrics.length / metricColumns));
     const detailLaneId = `lane:${activeDimension.name}`;
-    const detailLaneX = centeredMetricStartX - 72;
-    const detailLaneY = currentMetricsY - 24;
-    const detailLaneWidth = Math.max(420, (detailColumns - 1) * metricSpacingX + 232 + 144);
-    const detailLaneHeight = Math.max(236, 36 + (metricRows - 1) * metricRowHeight + 148 + 40);
+    const detailLaneX = Math.round(centeredMetricStartX - 40);
+    const detailLaneWidth = Math.max(420, (detailColumns - 1) * metricSpacingX + 344);
+    const detailLaneHeight = Math.max(224, 18 + (metricRows - 1) * metricRowHeight + metricCardHeight + 18);
     const activeDimensionHasHardMetric = activeDimension.metrics.some((metric) => metric.hardGate);
-    const activeDimensionCenterX = activeDimensionPosition.x + 126;
-    const laneJunctionId = `lane-junction:${activeDimension.name}`;
-    const laneEntryOffsetPx = Math.max(32, Math.min(detailLaneWidth - 32, activeDimensionCenterX - detailLaneX));
-    const laneExitOffsetPx = Math.max(32, Math.min(detailLaneWidth - 32, stageX - detailLaneX));
-    const detailLaneCenterX = stageX;
-    const laneJunctionY = detailLaneY + detailLaneHeight + 28;
+    const laneEntryOffsetPx = Math.round(Math.max(32, Math.min(detailLaneWidth - 32, activeDimensionCenterX - detailLaneX)));
+    const laneExitOffsetPx = Math.round(Math.max(32, Math.min(detailLaneWidth - 32, activeDimensionCenterX - detailLaneX)));
 
     nodes.push(buildNode(detailLaneId, detailLaneX, detailLaneY, {
       kind: "lane",
@@ -403,19 +446,14 @@ function buildPlanGraph(
       exitOffsetPx: laneExitOffsetPx,
     }));
 
-    nodes.push(buildNode(laneJunctionId, detailLaneCenterX, laneJunctionY, {
-      kind: "anchor",
-      title: "",
-    }));
-
     activeDimension.metrics.forEach((metric, metricIndex) => {
       const metricId = `${dimensionId}:metric:${metric.name}`;
       const metricColumn = metricIndex % metricColumns;
       const metricRow = Math.floor(metricIndex / metricColumns);
       const rowStartIndex = metricRow * metricColumns;
       const rowCount = Math.min(metricColumns, activeDimension.metrics.length - rowStartIndex);
-      const rowStartX = Math.max(72, stageX - ((rowCount - 1) * metricSpacingX) / 2);
-      const metricX = rowStartX + metricColumn * metricSpacingX;
+      const rowStartX = Math.round(Math.max(88, activeDimensionCenterX - ((rowCount - 1) * metricSpacingX + 244) / 2));
+      const metricX = Math.round(rowStartX + metricColumn * metricSpacingX);
       const metricY = metricsStartY + metricRow * metricRowHeight;
       const metricStatus: EdgeStatus = metric.hardGate ? "hard" : metric.gate === "warn" ? "warn" : "pass";
 
@@ -427,8 +465,7 @@ function buildPlanGraph(
         status: metricStatus,
       }));
 
-      maxMetricRight = Math.max(maxMetricRight, metricX + 208);
-      metricGridBottom = Math.max(metricGridBottom, metricY + rowContentHeight);
+      metricGridBottom = Math.max(metricGridBottom, metricY + metricCardHeight);
     });
 
     edges.push({
@@ -443,86 +480,34 @@ function buildPlanGraph(
     });
 
     edges.push({
-      id: `${detailLaneId}-${laneJunctionId}`,
-      source: detailLaneId,
-      target: laneJunctionId,
+      id: `${dimensionId}-gates`,
+      source: dimensionId,
+      target: "gates",
       type: "smoothstep",
-      sourceHandle: "exit",
-      targetHandle: "top",
+      sourceHandle: "right",
+      targetHandle: "bottom",
       style: activeDimensionHasHardMetric ? { ...buildEdgeStyle("hard"), strokeWidth: 2.2 } : buildEdgeStyle("pass"),
       markerEnd: { type: MarkerType.ArrowClosed, color: activeDimensionHasHardMetric ? "#dc2626" : "#059669" },
     });
 
-    currentMetricsY = metricGridBottom;
-  }
-
-  const detailLaneY = currentMetricsY;
-  const gatesX = stageX;
-  const gatesY = detailLaneY + 36;
-  const reportX = stageX;
-  const reportY = gatesY + 156;
-
-  nodes.push(
-    buildNode("gates", gatesX, gatesY, {
-      kind: "stage",
-      title: "Gates",
-      subtitle: "Hard-gated dimensions can stop the report path.",
-      meta: [`${plan.hardGateCount} hard`, "blocked on failure"],
-      status: plan.hardGateCount > 0 ? "blocked" : "pass",
-    }),
-    buildNode("report", reportX, reportY, {
-      kind: "stage",
-      title: "Report",
-      subtitle: "Weighted dimension score and final state.",
-      meta: ["weighted score", "thresholds", "final status"],
-      status: "pass",
-    }),
-  );
-
-  edges.push({
-    id: "gates-report",
-    source: "gates",
-    target: "report",
-    type: "smoothstep",
-    sourceHandle: "bottom",
-    targetHandle: "top",
-    style: buildEdgeStyle(plan.hardGateCount > 0 ? "blocked" : "pass"),
-    markerEnd: { type: MarkerType.ArrowClosed, color: plan.hardGateCount > 0 ? "#64748b" : "#059669" },
-  });
-
-  if (activeDimension) {
-    const laneJunctionId = `lane-junction:${activeDimension.name}`;
-    const hasHardMetric = activeDimension.metrics.some((metric) => metric.hardGate);
-
     edges.push({
-      id: `${laneJunctionId}-report`,
-      source: laneJunctionId,
+      id: `${dimensionId}-report`,
+      source: dimensionId,
       target: "report",
       type: "smoothstep",
-      sourceHandle: "bottom",
-      targetHandle: "top",
-      style: buildEdgeStyle(hasHardMetric ? "warn" : "pass"),
-      markerEnd: { type: MarkerType.ArrowClosed, color: hasHardMetric ? "#d97706" : "#059669" },
+      sourceHandle: "right",
+      targetHandle: "bottom",
+      style: buildEdgeStyle(activeDimensionHasHardMetric ? "warn" : "pass"),
+      markerEnd: { type: MarkerType.ArrowClosed, color: activeDimensionHasHardMetric ? "#d97706" : "#059669" },
     });
 
-    if (hasHardMetric) {
-      edges.push({
-        id: `${laneJunctionId}-gates`,
-        source: laneJunctionId,
-        target: "gates",
-        type: "smoothstep",
-        sourceHandle: "bottom",
-        targetHandle: "top",
-        style: { ...buildEdgeStyle("hard"), strokeWidth: 2.2 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#dc2626" },
-      });
-    }
+    contentBottom = detailLaneY + detailLaneHeight;
   }
 
   return {
     nodes,
     edges,
-    minHeight: Math.max(660, reportY + 96),
+    minHeight: Math.max(stageY + stageContentHeight + 32, contentBottom + 28),
   };
 }
 
@@ -654,7 +639,8 @@ export function HarnessExecutionPlanFlow({
                 panOnDrag
                 minZoom={0.58}
                 maxZoom={1.2}
-                defaultViewport={{ x: 24, y: 12, zoom: 0.72 }}
+                fitView
+                fitViewOptions={{ padding: 0.055, minZoom: 0.58, maxZoom: 0.94 }}
                 proOptions={{ hideAttribution: true }}
               >
                 <Background color="#d7dee7" gap={20} size={1} />
