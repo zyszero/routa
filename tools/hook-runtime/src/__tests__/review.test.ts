@@ -61,6 +61,24 @@ describe("runReviewTriggerPhase", () => {
         output: `${process.cwd()}\n`,
       })
       .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR origin/main",
+        durationMs: 5,
+        exitCode: 0,
+        output: "tools/hook-runtime/src/review.ts\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR",
+        durationMs: 5,
+        exitCode: 0,
+        output: "",
+      })
+      .mockResolvedValueOnce({
+        command: "git ls-files --others --exclude-standard",
+        durationMs: 5,
+        exitCode: 0,
+        output: "",
+      })
+      .mockResolvedValueOnce({
         command: "entrix review-trigger",
         durationMs: 10,
         exitCode: 0,
@@ -91,12 +109,33 @@ describe("runReviewTriggerPhase", () => {
         output: `${process.cwd()}\n`,
       })
       .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR origin/main",
+        durationMs: 5,
+        exitCode: 0,
+        output: "tools/hook-runtime/src/review.ts\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR",
+        durationMs: 5,
+        exitCode: 0,
+        output: "tools/hook-runtime/src/runtime.ts\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git ls-files --others --exclude-standard",
+        durationMs: 5,
+        exitCode: 0,
+        output: "tmp/debug.txt\n",
+      })
+      .mockResolvedValueOnce({
         command: "entrix review-trigger",
         durationMs: 10,
         exitCode: 3,
         output: JSON.stringify({
+          base: "origin/main",
           triggers: [{ action: "review", name: "oversized_change", severity: "high" }],
-          changed_files: ["tools/hook-runtime/src/review.ts"],
+          committed_files: ["tools/hook-runtime/src/review.ts"],
+          working_tree_files: ["tools/hook-runtime/src/runtime.ts"],
+          untracked_files: ["tmp/debug.txt"],
           diff_stats: { file_count: 1, added_lines: 10, deleted_lines: 2 },
         }),
       });
@@ -106,6 +145,9 @@ describe("runReviewTriggerPhase", () => {
     expect(result.allowed).toBe(false);
     expect(result.status).toBe("blocked");
     expect(result.triggers).toHaveLength(1);
+    expect(result.committedFiles).toEqual(["tools/hook-runtime/src/review.ts"]);
+    expect(result.workingTreeFiles).toEqual(["tools/hook-runtime/src/runtime.ts"]);
+    expect(result.untrackedFiles).toEqual(["tmp/debug.txt"]);
     expect(result.message).toContain("non-interactive push");
   });
 
@@ -125,12 +167,31 @@ describe("runReviewTriggerPhase", () => {
         output: `${process.cwd()}\n`,
       })
       .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR origin/main",
+        durationMs: 5,
+        exitCode: 0,
+        output: "tools/hook-runtime/src/review.ts\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR",
+        durationMs: 5,
+        exitCode: 0,
+        output: "",
+      })
+      .mockResolvedValueOnce({
+        command: "git ls-files --others --exclude-standard",
+        durationMs: 5,
+        exitCode: 0,
+        output: "",
+      })
+      .mockResolvedValueOnce({
         command: "entrix review-trigger",
         durationMs: 10,
         exitCode: 3,
         output: JSON.stringify({
+          base: "origin/main",
           triggers: [{ action: "review", name: "oversized_change", severity: "high" }],
-          changed_files: ["tools/hook-runtime/src/review.ts"],
+          committed_files: ["tools/hook-runtime/src/review.ts"],
           diff_stats: { file_count: 1, added_lines: 10, deleted_lines: 2 },
         }),
       });
@@ -142,6 +203,99 @@ describe("runReviewTriggerPhase", () => {
     expect(result.bypassed).toBe(true);
     expect(result.triggers).toHaveLength(1);
     expect(result.message).toContain("ROUTA_ALLOW_REVIEW_TRIGGER_PUSH=1 set");
+  });
+
+  it("falls back to legacy changed_files payloads", async () => {
+    runCommandMock
+      .mockResolvedValueOnce({
+        command: "git rev-parse",
+        durationMs: 5,
+        exitCode: 0,
+        output: "origin/main\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git rev-parse --show-toplevel",
+        durationMs: 5,
+        exitCode: 0,
+        output: `${process.cwd()}\n`,
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR origin/main",
+        durationMs: 5,
+        exitCode: 0,
+        output: "tools/hook-runtime/src/review.ts\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR",
+        durationMs: 5,
+        exitCode: 0,
+        output: "",
+      })
+      .mockResolvedValueOnce({
+        command: "git ls-files --others --exclude-standard",
+        durationMs: 5,
+        exitCode: 0,
+        output: "",
+      })
+      .mockResolvedValueOnce({
+        command: "entrix review-trigger",
+        durationMs: 10,
+        exitCode: 3,
+        output: JSON.stringify({
+          base: "origin/main",
+          triggers: [{ action: "review", name: "oversized_change", severity: "high" }],
+          changed_files: ["tools/hook-runtime/src/review.ts"],
+          diff_stats: { file_count: 1, added_lines: 10, deleted_lines: 2 },
+        }),
+      });
+
+    const result = await runReviewTriggerPhase("jsonl");
+
+    expect(result.changedFiles).toEqual(["tools/hook-runtime/src/review.ts"]);
+    expect(result.committedFiles).toEqual(["tools/hook-runtime/src/review.ts"]);
+  });
+
+  it("passes without invoking entrix when push scope has no committed files", async () => {
+    runCommandMock
+      .mockResolvedValueOnce({
+        command: "git rev-parse",
+        durationMs: 5,
+        exitCode: 0,
+        output: "origin/main\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git rev-parse --show-toplevel",
+        durationMs: 5,
+        exitCode: 0,
+        output: `${process.cwd()}\n`,
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR origin/main",
+        durationMs: 5,
+        exitCode: 0,
+        output: "",
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR",
+        durationMs: 5,
+        exitCode: 0,
+        output: "tools/hook-runtime/src/runtime.ts\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git ls-files --others --exclude-standard",
+        durationMs: 5,
+        exitCode: 0,
+        output: "tmp/debug.txt\n",
+      });
+
+    const result = await runReviewTriggerPhase("jsonl");
+
+    expect(result.allowed).toBe(true);
+    expect(result.status).toBe("passed");
+    expect(result.committedFiles).toEqual([]);
+    expect(result.workingTreeFiles).toEqual(["tools/hook-runtime/src/runtime.ts"]);
+    expect(result.untrackedFiles).toEqual(["tmp/debug.txt"]);
+    expect(runCommandMock).toHaveBeenCalledTimes(5);
   });
 
   it("blocks push when review evaluation is unavailable by default", async () => {
@@ -157,6 +311,24 @@ describe("runReviewTriggerPhase", () => {
         durationMs: 5,
         exitCode: 0,
         output: `${process.cwd()}\n`,
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR origin/main",
+        durationMs: 5,
+        exitCode: 0,
+        output: "tools/hook-runtime/src/review.ts\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR",
+        durationMs: 5,
+        exitCode: 0,
+        output: "",
+      })
+      .mockResolvedValueOnce({
+        command: "git ls-files --others --exclude-standard",
+        durationMs: 5,
+        exitCode: 0,
+        output: "",
       })
       .mockResolvedValueOnce({
         command: "entrix review-trigger",
@@ -188,6 +360,24 @@ describe("runReviewTriggerPhase", () => {
         durationMs: 5,
         exitCode: 0,
         output: `${process.cwd()}\n`,
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR origin/main",
+        durationMs: 5,
+        exitCode: 0,
+        output: "tools/hook-runtime/src/review.ts\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR",
+        durationMs: 5,
+        exitCode: 0,
+        output: "",
+      })
+      .mockResolvedValueOnce({
+        command: "git ls-files --others --exclude-standard",
+        durationMs: 5,
+        exitCode: 0,
+        output: "",
       })
       .mockResolvedValueOnce({
         command: "entrix review-trigger",

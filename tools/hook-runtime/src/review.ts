@@ -13,8 +13,12 @@ type ReviewTrigger = {
 };
 
 type ReviewReport = {
+  base?: string;
   triggers?: ReviewTrigger[];
   changed_files?: string[];
+  committed_files?: string[];
+  working_tree_files?: string[];
+  untracked_files?: string[];
   diff_stats?: {
     file_count?: number;
     added_lines?: number;
@@ -29,9 +33,41 @@ export type ReviewPhaseResult = {
   status: "passed" | "blocked" | "unavailable" | "error";
   triggers: ReviewTrigger[];
   changedFiles?: string[];
+  committedFiles?: string[];
+  workingTreeFiles?: string[];
+  untrackedFiles?: string[];
   diffFileCount?: number;
   message: string;
 };
+
+function emptyReport(): ReviewReport {
+  return {
+    triggers: [],
+    changed_files: [],
+    committed_files: [],
+    working_tree_files: [],
+    untracked_files: [],
+    diff_stats: { file_count: 0 },
+  };
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function parseNameOnlyOutput(output: string): string[] {
+  const seen = new Set<string>();
+  const files: string[] = [];
+  for (const line of output.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    files.push(trimmed);
+  }
+  return files;
+}
 
 async function resolveReviewBase(): Promise<string> {
   const upstream = await runCommand("git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}'", {
@@ -53,6 +89,32 @@ async function resolveReviewGitRoot(): Promise<string | null> {
   return trimmed ? path.resolve(trimmed) : null;
 }
 
+async function collectReviewScopeFiles(
+  root: string,
+  base: string,
+): Promise<{ committedFiles: string[]; workingTreeFiles: string[]; untrackedFiles: string[] }> {
+  const [committed, workingTree, untracked] = await Promise.all([
+    runCommand(`git diff --name-only --diff-filter=ACMR ${shellQuote(`${base}...HEAD`)}`, {
+      cwd: root,
+      stream: false,
+    }),
+    runCommand("git diff --name-only --diff-filter=ACMR", {
+      cwd: root,
+      stream: false,
+    }),
+    runCommand("git ls-files --others --exclude-standard", {
+      cwd: root,
+      stream: false,
+    }),
+  ]);
+
+  return {
+    committedFiles: parseNameOnlyOutput(committed.output),
+    workingTreeFiles: parseNameOnlyOutput(workingTree.output),
+    untrackedFiles: parseNameOnlyOutput(untracked.output),
+  };
+}
+
 function getReviewScopeMismatchMessage(rootPath: string): string {
   return `Review scope mismatch: hook-runtime expected to run in repository root "${rootPath}", but current directory is "${path.resolve(process.cwd())}".` +
     ` Set ${REVIEW_UNAVAILABLE_BYPASS_ENV}=1 only if you intentionally want to proceed with potentially shifted scope.`;
@@ -60,22 +122,42 @@ function getReviewScopeMismatchMessage(rootPath: string): string {
 
 function parseReport(reviewOutput: string): ReviewReport {
   if (!reviewOutput) {
-    return { triggers: [], changed_files: [], diff_stats: { file_count: 0 } };
+    return emptyReport();
   }
 
   try {
-    return JSON.parse(reviewOutput) as ReviewReport;
+    const report = JSON.parse(reviewOutput) as ReviewReport;
+    return {
+      ...emptyReport(),
+      ...report,
+      committed_files: report.committed_files ?? report.changed_files ?? [],
+    };
   } catch {
-    return { triggers: [], changed_files: [], diff_stats: { file_count: 0 } };
+    return emptyReport();
   }
 }
 
 function printReviewReport(report: ReviewReport): void {
-  console.log("Human review required before push:");
+  const committedFiles = report.committed_files ?? report.changed_files ?? [];
+  console.log("Human review required for pushed commits:");
+  console.log(`- Base: ${report.base ?? "unknown"}`);
+  console.log(`- Review scope files: ${committedFiles.length}`);
   for (const trigger of report.triggers ?? []) {
     console.log(`- [${trigger.severity}] ${trigger.name}`);
     for (const reason of trigger.reasons ?? []) {
       console.log(`  - ${reason}`);
+    }
+  }
+  const workingTreeFiles = report.working_tree_files ?? [];
+  const untrackedFiles = report.untracked_files ?? [];
+  if (workingTreeFiles.length > 0 || untrackedFiles.length > 0) {
+    console.log("");
+    console.log("Local workspace residue not included in push decision:");
+    if (workingTreeFiles.length > 0) {
+      console.log(`- tracked but uncommitted: ${workingTreeFiles.length}`);
+    }
+    if (untrackedFiles.length > 0) {
+      console.log(`- untracked: ${untrackedFiles.length}`);
     }
   }
   console.log("");
@@ -95,7 +177,10 @@ function buildResultBase(
     base,
     status,
     triggers: report.triggers ?? [],
-    changedFiles: report.changed_files,
+    changedFiles: report.committed_files ?? report.changed_files,
+    committedFiles: report.committed_files ?? report.changed_files,
+    workingTreeFiles: report.working_tree_files,
+    untrackedFiles: report.untracked_files,
     diffFileCount: report.diff_stats?.file_count,
     message,
   };
@@ -152,10 +237,10 @@ export async function runReviewTriggerPhase(outputMode: "human" | "jsonl" = "hum
         console.log(message);
         console.log("");
       }
-      return buildResultBase(reviewBase, { triggers: [], changed_files: [], diff_stats: { file_count: 0 } }, "unavailable", true, true, message);
+      return buildResultBase(reviewBase, emptyReport(), "unavailable", true, true, message);
     }
 
-    return buildResultBase(reviewBase, { triggers: [], changed_files: [], diff_stats: { file_count: 0 } }, "unavailable", false, false, message);
+    return buildResultBase(reviewBase, emptyReport(), "unavailable", false, false, message);
   }
 
   if (!reviewRoot) {
@@ -168,10 +253,10 @@ export async function runReviewTriggerPhase(outputMode: "human" | "jsonl" = "hum
         console.log(message);
         console.log("");
       }
-      return buildResultBase(reviewBase, { triggers: [], changed_files: [], diff_stats: { file_count: 0 } }, "unavailable", true, true, message);
+      return buildResultBase(reviewBase, emptyReport(), "unavailable", true, true, message);
     }
 
-    return buildResultBase(reviewBase, { triggers: [], changed_files: [], diff_stats: { file_count: 0 } }, "unavailable", false, false, message);
+    return buildResultBase(reviewBase, emptyReport(), "unavailable", false, false, message);
   }
 
   if (outputMode === "human") {
@@ -179,10 +264,40 @@ export async function runReviewTriggerPhase(outputMode: "human" | "jsonl" = "hum
     console.log("");
   }
 
-  const review = await runCommand(
-    `PYTHONPATH=tools/entrix python3 -m entrix.cli review-trigger --base "${reviewBase}" --json --fail-on-trigger`,
-    { stream: false, cwd: reviewRoot },
-  );
+  const scopeFiles = await collectReviewScopeFiles(reviewRoot, reviewBase);
+  if (scopeFiles.committedFiles.length === 0) {
+    const report = {
+      ...emptyReport(),
+      base: reviewBase,
+      committed_files: [],
+      changed_files: [],
+      working_tree_files: scopeFiles.workingTreeFiles,
+      untracked_files: scopeFiles.untrackedFiles,
+    } satisfies ReviewReport;
+    const message = "No committed changes in push scope.";
+    if (outputMode === "human") {
+      console.log(message);
+      if (scopeFiles.workingTreeFiles.length > 0 || scopeFiles.untrackedFiles.length > 0) {
+        console.log("");
+        console.log("Local workspace residue not included in push decision:");
+        if (scopeFiles.workingTreeFiles.length > 0) {
+          console.log(`- tracked but uncommitted: ${scopeFiles.workingTreeFiles.length}`);
+        }
+        if (scopeFiles.untrackedFiles.length > 0) {
+          console.log(`- untracked: ${scopeFiles.untrackedFiles.length}`);
+        }
+      }
+      console.log("");
+    }
+    return buildResultBase(reviewBase, report, "passed", true, false, message);
+  }
+  const reviewFilesArg = scopeFiles.committedFiles.map(shellQuote).join(" ");
+  const entrixBase = `${reviewBase}...HEAD`;
+  const reviewCommand =
+    `PYTHONPATH=tools/entrix python3 -m entrix.cli review-trigger --base ${shellQuote(entrixBase)} --json --fail-on-trigger`
+    + (reviewFilesArg ? ` ${reviewFilesArg}` : "");
+
+  const review = await runCommand(reviewCommand, { stream: false, cwd: reviewRoot });
 
   if (review.exitCode === 0) {
     if (outputMode === "human") {
@@ -191,7 +306,7 @@ export async function runReviewTriggerPhase(outputMode: "human" | "jsonl" = "hum
     }
     return buildResultBase(
       reviewBase,
-      { triggers: [], changed_files: [], diff_stats: { file_count: 0 } },
+      emptyReport(),
       "passed",
       true,
       false,
@@ -199,7 +314,14 @@ export async function runReviewTriggerPhase(outputMode: "human" | "jsonl" = "hum
     );
   }
 
-  const report = parseReport(review.output);
+  const report = {
+    ...parseReport(review.output),
+    base: reviewBase,
+    committed_files: scopeFiles.committedFiles,
+    changed_files: scopeFiles.committedFiles,
+    working_tree_files: scopeFiles.workingTreeFiles,
+    untracked_files: scopeFiles.untrackedFiles,
+  } satisfies ReviewReport;
   if (review.exitCode !== 3) {
     if (shouldBypassUnavailableReviewGate()) {
       const message = `${REVIEW_UNAVAILABLE_BYPASS_ENV}=1 set, bypassing unavailable review gate.`;
