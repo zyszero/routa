@@ -15,6 +15,7 @@ import { HarnessAgentInstructionsPanel } from "@/client/components/harness-agent
 import { HarnessGovernanceLoopGraph } from "@/client/components/harness-governance-loop-graph";
 import { HarnessGitHubActionsFlowPanel } from "@/client/components/harness-github-actions-flow-panel";
 import { HarnessHookRuntimePanel } from "@/client/components/harness-hook-runtime-panel";
+import { HarnessUnsupportedState, getHarnessUnsupportedRepoMessage } from "@/client/components/harness-support-state";
 import { useCodebases, useWorkspaces } from "@/client/hooks/use-workspaces";
 
 type RunnerKind = "shell" | "graph" | "sarif";
@@ -303,6 +304,7 @@ export default function HarnessSettingsPage() {
   const auxiliaryFiles = specsState.files.filter((file) => !primaryFiles.includes(file));
   const selectedRepoLabel = activeRepoSelection?.name ?? "None";
   const selectedRepo = activeRepoSelection;
+  const unsupportedRepoMessage = getHarnessUnsupportedRepoMessage(specsState.error, planState.error);
   const visibleSpecCodeBlocks = useMemo(
     () => (visibleSpec && visibleSpec.language === "markdown" ? extractMarkdownCodeBlocks(visibleSpec.source) : []),
     [visibleSpec],
@@ -311,7 +313,7 @@ export default function HarnessSettingsPage() {
   return (
     <SettingsRouteShell
       title="Harness"
-      description="Governance 视图按研发阶段重构为内部反馈环、提交反馈环、外部反馈环。"
+      description=""
       badgeLabel="AI Health"
       workspaceId={workspaceId}
       workspaceTitle={activeWorkspaceTitle}
@@ -372,8 +374,6 @@ export default function HarnessSettingsPage() {
                     setSelectedCodebaseId(matchedCodebase?.id ?? "");
                   }}
                   pathDisplay="hidden"
-                  sourceMode="additional-only"
-                  allowClone={false}
                   additionalRepos={codebases.map((codebase) => ({
                     name: codebase.label ?? codebase.repoPath.split("/").pop() ?? codebase.repoPath,
                     path: codebase.repoPath,
@@ -399,6 +399,7 @@ export default function HarnessSettingsPage() {
           planError={planState.error}
           metricCount={planState.plan?.metricCount ?? 0}
           hardGateCount={planState.plan?.hardGateCount ?? 0}
+          unsupportedMessage={unsupportedRepoMessage}
         />
 
         <HarnessAgentInstructionsPanel
@@ -406,6 +407,7 @@ export default function HarnessSettingsPage() {
           codebaseId={activeRepoCodebaseId}
           repoPath={activeRepoPath}
           repoLabel={selectedRepoLabel}
+          unsupportedMessage={unsupportedRepoMessage}
         />
 
         <HarnessHookRuntimePanel
@@ -413,6 +415,7 @@ export default function HarnessSettingsPage() {
           codebaseId={activeRepoCodebaseId}
           repoPath={activeRepoPath}
           repoLabel={selectedRepoLabel}
+          unsupportedMessage={unsupportedRepoMessage}
         />
 
         <section className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
@@ -434,19 +437,23 @@ export default function HarnessSettingsPage() {
                 </div>
               ) : null}
 
-              {specsState.error ? (
+              {unsupportedRepoMessage ? (
+                <HarnessUnsupportedState repoLabel={selectedRepoLabel} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-[11px] text-amber-800" />
+              ) : null}
+
+              {specsState.error && !unsupportedRepoMessage ? (
                 <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-[11px] text-red-700">
                   {specsState.error}
                 </div>
               ) : null}
 
-              {!specsState.loading && !specsState.error && specsState.files.length === 0 ? (
+              {!specsState.loading && !specsState.error && !unsupportedRepoMessage && specsState.files.length === 0 ? (
                 <div className="rounded-lg border border-desktop-border bg-desktop-bg-primary/80 px-3 py-3 text-[11px] text-desktop-text-secondary">
                   No fitness files found for this repository.
                 </div>
               ) : null}
 
-              {primaryFiles.map((file) => (
+              {!unsupportedRepoMessage ? primaryFiles.map((file) => (
                 <button
                   key={file.name}
                   type="button"
@@ -474,9 +481,9 @@ export default function HarnessSettingsPage() {
                     ) : null}
                   </div>
                 </button>
-              ))}
+              )) : null}
 
-              {auxiliaryFiles.length > 0 ? (
+              {!unsupportedRepoMessage && auxiliaryFiles.length > 0 ? (
                 <details className="mt-3 rounded-lg border border-desktop-border bg-desktop-bg-primary/60 px-3 py-2">
                   <summary className="cursor-pointer list-none text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
                     Auxiliary files
@@ -533,7 +540,9 @@ export default function HarnessSettingsPage() {
               ) : null}
             </div>
 
-            {visibleSpec ? (
+            {unsupportedRepoMessage ? (
+              <HarnessUnsupportedState repoLabel={selectedRepoLabel} />
+            ) : visibleSpec ? (
               <div className="mt-4 space-y-3">
                 <div className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-4 py-3">
                   <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-desktop-text-secondary">
@@ -697,6 +706,7 @@ export default function HarnessSettingsPage() {
           repoLabel={selectedRepoLabel}
           selectedTier={selectedTier}
           onTierChange={setSelectedTier}
+          unsupportedMessage={unsupportedRepoMessage}
         />
 
         <HarnessGitHubActionsFlowPanel
@@ -704,6 +714,7 @@ export default function HarnessSettingsPage() {
           codebaseId={activeRepoCodebaseId}
           repoPath={activeRepoPath}
           repoLabel={selectedRepoLabel}
+          unsupportedMessage={unsupportedRepoMessage}
         />
       </div>
     </SettingsRouteShell>

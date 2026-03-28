@@ -12,6 +12,7 @@ import {
   type Node,
   type NodeProps,
 } from "@xyflow/react";
+import { HarnessUnsupportedState } from "@/client/components/harness-support-state";
 
 export type RunnerKind = "shell" | "graph" | "sarif";
 export type TierValue = "fast" | "normal" | "deep";
@@ -74,6 +75,7 @@ type HarnessExecutionPlanFlowProps = {
   repoLabel: string;
   selectedTier: TierValue;
   onTierChange: (tier: TierValue) => void;
+  unsupportedMessage?: string | null;
 };
 
 function getStatusTone(status: EdgeStatus | undefined) {
@@ -496,6 +498,7 @@ export function HarnessExecutionPlanFlow({
   repoLabel,
   selectedTier,
   onTierChange,
+  unsupportedMessage,
 }: HarnessExecutionPlanFlowProps) {
   const [expandedState, setExpandedState] = useState<{
     planKey: string | null;
@@ -590,13 +593,17 @@ export function HarnessExecutionPlanFlow({
         </div>
       ) : null}
 
-      {error ? (
+      {unsupportedMessage ? (
+        <HarnessUnsupportedState repoLabel={repoLabel} />
+      ) : null}
+
+      {error && !unsupportedMessage ? (
         <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-5 text-[11px] text-red-700">
           {error}
         </div>
       ) : null}
 
-      {plan ? (
+      {!unsupportedMessage && plan ? (
         <div className="mt-4 space-y-3">
           <div className="flex flex-wrap gap-2 text-[10px] text-desktop-text-secondary">
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-700">pass = scoring path</span>

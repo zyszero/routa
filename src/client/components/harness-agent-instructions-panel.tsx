@@ -8,6 +8,7 @@ import {
   type TreeItem,
 } from "react-complex-tree";
 import { MarkdownViewer } from "@/client/components/markdown/markdown-viewer";
+import { HarnessUnsupportedState } from "@/client/components/harness-support-state";
 
 type InstructionSection = {
   id: string;
@@ -35,6 +36,7 @@ type HarnessAgentInstructionsPanelProps = {
   codebaseId?: string;
   repoPath?: string;
   repoLabel: string;
+  unsupportedMessage?: string | null;
 };
 
 function slugify(value: string) {
@@ -100,6 +102,7 @@ export function HarnessAgentInstructionsPanel({
   codebaseId,
   repoPath,
   repoLabel,
+  unsupportedMessage,
 }: HarnessAgentInstructionsPanelProps) {
   const [instructionsState, setInstructionsState] = useState<InstructionsState>({
     loading: false,
@@ -109,7 +112,7 @@ export function HarnessAgentInstructionsPanel({
   const [selectedSectionId, setSelectedSectionId] = useState("");
 
   useEffect(() => {
-    if (!workspaceId || !codebaseId || !repoPath) {
+    if (!workspaceId || !repoPath) {
       setInstructionsState({
         loading: false,
         error: null,
@@ -131,7 +134,9 @@ export function HarnessAgentInstructionsPanel({
       try {
         const query = new URLSearchParams();
         query.set("workspaceId", workspaceId);
-        query.set("codebaseId", codebaseId);
+        if (codebaseId) {
+          query.set("codebaseId", codebaseId);
+        }
         query.set("repoPath", repoPath);
 
         const response = await fetch(`/api/harness/instructions?${query.toString()}`);
@@ -267,13 +272,17 @@ export function HarnessAgentInstructionsPanel({
         </div>
       ) : null}
 
-      {instructionsState.error ? (
+      {unsupportedMessage ? (
+        <HarnessUnsupportedState repoLabel={repoLabel} />
+      ) : null}
+
+      {instructionsState.error && !unsupportedMessage ? (
         <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-5 text-[11px] text-red-700">
           {instructionsState.error}
         </div>
       ) : null}
 
-      {!instructionsState.loading && !instructionsState.error && instructionsState.data ? (
+      {!instructionsState.loading && !instructionsState.error && !unsupportedMessage && instructionsState.data ? (
         <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <div className="flex h-[380px] min-h-0 flex-col">
             <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-2 py-2 harness-instructions-tree">

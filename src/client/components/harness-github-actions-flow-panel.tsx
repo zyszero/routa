@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CodeViewer } from "@/client/components/codemirror/code-viewer";
+import { HarnessUnsupportedState } from "@/client/components/harness-support-state";
 
 type WorkflowJobKind = "job" | "approval" | "release";
 
@@ -34,6 +35,7 @@ type HarnessGitHubActionsFlowPanelProps = {
   codebaseId?: string;
   repoPath?: string;
   repoLabel: string;
+  unsupportedMessage?: string | null;
 };
 
 const KIND_STYLES: Record<WorkflowJobKind, string> = {
@@ -98,9 +100,10 @@ export function HarnessGitHubActionsFlowPanel({
   codebaseId,
   repoPath,
   repoLabel,
+  unsupportedMessage,
 }: HarnessGitHubActionsFlowPanelProps) {
-  const hasContext = Boolean(workspaceId && codebaseId && repoPath);
-  const contextKey = hasContext ? `${workspaceId}:${codebaseId}:${repoPath}` : "";
+  const hasContext = Boolean(workspaceId && repoPath);
+  const contextKey = hasContext ? `${workspaceId}:${codebaseId ?? "repo-only"}:${repoPath}` : "";
   const [flowState, setFlowState] = useState<FlowState>({
     error: null,
     flows: [],
@@ -208,19 +211,23 @@ export function HarnessGitHubActionsFlowPanel({
         </div>
       ) : null}
 
-      {flowState.error ? (
+      {unsupportedMessage ? (
+        <HarnessUnsupportedState repoLabel={repoLabel} />
+      ) : null}
+
+      {flowState.error && !unsupportedMessage ? (
         <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-5 text-[11px] text-red-700">
           {flowState.error}
         </div>
       ) : null}
 
-      {!isLoading && !flowState.error && visibleFlows.length === 0 ? (
+      {!isLoading && !flowState.error && !unsupportedMessage && visibleFlows.length === 0 ? (
         <div className="mt-4 rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-4 py-5 text-[11px] text-desktop-text-secondary">
           Select a repository to inspect workflow flows.
         </div>
       ) : null}
 
-      {visibleFlows.length > 0 && activeFlow ? (
+      {!unsupportedMessage && visibleFlows.length > 0 && activeFlow ? (
         <div className="mt-4 space-y-4">
           <div className="rounded-2xl border border-desktop-border bg-desktop-bg-primary/60 p-3">
             <div className="flex flex-wrap items-center justify-between gap-3">

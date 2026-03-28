@@ -12,6 +12,7 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import type { TierValue } from "@/client/components/harness-execution-plan-flow";
+import { HarnessUnsupportedState } from "@/client/components/harness-support-state";
 
 type HookPhase = "submodule" | "fitness" | "fitness-fast" | "review";
 
@@ -83,6 +84,7 @@ type HarnessGovernanceLoopGraphProps = {
   planError: string | null;
   metricCount: number;
   hardGateCount: number;
+  unsupportedMessage?: string | null;
 };
 
 type LoopLayer = "internal" | "commit" | "external";
@@ -513,8 +515,9 @@ export function HarnessGovernanceLoopGraph({
   planLoading,
   planError,
   metricCount,
+  unsupportedMessage,
 }: HarnessGovernanceLoopGraphProps) {
-  const hasContext = Boolean(workspaceId && codebaseId && repoPath);
+  const hasContext = Boolean(workspaceId && repoPath);
   const contextKey = hasContext ? `${workspaceId}:${codebaseId}:${repoPath}` : "";
   const [hookState, setHookState] = useState<SummaryState<HookSummary>>({
     data: null,
@@ -737,13 +740,17 @@ export function HarnessGovernanceLoopGraph({
         </div>
       </div>
 
-      {!hasContext ? (
+      {unsupportedMessage ? (
+        <HarnessUnsupportedState repoLabel={repoLabel} />
+      ) : null}
+
+      {!hasContext && !unsupportedMessage ? (
         <div className="mt-4 rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-4 py-5 text-[11px] text-desktop-text-secondary">
           Select a repository to render the governance loop.
         </div>
       ) : null}
 
-      {hasContext && graphIssues.length > 0 ? (
+      {hasContext && !unsupportedMessage && graphIssues.length > 0 ? (
         <div className="mt-4 space-y-2">
           {graphIssues.map((issue) => (
             <div key={issue} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-[11px] text-amber-800">
@@ -753,7 +760,7 @@ export function HarnessGovernanceLoopGraph({
         </div>
       ) : null}
 
-      {hasContext ? (
+      {hasContext && !unsupportedMessage ? (
         <div className="mt-4 space-y-4">
           <div className="flex flex-wrap gap-2 text-[10px] text-desktop-text-secondary">
             <span className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2.5 py-1">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { HarnessUnsupportedState } from "@/client/components/harness-support-state";
 
 type HookProfileName = string;
 type RuntimePhase = string;
@@ -51,6 +52,7 @@ type HooksPanelProps = {
   codebaseId?: string;
   repoPath?: string;
   repoLabel: string;
+  unsupportedMessage?: string | null;
 };
 
 type HooksState = {
@@ -84,6 +86,7 @@ export function HarnessHookRuntimePanel({
   codebaseId,
   repoPath,
   repoLabel,
+  unsupportedMessage,
 }: HooksPanelProps) {
   const [hooksState, setHooksState] = useState<HooksState>({
     loading: false,
@@ -93,7 +96,7 @@ export function HarnessHookRuntimePanel({
   const [selectedHookName, setSelectedHookName] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!workspaceId || !codebaseId || !repoPath) {
+    if (!workspaceId || !repoPath) {
       setHooksState({
         loading: false,
         error: null,
@@ -113,7 +116,9 @@ export function HarnessHookRuntimePanel({
       try {
         const query = new URLSearchParams();
         query.set("workspaceId", workspaceId);
-        query.set("codebaseId", codebaseId);
+        if (codebaseId) {
+          query.set("codebaseId", codebaseId);
+        }
         query.set("repoPath", repoPath);
 
         const response = await fetch(`/api/harness/hooks?${query.toString()}`);
@@ -254,13 +259,17 @@ export function HarnessHookRuntimePanel({
         </div>
       ) : null}
 
-      {hooksState.error ? (
+      {unsupportedMessage ? (
+        <HarnessUnsupportedState repoLabel={repoLabel} />
+      ) : null}
+
+      {hooksState.error && !unsupportedMessage ? (
         <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-5 text-[11px] text-red-700">
           {hooksState.error}
         </div>
       ) : null}
 
-      {hooksState.data?.warnings.length ? (
+      {!unsupportedMessage && hooksState.data?.warnings.length ? (
         <div className="mt-4 space-y-2">
           {hooksState.data.warnings.map((warning) => (
             <div key={warning} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-[11px] text-amber-800">
@@ -270,13 +279,13 @@ export function HarnessHookRuntimePanel({
         </div>
       ) : null}
 
-      {!hooksState.loading && !hooksState.error && !hooksState.data?.profiles.length ? (
+      {!hooksState.loading && !hooksState.error && !unsupportedMessage && !hooksState.data?.profiles.length ? (
         <div className="mt-4 rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-4 py-5 text-[11px] text-desktop-text-secondary">
           No hook profiles found for the selected repository.
         </div>
       ) : null}
 
-      {hooksState.data ? (
+      {!unsupportedMessage && hooksState.data ? (
         <div className="mt-4 grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
           <div className="rounded-2xl border border-desktop-border bg-desktop-bg-primary/60 p-4">
             <div className="flex items-center justify-between gap-3">
