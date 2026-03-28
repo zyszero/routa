@@ -20,11 +20,9 @@ import { useNotes } from "@/client/hooks/use-notes";
 import { DesktopAppShell } from "@/client/components/desktop-app-shell";
 import { AgentInstallPanel } from "@/client/components/agent-install-panel";
 import { CompactStat } from "@/client/components/compact-stat";
-import { OverviewCard } from "@/client/components/overview-card";
 import { WorkspaceTabBar } from "@/client/components/workspace-tab-bar";
 import { WorkspacePageHeader } from "@/client/components/workspace-page-header";
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
-import { SessionsOverview } from "@/app/workspace/[workspaceId]/sessions-overview";
 import { BackgroundTaskInfo, TaskInfo, SessionInfo, KanbanBoardInfo } from "@/app/workspace/[workspaceId]/types";
 import { NoteTasksTab } from "@/app/workspace/[workspaceId]/note-tasks-tab";
 import { NotesTab } from "@/app/workspace/[workspaceId]/notes-tab";
@@ -221,6 +219,7 @@ export function WorkspacePageClient({
   const runningBgTasks = bgTasks.filter((t) => t.status === "RUNNING").length;
   const activeBoard = boards.find((board) => board.isDefault) ?? boards[0];
   const latestSession = sessions[0];
+  const recentSessions = sessions.slice(0, 6);
   const generalNotes = notesHook.notes.filter((note) => note.metadata?.type === "general");
   const taskNotes = notesHook.notes.filter((note) => note.metadata?.type === "task");
   const snapshotReady = !workspacesHook.loading
@@ -261,64 +260,99 @@ export function WorkspacePageClient({
   };
 
   const overviewContent = (
-    <div className="space-y-4">
-      <div className="grid gap-4 xl:grid-cols-12">
-        <OverviewCard
-          className="xl:col-span-7"
-          eyebrow="Primary surface"
-          title={activeBoard?.name ?? "Kanban board"}
-          description="Kanban is the canonical work surface for routing, queue supervision, and lane-based execution."
-          meta={[
-            `${boards.length} board${boards.length === 1 ? "" : "s"}`,
-            `${pendingTasks.length} active tasks`,
-            `${runningBgTasks} background runs`,
-          ]}
-          actionLabel="Go to board"
-          onAction={() => router.push(`/workspace/${workspaceId}/kanban`)}
-        />
-        <OverviewCard
-          className="xl:col-span-5"
-          eyebrow="Latest recovery point"
-          title={latestSession?.name ?? latestSession?.sessionId ?? "No recent session"}
-          description={latestSession
-            ? "Recover the latest session from this workspace or continue task execution from the board."
-            : "Create a new requirement from the homepage launcher, then return here for context and recovery."}
-          meta={[
-            `${sessions.length} recent sessions`,
-            `${notesHook.notes.length} notes`,
-            `${agentsHook.agents.length} agents`,
-          ]}
-          actionLabel={latestSession ? "Open latest session" : "Back to launcher"}
-          onAction={() => {
-            if (latestSession?.sessionId) {
-              router.push(`/workspace/${workspaceId}/sessions/${latestSession.sessionId}`);
-              return;
-            }
-            router.push("/");
-          }}
-        />
-      </div>
-
-      {sessions.length > 0 && (
-        <section className="rounded-xl border border-desktop-border bg-desktop-bg-secondary p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">
-                Recent sessions
+    <div className="space-y-5">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+        <section className="border-b border-desktop-border pb-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">
+                Active board
               </div>
-              <div className="mt-1 text-sm text-desktop-text-secondary">
-                Recover execution context without reopening the Kanban surface.
+              <div className="mt-2 truncate text-xl font-semibold tracking-tight text-desktop-text-primary">
+                {activeBoard?.name ?? "Kanban board"}
               </div>
             </div>
+            <button
+              type="button"
+              onClick={() => router.push(`/workspace/${workspaceId}/kanban`)}
+              className="shrink-0 rounded-full border border-desktop-border px-3 py-1.5 text-[11px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+            >
+              Open board
+            </button>
           </div>
-          <SessionsOverview
-            sessions={sessions}
-            workspaceId={workspaceId}
-            onNavigate={(sessionId) => router.push(`/workspace/${workspaceId}/sessions/${sessionId}`)}
-            onRefresh={handleRefresh}
-          />
+          <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-[11px] text-desktop-text-secondary">
+            <span>{boards.length} board{boards.length === 1 ? "" : "s"}</span>
+            <span>{pendingTasks.length} active tasks</span>
+            <span>{runningBgTasks} background runs</span>
+          </div>
         </section>
-      )}
+
+        <section className="border-b border-desktop-border pb-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">
+                Latest session
+              </div>
+              <div className="mt-2 truncate text-base font-semibold text-desktop-text-primary">
+                {latestSession?.name ?? latestSession?.sessionId ?? "No recent session"}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (latestSession?.sessionId) {
+                  router.push(`/workspace/${workspaceId}/sessions/${latestSession.sessionId}`);
+                  return;
+                }
+                router.push("/");
+              }}
+              className="shrink-0 rounded-full border border-desktop-border px-3 py-1.5 text-[11px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+            >
+              {latestSession ? "Resume" : "Launcher"}
+            </button>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-[11px] text-desktop-text-secondary">
+            <span>{sessions.length} sessions</span>
+            <span>{notesHook.notes.length} notes</span>
+            <span>{agentsHook.agents.length} agents</span>
+          </div>
+        </section>
+      </div>
+
+      {recentSessions.length > 0 ? (
+        <section>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">
+              Recent sessions
+            </div>
+            <div className="text-[11px] text-desktop-text-secondary">
+              Latest {recentSessions.length} of {sessions.length}
+            </div>
+          </div>
+          <div className="divide-y divide-desktop-border border-t border-desktop-border">
+            {recentSessions.map((session) => (
+              <button
+                key={session.sessionId}
+                type="button"
+                onClick={() => router.push(`/workspace/${workspaceId}/sessions/${session.sessionId}`)}
+                className="flex w-full items-center justify-between gap-4 py-3 text-left transition-colors hover:bg-desktop-bg-secondary/40"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-desktop-text-primary">
+                    {session.name ?? session.sessionId}
+                  </div>
+                  <div className="mt-1 truncate text-[11px] text-desktop-text-secondary">
+                    {session.provider ?? "unknown provider"}{session.role ? ` · ${session.role}` : ""}
+                  </div>
+                </div>
+                <div className="shrink-0 text-[11px] text-desktop-text-secondary">
+                  {new Date(session.createdAt).toLocaleString()}
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 
@@ -429,9 +463,6 @@ export function WorkspacePageClient({
               activeAgentsCount={activeAgents.length}
               pendingTasksCount={pendingTasks.length}
               onRefresh={handleRefresh}
-              onTeam={() => router.push(`/workspace/${workspaceId}/team`)}
-              onKanban={() => router.push(`/workspace/${workspaceId}/kanban`)}
-              onTraces={() => router.push("/traces")}
             />
 
             <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -442,12 +473,9 @@ export function WorkspacePageClient({
             </div>
 
             <div className="hidden xl:grid xl:grid-cols-12 xl:gap-4">
-              <section className="xl:col-span-7 rounded-[24px] border border-desktop-border bg-desktop-bg-secondary p-4">
-                <div className="mb-4 flex items-center justify-between gap-3 border-b border-desktop-border pb-3">
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">Overview</div>
-                    <div className="mt-1 text-sm text-desktop-text-secondary">Recovery, routing, and workspace context.</div>
-                  </div>
+              <section className="xl:col-span-7">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">Overview</div>
                 </div>
                 {overviewContent}
               </section>

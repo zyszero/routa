@@ -6,9 +6,9 @@ interface WorkspacePageHeaderProps {
   activeAgentsCount: number;
   pendingTasksCount: number;
   onRefresh: () => void;
-  onTeam: () => void;
-  onKanban: () => void;
-  onTraces: () => void;
+  onKanban?: () => void;
+  onTeam?: () => void;
+  onTraces?: () => void;
 }
 
 export function WorkspacePageHeader({
@@ -19,8 +19,8 @@ export function WorkspacePageHeader({
   activeAgentsCount,
   pendingTasksCount,
   onRefresh,
-  onTeam,
   onKanban,
+  onTeam,
   onTraces,
 }: WorkspacePageHeaderProps) {
   return (
@@ -58,27 +58,33 @@ export function WorkspacePageHeader({
         >
           Refresh
         </button>
-        <button
-          type="button"
-          onClick={onTeam}
-          className="rounded-md bg-desktop-bg-secondary px-2.5 py-1.5 text-[11px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
-        >
-          Team
-        </button>
-        <button
-          type="button"
-          onClick={onKanban}
-          className="rounded-md bg-desktop-accent px-2.5 py-1.5 text-[11px] font-medium text-desktop-accent-text transition-colors hover:opacity-90"
-        >
-          Kanban
-        </button>
-        <button
-          type="button"
-          onClick={onTraces}
-          className="rounded-md bg-desktop-bg-secondary px-2.5 py-1.5 text-[11px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
-        >
-          Traces
-        </button>
+        {onTeam ? (
+          <button
+            type="button"
+            onClick={onTeam}
+            className="rounded-md bg-desktop-bg-secondary px-2.5 py-1.5 text-[11px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
+          >
+            Team
+          </button>
+        ) : null}
+        {onKanban ? (
+          <button
+            type="button"
+            onClick={onKanban}
+            className="rounded-md bg-desktop-accent px-2.5 py-1.5 text-[11px] font-medium text-desktop-accent-text transition-colors hover:opacity-90"
+          >
+            Kanban
+          </button>
+        ) : null}
+        {onTraces ? (
+          <button
+            type="button"
+            onClick={onTraces}
+            className="rounded-md bg-desktop-bg-secondary px-2.5 py-1.5 text-[11px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
+          >
+            Traces
+          </button>
+        ) : null}
       </div>
     </header>
   );
