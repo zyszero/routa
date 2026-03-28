@@ -368,7 +368,7 @@ function buildGraph(args: {
     }),
     buildNode("post-commit", 835, 416, {
       layer: "external",
-      title: "提交后阶段",
+      title: "CI/CD",
       tone: "violet",
       note: "远程校验 / 自动构建",
       active: Boolean(workflowSummary),
@@ -391,7 +391,23 @@ function buildGraph(args: {
 
     buildEdge("test-lint", "test", "lint", "source-bottom", "target-top", "", "#10b981", "6 4"),
     buildEdge("commit-post-commit", "commit", "post-commit", "source-bottom", "target-top", "", "#8b5cf6", "6 4"),
-    buildEdge("metrics-thinking", "metrics", "thinking", "source-right", "target-left", "", "#059669", "6 4"),
+    {
+      id: "metrics-thinking",
+      source: "metrics",
+      target: "thinking",
+      sourceHandle: "source-left",
+      targetHandle: "target-left",
+      type: "simplebezier",
+      style: {
+        stroke: "#059669",
+        strokeWidth: 1.8,
+        strokeDasharray: "6 4",
+      },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        color: "#059669",
+      },
+    } satisfies Edge,
 
     ...(workflowSummary?.hasRepairLoop
       ? [
@@ -399,7 +415,7 @@ function buildGraph(args: {
           id: "post-commit-self-heal",
           source: "post-commit",
           target: "post-commit",
-          sourceHandle: "source-left",
+          sourceHandle: "source-right",
           targetHandle: "target-top",
           type: "smoothstep",
           label: "自动修复重试",
