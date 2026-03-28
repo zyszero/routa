@@ -59,6 +59,18 @@ type HooksState = {
   data: HooksResponse | null;
 };
 
+const GIT_HOOK_CATALOG = [
+  "pre-commit",
+  "prepare-commit-msg",
+  "commit-msg",
+  "post-commit",
+  "pre-rebase",
+  "post-checkout",
+  "post-merge",
+  "pre-push",
+  "post-rewrite",
+] as const;
+
 function formatTokenLabel(value: string): string {
   return value
     .split(/[-_]/u)
@@ -78,7 +90,7 @@ export function HarnessHookRuntimePanel({
     error: null,
     data: null,
   });
-  const [selectedProfileName, setSelectedProfileName] = useState<string | null>(null);
+  const [selectedHookName, setSelectedHookName] = useState<string | null>(null);
 
   useEffect(() => {
     if (!workspaceId || !codebaseId || !repoPath) {
@@ -168,39 +180,47 @@ export function HarnessHookRuntimePanel({
       .map(({ profile }) => profile);
   }, [hooksState.data?.hookFiles, hooksState.data?.profiles]);
 
-  const profileEntries = useMemo(
-    () => orderedProfiles.map((profile) => ({
-      profile,
-      hookNames: profile.hooks,
-      isBound: profile.hooks.length > 0,
-    })),
-    [orderedProfiles],
-  );
+  const hookEntries = useMemo(() => {
+    const hookFilesByName = new Map((hooksState.data?.hookFiles ?? []).map((hook) => [hook.name, hook]));
+    const profilesByName = new Map(orderedProfiles.map((profile) => [profile.name, profile]));
+
+    return GIT_HOOK_CATALOG.map((hookName) => {
+      const hookFile = hookFilesByName.get(hookName) ?? null;
+      const runtimeProfile = hookFile?.runtimeProfileName
+        ? profilesByName.get(hookFile.runtimeProfileName) ?? null
+        : null;
+      return {
+        hookName,
+        runtimeProfile,
+        isConfigured: Boolean(hookFile && runtimeProfile),
+      };
+    });
+  }, [hooksState.data?.hookFiles, orderedProfiles]);
 
   const defaultSelectableHook = useMemo(
-    () => profileEntries[0] ?? null,
-    [profileEntries],
+    () => hookEntries.find((entry) => entry.isConfigured) ?? null,
+    [hookEntries],
   );
 
   const activeHookName = useMemo(() => {
     if (!defaultSelectableHook) {
-      return selectedProfileName ?? "";
+      return selectedHookName ?? "";
     }
 
-    const selectedEntry = profileEntries.find((entry) => entry.profile.name === selectedProfileName);
+    const selectedEntry = hookEntries.find((entry) => entry.hookName === selectedHookName && entry.isConfigured);
     if (selectedEntry) {
-      return selectedEntry.profile.name;
+      return selectedEntry.hookName;
     }
 
-    return defaultSelectableHook.profile.name;
-  }, [defaultSelectableHook, profileEntries, selectedProfileName]);
+    return defaultSelectableHook.hookName;
+  }, [defaultSelectableHook, hookEntries, selectedHookName]);
 
   const activeHookEntry = useMemo(
-    () => profileEntries.find((entry) => entry.profile.name === activeHookName) ?? defaultSelectableHook ?? null,
-    [activeHookName, defaultSelectableHook, profileEntries],
+    () => hookEntries.find((entry) => entry.hookName === activeHookName) ?? defaultSelectableHook ?? null,
+    [activeHookName, defaultSelectableHook, hookEntries],
   );
 
-  const runtimeProfile = activeHookEntry?.profile ?? null;
+  const runtimeProfile = activeHookEntry?.runtimeProfile ?? null;
 
   const hookCount = hooksState.data?.hookFiles.length ?? 0;
   const profileCount = hooksState.data?.profiles.length ?? 0;
@@ -261,63 +281,68 @@ export function HarnessHookRuntimePanel({
           <div className="rounded-2xl border border-desktop-border bg-desktop-bg-primary/60 p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Profiles</div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Git hooks</div>
                 <h4 className="mt-1 text-sm font-semibold text-desktop-text-primary">Configured profiles</h4>
               </div>
               <div className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
-                {profileEntries.length} profiles
+                {hookEntries.length} hooks
               </div>
             </div>
 
             <div className="mt-4 space-y-1.5">
-              {profileEntries.map((entry) => {
-                const isSelected = activeHookEntry?.profile.name === entry.profile.name;
-                const profile = entry.profile;
+              {hookEntries.map((entry) => {
+                const isSelected = activeHookEntry?.hookName === entry.hookName;
+                const profile = entry.runtimeProfile;
                 return (
                   <button
-                    key={entry.profile.name}
+                    key={entry.hookName}
                     type="button"
+                    disabled={!entry.isConfigured}
                     onClick={() => {
-                      setSelectedProfileName(entry.profile.name);
+                      if (!entry.isConfigured) {
+                        return;
+                      }
+                      setSelectedHookName(entry.hookName);
                     }}
-                    className={`w-full rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                    className={`w-full rounded-xl border px-3 py-2 text-left transition-colors ${
                       isSelected
                         ? "border-desktop-accent bg-desktop-bg-secondary text-desktop-text-primary"
-                        : !entry.isBound
-                          ? "border-desktop-border bg-desktop-bg-primary/60 text-desktop-text-secondary hover:bg-desktop-bg-secondary"
+                        : !entry.isConfigured
+                          ? "cursor-not-allowed border-desktop-border bg-desktop-bg-primary/50 text-desktop-text-secondary/55"
                           : "border-desktop-border bg-desktop-bg-primary/80 text-desktop-text-secondary hover:bg-desktop-bg-secondary"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="text-[12px] font-semibold">{profile.name}</div>
+                        <div className="text-[12px] font-semibold">{entry.hookName}</div>
                         <div className="mt-1 text-[10px]">
-                          {profile.phases.length} phases · {profile.metrics.length} metrics
+                          {profile ? `${profile.name} · ${profile.metrics.length} metrics` : "Not configured"}
                         </div>
                       </div>
                       <span className={`rounded-full border px-2 py-0.5 text-[10px] ${
-                        entry.isBound
+                        entry.isConfigured
                           ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                           : "border-desktop-border bg-desktop-bg-primary text-desktop-text-secondary/60"
                       }`}>
-                        {entry.isBound ? `${entry.hookNames.length} hooks` : "unbound"}
+                        {entry.isConfigured ? "active" : "missing"}
                       </span>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-desktop-text-secondary">
-                      {profile.phases.slice(0, 3).map((phase) => (
-                        <span
-                          key={`${entry.profile.name}-${phase}`}
-                          className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2 py-0.5"
-                        >
-                          {formatTokenLabel(phase)}
-                        </span>
-                      ))}
-                    </div>
-                    {!entry.isBound ? (
-                      <div className="mt-2 text-[10px] text-desktop-text-secondary/60">
-                        Configured in `hooks.yaml`, but not wired by any checked-in git hook file.
+                    {profile ? (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5 text-[10px] text-desktop-text-secondary">
+                        {profile.phases.slice(0, 2).map((phase) => (
+                          <span
+                            key={`${entry.hookName}-${phase}`}
+                            className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2 py-0.5"
+                          >
+                            {formatTokenLabel(phase)}
+                          </span>
+                        ))}
                       </div>
-                    ) : null}
+                    ) : (
+                      <div className="mt-1 text-[10px] text-desktop-text-secondary/55">
+                        No runtime profile
+                      </div>
+                    )}
                   </button>
                 );
               })}
@@ -333,9 +358,9 @@ export function HarnessHookRuntimePanel({
                     <h4 className="mt-1 text-sm font-semibold text-desktop-text-primary">{runtimeProfile.name}</h4>
                   </div>
                   <div className="flex flex-wrap gap-2 text-[10px]">
-                    {activeHookEntry?.hookNames.length ? (
+                    {activeHookEntry ? (
                       <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-desktop-text-secondary">
-                        {activeHookEntry.hookNames.join(", ")}
+                        {activeHookEntry.hookName}
                       </span>
                     ) : null}
                     <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-desktop-text-secondary">
@@ -347,53 +372,53 @@ export function HarnessHookRuntimePanel({
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-desktop-border bg-desktop-bg-secondary/55 p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">Mapped metrics</div>
-                          <div className="mt-1 text-[11px] text-desktop-text-secondary">
-                            Configured metrics resolved from `docs/fitness/manifest.yaml`
-                          </div>
-                        </div>
-                        <div className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
-                          {runtimeProfile.metrics.length} metrics
-                        </div>
+                <div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">Mapped metrics</div>
+                      <div className="mt-1 text-[11px] text-desktop-text-secondary">
+                        Configured metrics resolved from `docs/fitness/manifest.yaml`
                       </div>
+                    </div>
+                    <div className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
+                      {runtimeProfile.metrics.length} metrics
+                    </div>
+                  </div>
 
-                      <div className="mt-4 space-y-3">
-                        {runtimeProfile.metrics.map((metric) => (
-                          <div key={metric.name} className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-4 py-3">
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="text-[12px] font-semibold text-desktop-text-primary">{metric.name}</div>
-                                {metric.command ? (
-                                  <div className="mt-1 break-all font-mono text-[11px] text-desktop-text-secondary">{metric.command}</div>
-                                ) : null}
-                                {metric.description ? (
-                                  <div className="mt-2 text-[11px] leading-5 text-desktop-text-secondary">{metric.description}</div>
-                                ) : null}
-                              </div>
-                              <div className="flex flex-wrap gap-2 text-[10px]">
-                                <span className={`rounded-full border px-2.5 py-1 ${
-                                  metric.resolved
-                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                    : "border-amber-200 bg-amber-50 text-amber-800"
-                                }`}>
-                                  {metric.resolved ? "resolved" : "unresolved"}
-                                </span>
-                                {metric.hardGate ? (
-                                  <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-red-700">
-                                    hard gate
-                                  </span>
-                                ) : null}
-                              </div>
-                            </div>
-                            {metric.sourceFile ? (
-                              <div className="mt-3 text-[10px] font-mono text-desktop-text-secondary">{metric.sourceFile}</div>
+                  <div className="mt-4 space-y-3">
+                    {runtimeProfile.metrics.map((metric) => (
+                      <div key={metric.name} className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-4 py-3">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-[12px] font-semibold text-desktop-text-primary">{metric.name}</div>
+                            {metric.command ? (
+                              <div className="mt-1 break-all font-mono text-[11px] text-desktop-text-secondary">{metric.command}</div>
+                            ) : null}
+                            {metric.description ? (
+                              <div className="mt-2 text-[11px] leading-5 text-desktop-text-secondary">{metric.description}</div>
                             ) : null}
                           </div>
-                        ))}
+                          <div className="flex flex-wrap gap-2 text-[10px]">
+                            <span className={`rounded-full border px-2.5 py-1 ${
+                              metric.resolved
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                : "border-amber-200 bg-amber-50 text-amber-800"
+                            }`}>
+                              {metric.resolved ? "resolved" : "unresolved"}
+                            </span>
+                            {metric.hardGate ? (
+                              <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-red-700">
+                                hard gate
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        {metric.sourceFile ? (
+                          <div className="mt-3 text-[10px] font-mono text-desktop-text-secondary">{metric.sourceFile}</div>
+                        ) : null}
                       </div>
+                    ))}
+                  </div>
                 </div>
               </>
             ) : (
