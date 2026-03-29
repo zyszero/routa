@@ -10,18 +10,23 @@ import { SettingsRouteShell } from "@/client/components/settings-route-shell";
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
 import { useCodebases, useWorkspaces } from "@/client/hooks/use-workspaces";
 
-export function FluencySettingsPageClient() {
+type FluencySettingsPageClientProps = {
+  defaultRepoPath?: string;
+};
+
+export function FluencySettingsPageClient({ defaultRepoPath }: FluencySettingsPageClientProps) {
   const searchParams = useSearchParams();
   const workspacesHook = useWorkspaces();
   const requestedWorkspaceId = searchParams.get("workspaceId") ?? "";
   const requestedCodebaseId = searchParams.get("codebaseId") ?? "";
   const requestedRepoPath = searchParams.get("repoPath") ?? "";
+  const initialRequestedRepoPath = requestedRepoPath || (requestedCodebaseId ? "" : (defaultRepoPath ?? ""));
 
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(requestedWorkspaceId);
   const workspaceId = selectedWorkspaceId || requestedWorkspaceId || workspacesHook.workspaces[0]?.id || "";
   const { codebases } = useCodebases(workspaceId);
   const [selectedCodebaseId, setSelectedCodebaseId] = useState(requestedCodebaseId);
-  const [initialRepoPath, setInitialRepoPath] = useState(requestedRepoPath);
+  const [initialRepoPath, setInitialRepoPath] = useState(initialRequestedRepoPath);
   const [selectedRepoOverride, setSelectedRepoOverride] = useState<RepoSelection | null>(null);
 
   const activeWorkspaceTitle = useMemo(() => {
@@ -38,16 +43,17 @@ export function FluencySettingsPageClient() {
   }, [codebases, selectedCodebaseId]);
 
   const matchedSelectedCodebase = useMemo(() => {
-    if (!selectedRepoOverride) {
+    const selectedPath = selectedRepoOverride?.path ?? initialRepoPath;
+    if (!selectedPath) {
       return activeCodebase;
     }
 
     return codebases.find((codebase) => (
-      codebase.repoPath === selectedRepoOverride.path
-      && (selectedRepoOverride.branch ? (codebase.branch ?? "") === selectedRepoOverride.branch : true)
-    )) ?? codebases.find((codebase) => codebase.repoPath === selectedRepoOverride.path)
+      codebase.repoPath === selectedPath
+      && (selectedRepoOverride?.branch ? (codebase.branch ?? "") === selectedRepoOverride.branch : true)
+    )) ?? codebases.find((codebase) => codebase.repoPath === selectedPath)
       ?? null;
-  }, [activeCodebase, codebases, selectedRepoOverride]);
+  }, [activeCodebase, codebases, initialRepoPath, selectedRepoOverride]);
 
   const activeRepoSelection = useMemo(() => {
     if (selectedRepoOverride) {

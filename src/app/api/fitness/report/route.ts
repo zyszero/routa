@@ -1,8 +1,12 @@
-import * as fs from "fs";
 import { promises as fsp } from "fs";
 import * as path from "path";
 import { NextRequest, NextResponse } from "next/server";
-import { getRoutaSystem } from "@/core/routa-system";
+import {
+  isFitnessContextError,
+  normalizeFitnessContextValue,
+  resolveFitnessRepoRoot,
+  type FitnessContext,
+} from "@/core/fitness/repo-root";
 
 const FITNESS_PROFILES = ["generic", "agent_orchestrator"] as const;
 
@@ -22,12 +26,6 @@ type ReportResponse = {
   profiles: ReportApiProfileResult[];
 };
 
-type FitnessContext = {
-  workspaceId?: string;
-  codebaseId?: string;
-  repoPath?: string;
-};
-
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -35,91 +33,12 @@ function toMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function normalizeContextValue(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
 function parseReportContext(searchParams: URLSearchParams): FitnessContext {
   return {
-    workspaceId: normalizeContextValue(searchParams.get("workspaceId")),
-    codebaseId: normalizeContextValue(searchParams.get("codebaseId")),
-    repoPath: normalizeContextValue(searchParams.get("repoPath")),
+    workspaceId: normalizeFitnessContextValue(searchParams.get("workspaceId")),
+    codebaseId: normalizeFitnessContextValue(searchParams.get("codebaseId")),
+    repoPath: normalizeFitnessContextValue(searchParams.get("repoPath")),
   };
-}
-
-function isRoutaRepoRoot(repoRoot: string): boolean {
-  return (
-    fs.existsSync(path.join(repoRoot, "docs", "fitness", "harness-fluency.model.yaml"))
-    && fs.existsSync(path.join(repoRoot, "crates", "routa-cli"))
-  );
-}
-
-async function resolveRepoRoot(context: FitnessContext): Promise<string> {
-  const workspaceId = normalizeContextValue(context.workspaceId);
-  const codebaseId = normalizeContextValue(context.codebaseId);
-  const repoPath = normalizeContextValue(context.repoPath);
-  const system = getRoutaSystem();
-
-  const directPath = repoPath ? path.resolve(repoPath) : undefined;
-  if (directPath) {
-    if (!fs.existsSync(directPath) || !fs.statSync(directPath).isDirectory()) {
-      throw new Error(`repoPath 不存在或不是目录: ${directPath}`);
-    }
-    if (!isRoutaRepoRoot(directPath)) {
-      throw new Error(`repoPath 不是 Routa 仓库: ${directPath}`);
-    }
-    return directPath;
-  }
-
-  if (codebaseId) {
-    const codebase = await system.codebaseStore.get(codebaseId);
-    if (!codebase) {
-      throw new Error(`Codebase 未找到: ${codebaseId}`);
-    }
-
-    const candidate = path.resolve(codebase.repoPath);
-    if (!fs.existsSync(candidate) || !fs.statSync(candidate).isDirectory()) {
-      throw new Error(`Codebase 的路径不存在或不是目录: ${candidate}`);
-    }
-    if (!isRoutaRepoRoot(candidate)) {
-      throw new Error(`Codebase 的路径不是 Routa 仓库: ${candidate}`);
-    }
-
-    return candidate;
-  }
-
-  if (!workspaceId) {
-    throw new Error("缺少 fitness 上下文，请提供 workspaceId / codebaseId / repoPath 之一");
-  }
-
-  const codebases = await system.codebaseStore.listByWorkspace(workspaceId);
-  if (codebases.length === 0) {
-    throw new Error(`Workspace 下没有配置 codebase: ${workspaceId}`);
-  }
-
-  const fallback = codebases.find((codebase) => codebase.isDefault) ?? codebases[0];
-  const candidate = path.resolve(fallback.repoPath);
-
-  if (!fs.existsSync(candidate) || !fs.statSync(candidate).isDirectory()) {
-    throw new Error(`默认 codebase 的路径不存在或不是目录: ${candidate}`);
-  }
-  if (!isRoutaRepoRoot(candidate)) {
-    throw new Error(`默认 codebase 的路径不是 Routa 仓库: ${candidate}`);
-  }
-
-  return candidate;
-}
-
-function isContextError(message: string) {
-  return message.includes("缺少 fitness 上下文")
-    || message.includes("Codebase 未找到")
-    || message.includes("Codebase 的路径")
-    || message.includes("repoPath")
-    || message.includes("Workspace 下没有配置 codebase")
-    || message.includes("不是 Routa 仓库")
-    || message.includes("不存在或不是目录");
 }
 
 function profileSnapshotPath(repoRoot: string, profile: FitnessProfile) {
@@ -133,7 +52,9 @@ function profileSnapshotPath(repoRoot: string, profile: FitnessProfile) {
 export async function GET(request: NextRequest) {
   try {
     const context = parseReportContext(request.nextUrl.searchParams);
-    const repoRoot = await resolveRepoRoot(context);
+    const repoRoot = await resolveFitnessRepoRoot(context, {
+      preferCurrentRepoForDefaultWorkspace: true,
+    });
     const results: ReportApiProfileResult[] = [];
 
     for (const profile of FITNESS_PROFILES) {
@@ -177,7 +98,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(response);
   } catch (error) {
     const message = toMessage(error);
-    if (isContextError(message)) {
+    if (isFitnessContextError(message)) {
       return NextResponse.json(
         {
           error: "Fitness 快照上下文无效",
