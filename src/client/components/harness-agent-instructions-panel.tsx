@@ -34,6 +34,7 @@ type HarnessAgentInstructionsPanelProps = {
   data?: InstructionsResponse | null;
   loading?: boolean;
   error?: string | null;
+  variant?: "full" | "compact";
 };
 
 function slugify(value: string) {
@@ -103,6 +104,7 @@ export function HarnessAgentInstructionsPanel({
   data,
   loading,
   error,
+  variant = "full",
 }: HarnessAgentInstructionsPanelProps) {
   const hasExternalState = loading !== undefined || error !== undefined || data !== undefined;
   const [instructionsState, setInstructionsState] = useState<InstructionsState>({
@@ -254,7 +256,10 @@ export function HarnessAgentInstructionsPanel({
   );
 
   return (
-    <section className="rounded-2xl border border-desktop-border bg-desktop-bg-primary/70 p-4 shadow-sm">
+    <section className={variant === "compact"
+      ? "rounded-2xl border border-desktop-border bg-desktop-bg-primary/60 p-4"
+      : "rounded-2xl border border-desktop-border bg-desktop-bg-primary/70 p-4 shadow-sm"}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Instruction file</div>
@@ -296,7 +301,7 @@ export function HarnessAgentInstructionsPanel({
 
       {!resolvedInstructionsState.loading && !resolvedInstructionsState.error && !unsupportedMessage && resolvedInstructionsState.data ? (
         <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <div className="flex h-[380px] min-h-0 flex-col">
+          <div className={`flex ${variant === "compact" ? "h-[280px]" : "h-[380px]"} min-h-0 flex-col`}>
             <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-2 py-2 harness-instructions-tree">
               <UncontrolledTreeEnvironment
                 dataProvider={treeDataProvider}
@@ -337,7 +342,7 @@ export function HarnessAgentInstructionsPanel({
             </div>
           </div>
 
-          <div className="flex h-[380px] min-h-0 flex-col">
+          <div className={`flex ${variant === "compact" ? "h-[280px]" : "h-[380px]"} min-h-0 flex-col`}>
             <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-4 py-3">
               <MarkdownViewer
                 content={selectedSection?.content ?? resolvedInstructionsState.data.source}

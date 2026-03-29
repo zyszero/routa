@@ -26,6 +26,7 @@ type HarnessGitHubActionsFlowPanelProps = {
   data?: GitHubActionsFlowsResponse | null;
   loading?: boolean;
   error?: string | null;
+  variant?: "full" | "compact";
 };
 
 const KIND_STYLES: Record<WorkflowJobKind, string> = {
@@ -184,6 +185,7 @@ export function HarnessGitHubActionsFlowPanel({
   data,
   loading,
   error,
+  variant = "full",
 }: HarnessGitHubActionsFlowPanelProps) {
   const hasExternalState = loading !== undefined || error !== undefined || data !== undefined;
   const hasContext = Boolean(workspaceId && repoPath);
@@ -289,7 +291,10 @@ export function HarnessGitHubActionsFlowPanel({
   const dependencyCount = activeFlow?.jobs.reduce((sum, job) => sum + job.needs.length, 0) ?? 0;
 
   return (
-    <section className="rounded-2xl border border-desktop-border bg-desktop-bg-secondary/55 p-4 shadow-sm">
+    <section className={variant === "compact"
+      ? "rounded-2xl border border-desktop-border bg-desktop-bg-primary/60 p-4"
+      : "rounded-2xl border border-desktop-border bg-desktop-bg-secondary/55 p-4 shadow-sm"}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">GitHub Actions flow</div>

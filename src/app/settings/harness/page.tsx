@@ -36,6 +36,7 @@ export default function HarnessSettingsPage() {
   const [selectedRepoOverride, setSelectedRepoOverride] = useState<RepoSelection | null>(null);
   const [selectedTier, setSelectedTier] = useState<TierValue>("normal");
   const [selectedSpecName, setSelectedSpecName] = useState("");
+  const [selectedGovernanceNodeId, setSelectedGovernanceNodeId] = useState("precommit");
 
   const activeWorkspaceTitle = useMemo(() => {
     return workspacesHook.workspaces.find((workspace) => workspace.id === workspaceId)?.title
@@ -114,6 +115,105 @@ export default function HarnessSettingsPage() {
     () => (visibleSpec && visibleSpec.language === "markdown" ? extractMarkdownCodeBlocks(visibleSpec.source) : []),
     [visibleSpec],
   );
+  const governanceContextPanel = useMemo(() => {
+    switch (selectedGovernanceNodeId) {
+      case "coding":
+        return (
+          <HarnessAgentInstructionsPanel
+            workspaceId={workspaceId}
+            codebaseId={activeRepoCodebaseId}
+            repoPath={activeRepoPath}
+            repoLabel={selectedRepoLabel}
+            unsupportedMessage={unsupportedRepoMessage}
+            data={instructionsState.data}
+            loading={instructionsState.loading}
+            error={instructionsState.error}
+            variant="compact"
+          />
+        );
+      case "precommit":
+        return (
+          <HarnessHookRuntimePanel
+            workspaceId={workspaceId}
+            codebaseId={activeRepoCodebaseId}
+            repoPath={activeRepoPath}
+            repoLabel={selectedRepoLabel}
+            unsupportedMessage={unsupportedRepoMessage}
+            data={hooksState.data}
+            loading={hooksState.loading}
+            error={hooksState.error}
+            variant="compact"
+          />
+        );
+      case "lint":
+      case "review":
+      case "test":
+        return (
+          <HarnessExecutionPlanFlow
+            loading={planState.loading}
+            error={planState.error}
+            plan={planState.data}
+            repoLabel={selectedRepoLabel}
+            selectedTier={selectedTier}
+            onTierChange={setSelectedTier}
+            unsupportedMessage={unsupportedRepoMessage}
+            variant="compact"
+          />
+        );
+      case "post-commit":
+        return (
+          <HarnessGitHubActionsFlowPanel
+            workspaceId={workspaceId}
+            codebaseId={activeRepoCodebaseId}
+            repoPath={activeRepoPath}
+            repoLabel={selectedRepoLabel}
+            unsupportedMessage={unsupportedRepoMessage}
+            data={githubActionsState.data}
+            loading={githubActionsState.loading}
+            error={githubActionsState.error}
+            variant="compact"
+          />
+        );
+      default:
+        return (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80 p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">Connected surfaces</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {["Instruction file", "Hook system", "Execution plan", "GitHub Actions flow"].map((label) => (
+                  <span key={label} className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-[10px] text-desktop-text-primary">
+                    {label}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80 p-3 text-[11px] text-desktop-text-secondary">
+              选择 `编码`、`预提交`、`测试` 或 `提交后阶段` 节点，可以在这里直接查看对应组件的上下文视图。
+            </div>
+          </div>
+        );
+    }
+  }, [
+    activeRepoCodebaseId,
+    activeRepoPath,
+    githubActionsState.data,
+    githubActionsState.error,
+    githubActionsState.loading,
+    hooksState.data,
+    hooksState.error,
+    hooksState.loading,
+    instructionsState.data,
+    instructionsState.error,
+    instructionsState.loading,
+    planState.data,
+    planState.error,
+    planState.loading,
+    selectedGovernanceNodeId,
+    selectedRepoLabel,
+    selectedTier,
+    unsupportedRepoMessage,
+    workspaceId,
+  ]);
 
   return (
     <SettingsRouteShell
@@ -216,6 +316,9 @@ export default function HarnessSettingsPage() {
           instructionsData={instructionsState.data}
           instructionsError={instructionsState.error}
           fitnessFiles={specFiles}
+          selectedNodeId={selectedGovernanceNodeId}
+          onSelectedNodeChange={setSelectedGovernanceNodeId}
+          contextPanel={governanceContextPanel}
         />
 
         <HarnessAgentInstructionsPanel

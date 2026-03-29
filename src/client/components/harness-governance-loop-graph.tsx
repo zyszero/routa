@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   Background,
   Handle,
@@ -70,6 +70,7 @@ type HarnessGovernanceLoopGraphProps = {
   fitnessFiles?: FitnessSpecSummary[];
   selectedNodeId?: string;
   onSelectedNodeChange?: (nodeId: string) => void;
+  contextPanel?: ReactNode;
 };
 
 type LoopLayer = "internal" | "commit" | "external";
@@ -526,6 +527,7 @@ export function HarnessGovernanceLoopGraph({
   fitnessFiles = [],
   selectedNodeId,
   onSelectedNodeChange,
+  contextPanel,
 }: HarnessGovernanceLoopGraphProps) {
   const hasContext = Boolean(repoPath);
   const [internalSelectedNodeId, setInternalSelectedNodeId] = useState("precommit");
@@ -650,7 +652,7 @@ export function HarnessGovernanceLoopGraph({
             </span>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(380px,460px)]">
             <div className="relative overflow-hidden rounded-2xl border border-desktop-border bg-[linear-gradient(180deg,rgba(248,250,252,0.98),rgba(241,245,249,0.98))]">
               <div className="pointer-events-none absolute inset-0">
                 <div className="absolute left-[20px] top-[44px] h-[152px] w-[1068px] rounded-[36px] border border-emerald-300/70 bg-emerald-50/35" />
@@ -701,20 +703,24 @@ export function HarnessGovernanceLoopGraph({
               <div className="mt-1 text-sm font-semibold text-desktop-text-primary">
                 {graph.nodes.find((node) => node.id === activeSelectedNodeId)?.data.title ?? "阶段详情"}
               </div>
-              <div className="mt-3 space-y-3">
-                {detailSections.map((section: LoopDetailSection) => (
-                  <div key={section.title} className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80 p-3">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">{section.title}</div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {section.items.map((item: string) => (
-                        <span key={item} className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-[10px] text-desktop-text-primary">
-                          {item}
-                        </span>
-                      ))}
+              {contextPanel ? (
+                <div className="mt-3">{contextPanel}</div>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  {detailSections.map((section: LoopDetailSection) => (
+                    <div key={section.title} className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80 p-3">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">{section.title}</div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {section.items.map((item: string) => (
+                          <span key={item} className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-[10px] text-desktop-text-primary">
+                            {item}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </aside>
           </div>
 

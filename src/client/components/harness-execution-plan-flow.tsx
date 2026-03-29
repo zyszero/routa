@@ -76,6 +76,7 @@ type HarnessExecutionPlanFlowProps = {
   selectedTier: TierValue;
   onTierChange: (tier: TierValue) => void;
   unsupportedMessage?: string | null;
+  variant?: "full" | "compact";
 };
 
 function getStatusTone(status: EdgeStatus | undefined) {
@@ -501,6 +502,7 @@ export function HarnessExecutionPlanFlow({
   selectedTier,
   onTierChange,
   unsupportedMessage,
+  variant = "full",
 }: HarnessExecutionPlanFlowProps) {
   const [expandedState, setExpandedState] = useState<{
     planKey: string | null;
@@ -529,7 +531,7 @@ export function HarnessExecutionPlanFlow({
 
   const graph = useMemo(() => {
     if (!plan) {
-      return { nodes: [] as Node<PlanNodeData>[], edges: [] as Edge[], minHeight: 660 };
+      return { nodes: [] as Node<PlanNodeData>[], edges: [] as Edge[], minHeight: variant === "compact" ? 520 : 660 };
     }
 
     return buildPlanGraph(plan, expandedDimensions, (name) => {
@@ -538,10 +540,13 @@ export function HarnessExecutionPlanFlow({
         names: expandedDimensions.has(name) ? new Set<string>() : new Set([name]),
       });
     });
-  }, [expandedDimensions, plan, planKey]);
+  }, [expandedDimensions, plan, planKey, variant]);
 
   return (
-    <section className="rounded-2xl border border-desktop-border bg-desktop-bg-secondary/55 p-4 shadow-sm">
+    <section className={variant === "compact"
+      ? "rounded-2xl border border-desktop-border bg-desktop-bg-primary/60 p-4"
+      : "rounded-2xl border border-desktop-border bg-desktop-bg-secondary/55 p-4 shadow-sm"}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Execution plan</div>
@@ -627,7 +632,7 @@ export function HarnessExecutionPlanFlow({
                 minZoom={0.58}
                 maxZoom={1.2}
                 fitView
-                fitViewOptions={{ padding: 0.055, minZoom: 0.58, maxZoom: 0.94 }}
+                fitViewOptions={{ padding: variant === "compact" ? 0.03 : 0.055, minZoom: 0.58, maxZoom: 0.94 }}
                 proOptions={{ hideAttribution: true }}
               >
                 <Background color="#d7dee7" gap={20} size={1} />
