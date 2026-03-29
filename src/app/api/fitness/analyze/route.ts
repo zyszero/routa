@@ -48,6 +48,7 @@ type FitnessConsole = {
   data: string;
   stdout: string;
   stderr: string;
+  reportText?: string;
   exitCode?: number | null;
   signal?: string | null;
 };
@@ -275,7 +276,7 @@ function buildConsoleTranscript(params: {
     lines.push("");
   } else if (reportText) {
     lines.push("stdout:");
-    lines.push("[JSON report emitted to stdout and parsed into the Fluency report view]");
+    lines.push("[No step-by-step stdout logs. This command only emitted the final JSON report, which was parsed into the Fluency report view.]");
     lines.push("");
   }
 
@@ -299,6 +300,7 @@ function buildConsoleTranscript(params: {
     data: `${lines.join("\n")}\n`,
     stdout,
     stderr,
+    reportText,
     exitCode,
     signal,
   };

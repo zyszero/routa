@@ -464,11 +464,13 @@ function RawView({ report }: { report: FitnessReport }) {
 
 function ConsoleView({ profileState }: { profileState: ProfilePanelState }) {
   const consoleState = profileState.console;
+  const [copied, setCopied] = useState(false);
 
   if (!consoleState?.data) {
     return (
       <div className="rounded-2xl border border-dashed border-desktop-border px-4 py-6 text-sm text-desktop-text-secondary">
-        当前没有 console transcript。先运行一次 profile，后端会捕获 `cargo … fitness fluency` 的 stdout / stderr。
+        当前没有 console transcript。先运行一次 profile。
+        这条 fluency CLI 不会持续输出内部进度；成功时通常只会在结束后一次性输出最终 JSON 报告和 Cargo 的 stderr。
       </div>
     );
   }
@@ -499,6 +501,37 @@ function ConsoleView({ profileState }: { profileState: ProfilePanelState }) {
         exited={profileState.state !== "loading"}
         exitCode={consoleState.signal ? 130 : typeof consoleState.exitCode === "number" ? consoleState.exitCode : undefined}
       />
+      {consoleState.reportText ? (
+        <div className="rounded-2xl border border-desktop-border bg-desktop-bg-secondary/60 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">JSON output</div>
+              <div className="mt-1 text-[11px] text-desktop-text-secondary">
+                这是 fluency CLI 最终输出到 stdout 的原始 JSON。
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                if (typeof window === "undefined") {
+                  return;
+                }
+                await navigator.clipboard.writeText(consoleState.reportText ?? "");
+                setCopied(true);
+                window.setTimeout(() => {
+                  setCopied(false);
+                }, 1200);
+              }}
+              className="rounded-full border border-desktop-border px-3 py-1.5 text-xs font-semibold text-desktop-text-secondary hover:bg-desktop-bg-primary/70"
+            >
+              {copied ? "已复制" : "复制 JSON"}
+            </button>
+          </div>
+          <pre className="mt-3 overflow-x-auto rounded-2xl border border-desktop-border bg-slate-950 p-4 text-xs leading-5 text-slate-100">
+            <code>{consoleState.reportText}</code>
+          </pre>
+        </div>
+      ) : null}
     </div>
   );
 }

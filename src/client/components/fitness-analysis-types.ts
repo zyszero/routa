@@ -33,6 +33,7 @@ export type FitnessConsole = {
   data: string;
   stdout: string;
   stderr: string;
+  reportText?: string;
   exitCode?: number | null;
   signal?: string | null;
 };
