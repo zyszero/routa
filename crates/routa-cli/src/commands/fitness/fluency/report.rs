@@ -29,6 +29,7 @@ pub fn format_text_report(report: &HarnessFluencyReport) -> String {
         String::new(),
         format!("Repository: {}", report.repo_root),
         format!("Profile: {}", report.profile),
+        format!("Mode: {:?}", report.mode),
         format!("Model Version: {}", report.model_version),
         format!("Overall Level: {}", report.overall_level_name),
         format!(
@@ -76,6 +77,12 @@ pub fn format_text_report(report: &HarnessFluencyReport) -> String {
                 group.critical_failures
             ));
         }
+    }
+
+    if !report.evidence_packs.is_empty() {
+        lines.push(String::new());
+        lines.push("Evidence Packs Prepared:".to_string());
+        lines.push(format!("- {} packs ready for adjudication", report.evidence_packs.len()));
     }
 
     lines.push(String::new());

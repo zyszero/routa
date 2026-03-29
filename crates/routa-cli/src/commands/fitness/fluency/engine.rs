@@ -2,6 +2,7 @@ use chrono::Utc;
 use std::collections::{HashMap, HashSet};
 
 use super::detector::{evaluate_criterion, EvaluationContext};
+use super::evidence_pack::build_evidence_packs;
 use super::model::load_fluency_model;
 use super::snapshot::{
     build_comparison, can_compare_reports, load_previous_snapshot, persist_snapshot,
@@ -148,6 +149,8 @@ pub fn evaluate_harness_fluency(options: &EvaluateOptions) -> Result<HarnessFlue
         .map(|cell| (cell.id.clone(), cell))
         .collect();
     let capability_groups = build_capability_group_results(&criteria_results, &capability_group_names);
+    let evidence_packs =
+        build_evidence_packs(&options.repo_root, &model.criteria, &criteria_results, &options.mode);
     let mut dimensions = HashMap::new();
     for dimension in &model.dimensions {
         let mut achieved_index: isize = -1;
@@ -236,6 +239,7 @@ pub fn evaluate_harness_fluency(options: &EvaluateOptions) -> Result<HarnessFlue
         blocking_target_level_name: blocking_target_level.map(|level| level.name.clone()),
         dimensions,
         capability_groups,
+        evidence_packs,
         cells,
         criteria: criteria_results,
         blocking_criteria: blocking_criteria.clone(),

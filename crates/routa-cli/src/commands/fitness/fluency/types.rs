@@ -323,6 +323,36 @@ pub struct CapabilityGroupResult {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct EvidenceExcerpt {
+    pub path: String,
+    pub content: String,
+    pub truncated: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvidencePack {
+    pub criterion_id: String,
+    pub capability_group: String,
+    pub capability_group_name: String,
+    pub status: CriterionStatus,
+    pub evidence_mode: EvidenceMode,
+    pub detector_type: String,
+    pub selection_reasons: Vec<String>,
+    pub detail: String,
+    pub evidence: Vec<String>,
+    pub excerpts: Vec<EvidenceExcerpt>,
+    pub why_it_matters: String,
+    pub recommended_action: String,
+    pub evidence_hint: String,
+    #[serde(default)]
+    pub ai_prompt_template: Option<String>,
+    #[serde(default)]
+    pub ai_requires: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HarnessFluencyReport {
     pub model_version: u32,
     pub model_path: String,
@@ -343,6 +373,8 @@ pub struct HarnessFluencyReport {
     pub dimensions: HashMap<String, DimensionResult>,
     #[serde(default)]
     pub capability_groups: HashMap<String, CapabilityGroupResult>,
+    #[serde(default)]
+    pub evidence_packs: Vec<EvidencePack>,
     pub cells: Vec<CellResult>,
     pub criteria: Vec<CriterionResult>,
     pub blocking_criteria: Vec<CriterionResult>,

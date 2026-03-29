@@ -36,6 +36,10 @@ pub struct FluencyArgs {
     #[arg(long, value_enum, default_value_t = FluencyProfile::Generic)]
     pub profile: FluencyProfile,
 
+    /// Execution mode. `hybrid` and `ai` currently prepare evidence packs for adjudication.
+    #[arg(long, value_enum, default_value_t = FluencyRunMode::Deterministic)]
+    pub mode: FluencyRunMode,
+
     /// Output format.
     #[arg(long, value_enum, default_value_t = FluencyOutputFormat::Text)]
     pub format: FluencyOutputFormat,
@@ -82,6 +86,23 @@ pub enum FluencyOutputFormat {
     Json,
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
+pub enum FluencyRunMode {
+    Deterministic,
+    Hybrid,
+    Ai,
+}
+
+impl FluencyRunMode {
+    fn into_fluency_mode(self) -> FluencyMode {
+        match self {
+            Self::Deterministic => FluencyMode::Deterministic,
+            Self::Hybrid => FluencyMode::Hybrid,
+            Self::Ai => FluencyMode::Ai,
+        }
+    }
+}
+
 pub fn run(action: FitnessAction) -> Result<(), String> {
     match action {
         FitnessAction::Fluency(args) => run_fluency(&args),
@@ -98,7 +119,7 @@ fn run_fluency(args: &FluencyArgs) -> Result<(), String> {
         repo_root,
         model_path,
         profile: args.profile.as_cli_value().to_string(),
-        mode: FluencyMode::Deterministic,
+        mode: args.mode.into_fluency_mode(),
         snapshot_path,
         compare_last: args.compare_last,
         save: !args.no_save,
@@ -249,7 +270,7 @@ mod tests {
     use super::{
         discover_git_toplevel, profile_snapshot_filename, resolve_requested_path,
         resolve_workspace_root, resolved_output_format, validate_repo_root, FluencyArgs,
-        FluencyOutputFormat, FluencyProfile,
+        FluencyMode, FluencyOutputFormat, FluencyProfile, FluencyRunMode,
     };
     use std::fs::File;
     use std::path::Path;
@@ -304,6 +325,7 @@ mod tests {
             model: None,
             snapshot_path: None,
             profile: FluencyProfile::Generic,
+            mode: FluencyRunMode::Deterministic,
             format: FluencyOutputFormat::Text,
             json: true,
             compare_last: false,
@@ -311,5 +333,15 @@ mod tests {
         };
 
         assert_eq!(resolved_output_format(&args), FluencyOutputFormat::Json);
+    }
+
+    #[test]
+    fn fluency_run_mode_maps_to_internal_mode() {
+        assert_eq!(
+            FluencyRunMode::Deterministic.into_fluency_mode(),
+            FluencyMode::Deterministic
+        );
+        assert_eq!(FluencyRunMode::Hybrid.into_fluency_mode(), FluencyMode::Hybrid);
+        assert_eq!(FluencyRunMode::Ai.into_fluency_mode(), FluencyMode::Ai);
     }
 }

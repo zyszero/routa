@@ -1,4 +1,5 @@
 mod detector;
+mod evidence_pack;
 mod engine;
 mod model;
 mod report;
