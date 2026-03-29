@@ -9,10 +9,8 @@ import {
   PROFILE_ORDER,
   buildAnalysisPayload,
   buildAnalysisQuery,
-  clampPercent,
   normalizeApiResponse,
   profileStateTone,
-  readinessBarTone,
   type AnalyzeResponse,
   type FitnessProfile,
   type FitnessProfileState,
@@ -254,45 +252,38 @@ export function FitnessAnalysisPanel({
   const failedCriteria = selectedReport?.criteria.filter((criterion) => criterion.status === "fail") ?? [];
   const heroModel = buildHeroModel(selectedReport, selectedProfile, selectedState.state);
   const primaryActionLabel = buildPrimaryActionLabel(selectedReport, selectedState.state);
+  const reportSource = selectedState.source === "analysis"
+    ? "Live"
+    : selectedState.source === "snapshot"
+      ? "Snapshot"
+      : "No data";
+  const reportReadiness = selectedReport ? `${Math.round(selectedReport.currentLevelReadiness * 100)}%` : "N/A";
 
   return (
     <div className="space-y-4">
-      <section className="rounded-[28px] border border-desktop-border bg-desktop-bg-secondary/60 p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-[11px] uppercase tracking-[0.14em] text-desktop-text-secondary">Generic report</div>
-            <div className="mt-1 text-sm font-semibold text-desktop-text-primary">Repository</div>
-            <div className="text-[12px] text-desktop-text-secondary">{contextLabel ?? "未设置"}</div>
+      <section className="rounded-[28px] border border-desktop-border bg-desktop-bg-secondary/60 p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="truncate text-[11px] uppercase tracking-[0.14em] text-desktop-text-secondary">
+              Generic report · Repo <span className="text-desktop-text-primary">{contextLabel ?? "未设置"}</span>
+            </div>
+            <div className="mt-1 truncate text-[11px] leading-tight text-desktop-text-secondary">
+              {heroModel.currentLevel} → {heroModel.targetLevel}
+              <span className="text-desktop-text-secondary"> · {heroModel.confidenceSummary}</span>
+              <span className="text-desktop-text-secondary"> · Blockers {selectedReport ? blockers.length : "N/A"}</span>
+              <span className="text-desktop-text-secondary"> · Failed {selectedReport ? failedCriteria.length : "N/A"}</span>
+              <span className="text-desktop-text-secondary"> · {reportSource}</span>
+            </div>
           </div>
           <StatusBadge state={selectedState.state} />
         </div>
 
-        <div className="mt-3 space-y-1.5 text-[11px] text-desktop-text-secondary">
-          <div className="rounded-xl border border-desktop-border bg-white/80 px-3 py-2 dark:bg-white/6">
-            <span className="text-desktop-text-secondary">Level:</span>
-            <span className="ml-1 font-semibold text-desktop-text-primary">{heroModel.currentLevel}</span>
-            <span className="text-desktop-text-secondary"> · Next:</span>
-            <span className="ml-1 font-semibold text-desktop-text-primary">{heroModel.targetLevel}</span>
-            <span className="text-desktop-text-secondary"> · Source:</span>
-            <span className="ml-1 font-semibold text-desktop-text-primary">
-              {selectedState.source === "analysis" ? "Live" : selectedState.source === "snapshot" ? "Snapshot" : "No data"}
-            </span>
-          </div>
-          <div className="rounded-xl border border-desktop-border bg-white/80 px-3 py-2 dark:bg-white/6">
-            <span className="text-desktop-text-secondary">Blockers:</span>
-            <span className="ml-1 font-semibold text-desktop-text-primary">{selectedReport ? blockers.length : "N/A"}</span>
-            <span className="text-desktop-text-secondary"> · Failed:</span>
-            <span className="ml-1 font-semibold text-desktop-text-primary">{selectedReport ? failedCriteria.length : "N/A"}</span>
-            <span className="text-desktop-text-secondary"> · {heroModel.confidenceSummary}</span>
-          </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={onRunSelectedProfile}
             disabled={!hasContext || selectedState.state === "loading"}
-            className="rounded-full bg-desktop-accent px-4 py-2 text-sm font-semibold text-desktop-text-on-accent disabled:opacity-60"
+            className="h-7 rounded-full bg-desktop-accent px-3 text-[12px] font-semibold leading-none text-desktop-text-on-accent disabled:opacity-60"
           >
             {primaryActionLabel}
           </button>
@@ -300,17 +291,13 @@ export function FitnessAnalysisPanel({
             type="button"
             onClick={() => void syncProfiles()}
             disabled={!hasContext}
-            className="rounded-full border border-desktop-border px-4 py-2 text-sm font-semibold text-desktop-text-primary hover:bg-desktop-bg-primary/80 disabled:opacity-60"
+            className="h-7 rounded-full border border-desktop-border px-3 text-[12px] font-semibold leading-none text-desktop-text-primary hover:bg-desktop-bg-primary/80 disabled:opacity-60"
           >
             Refresh latest report
           </button>
-        </div>
-
-        <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-desktop-bg-secondary">
-          <div
-            className={`h-full rounded-full ${readinessBarTone(selectedReport?.currentLevelReadiness ?? 0)}`}
-            style={{ width: `${clampPercent(selectedReport?.currentLevelReadiness ?? 0)}%` }}
-          />
+          <span className="ml-auto inline-flex items-center rounded-full border border-desktop-border px-2 py-0.5 text-[11px] text-desktop-text-secondary">
+            Fit {reportReadiness}
+          </span>
         </div>
 
         {globalError ? (

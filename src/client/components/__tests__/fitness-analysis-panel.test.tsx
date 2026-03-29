@@ -128,12 +128,11 @@ describe("FitnessAnalysisPanel", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Generic report")).toBeTruthy();
+      expect(screen.getByText(/Generic report/)).toBeTruthy();
     });
 
-    expect(screen.getByText("Repository")).toBeTruthy();
     expect(screen.getByText("routa-js")).toBeTruthy();
-    expect(screen.getByText(/Blockers:/i)).toBeTruthy();
+    expect(screen.getByText(/Blockers/i)).toBeTruthy();
     expect(screen.getByTestId("fitness-analysis-content").textContent).toBe("overview");
     expect(screen.queryByText("Report Controls")).toBeNull();
     expect(screen.queryByText("Mode")).toBeNull();
