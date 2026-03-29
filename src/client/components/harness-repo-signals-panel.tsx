@@ -1,0 +1,372 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { HarnessUnsupportedState } from "@/client/components/harness-support-state";
+
+type ScriptCategory = "build" | "dev" | "bundle" | "unit" | "e2e" | "quality" | "coverage";
+type HarnessSignalsMode = "build" | "test";
+
+type ScriptSignal = {
+  name: string;
+  command: string;
+  category: ScriptCategory;
+};
+
+type FileSignal = {
+  relativePath: string;
+  exists: boolean;
+};
+
+type RepoSignalsResponse = {
+  generatedAt: string;
+  repoRoot: string;
+  packageManager: string | null;
+  lockfiles: string[];
+  build: {
+    scripts: ScriptSignal[];
+    manifests: FileSignal[];
+    configFiles: FileSignal[];
+    outputDirs: FileSignal[];
+    platformTargets: string[];
+  };
+  test: {
+    scripts: ScriptSignal[];
+    configFiles: FileSignal[];
+    artifactDirs: FileSignal[];
+    evidenceFiles: FileSignal[];
+  };
+  warnings: string[];
+};
+
+type HarnessRepoSignalsPanelProps = {
+  workspaceId: string;
+  codebaseId?: string;
+  repoPath?: string;
+  repoLabel: string;
+  mode: HarnessSignalsMode;
+  unsupportedMessage?: string | null;
+  variant?: "full" | "compact";
+};
+
+type QueryState = {
+  loading: boolean;
+  error: string | null;
+  data: RepoSignalsResponse | null;
+};
+
+function categoryTone(mode: HarnessSignalsMode) {
+  return mode === "build"
+    ? {
+      panel: "border-sky-200 bg-sky-50/45",
+      card: "border-sky-200 bg-white/80",
+      badge: "border-sky-200 bg-white/90 text-sky-800",
+      title: "text-sky-800",
+    }
+    : {
+      panel: "border-emerald-200 bg-emerald-50/40",
+      card: "border-emerald-200 bg-white/80",
+      badge: "border-emerald-200 bg-white/90 text-emerald-800",
+      title: "text-emerald-800",
+    };
+}
+
+function groupScripts(scripts: ScriptSignal[]) {
+  const order: ScriptCategory[] = ["dev", "build", "bundle", "unit", "e2e", "quality", "coverage"];
+  const labels: Record<ScriptCategory, string> = {
+    dev: "Dev flow",
+    build: "Build flow",
+    bundle: "Bundle / release",
+    unit: "Unit / component",
+    e2e: "Browser / integration",
+    quality: "Contract / quality",
+    coverage: "Coverage",
+  };
+
+  return order
+    .map((category) => ({
+      category,
+      label: labels[category],
+      scripts: scripts.filter((script) => script.category === category),
+    }))
+    .filter((entry) => entry.scripts.length > 0);
+}
+
+function summarizeItems(items: string[], limit = 4) {
+  if (items.length <= limit) {
+    return items;
+  }
+  return [...items.slice(0, limit), `+${items.length - limit} more`];
+}
+
+function summarizeFileSignals(items: FileSignal[], limit = 5) {
+  return summarizeItems(items.filter((item) => item.exists).map((item) => item.relativePath), limit);
+}
+
+function summarizeScripts(items: ScriptSignal[], limit = 2) {
+  return summarizeItems(items.map((item) => item.name), limit);
+}
+
+export function HarnessRepoSignalsPanel({
+  workspaceId,
+  codebaseId,
+  repoPath,
+  repoLabel,
+  mode,
+  unsupportedMessage,
+  variant = "full",
+}: HarnessRepoSignalsPanelProps) {
+  const hasContext = Boolean(workspaceId && repoPath);
+  const [state, setState] = useState<QueryState>({
+    loading: false,
+    error: null,
+    data: null,
+  });
+
+  useEffect(() => {
+    if (!hasContext) {
+      setState({ loading: false, error: null, data: null });
+      return;
+    }
+
+    let cancelled = false;
+    const query = new URLSearchParams();
+    query.set("workspaceId", workspaceId);
+    if (codebaseId) {
+      query.set("codebaseId", codebaseId);
+    }
+    if (repoPath) {
+      query.set("repoPath", repoPath);
+    }
+
+    const fetchSignals = async () => {
+      setState((current) => ({ ...current, loading: true, error: null }));
+      try {
+        const response = await fetch(`/api/harness/repo-signals?${query.toString()}`);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(typeof payload?.details === "string" ? payload.details : "Failed to load repository signals");
+        }
+        if (!cancelled) {
+          setState({
+            loading: false,
+            error: null,
+            data: payload as RepoSignalsResponse,
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setState({
+            loading: false,
+            error: error instanceof Error ? error.message : String(error),
+            data: null,
+          });
+        }
+      }
+    };
+
+    void fetchSignals();
+    return () => {
+      cancelled = true;
+    };
+  }, [codebaseId, hasContext, repoPath, workspaceId]);
+
+  const compactMode = variant === "compact";
+  const tone = categoryTone(mode);
+  const focus = state.data?.[mode];
+  const scriptGroups = useMemo(() => groupScripts(focus?.scripts ?? []), [focus?.scripts]);
+  const title = mode === "build" ? "构建反馈环" : "测试反馈环";
+  const summaryText = mode === "build"
+    ? "把 package manager、workspace manifests 和发布目标放在一个视图里。"
+    : "把测试脚本、配置文件和 coverage / reports 证据放在一个视图里。";
+  const summaryRows = useMemo(() => {
+    if (!state.data || !focus) {
+      return [];
+    }
+
+    if (mode === "build") {
+      return [
+        {
+          label: "Repository",
+          values: summarizeItems(state.data.lockfiles, 3),
+        },
+        {
+          label: "Targets",
+          values: summarizeItems(state.data.build.platformTargets, 4),
+        },
+        {
+          label: "Evidence",
+          values: summarizeFileSignals([...state.data.build.manifests, ...state.data.build.configFiles], 6),
+        },
+        {
+          label: "Outputs",
+          values: summarizeFileSignals(state.data.build.outputDirs, 4),
+        },
+      ];
+    }
+
+    return [
+      {
+        label: "Repository",
+        values: summarizeItems(state.data.lockfiles, 3),
+      },
+      {
+        label: "Config",
+        values: summarizeFileSignals(state.data.test.configFiles, 5),
+      },
+      {
+        label: "Evidence",
+        values: summarizeFileSignals(state.data.test.evidenceFiles, 5),
+      },
+      {
+        label: "Artifacts",
+        values: summarizeFileSignals(state.data.test.artifactDirs, 4),
+      },
+    ];
+  }, [focus, mode, state.data]);
+
+  return (
+    <section className={`rounded-2xl border p-4 shadow-sm ${compactMode ? tone.panel : tone.panel}`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className={`text-[10px] font-semibold uppercase tracking-[0.16em] ${tone.title}`}>{title}</div>
+          <div className="mt-1 text-[11px] text-desktop-text-secondary">{summaryText}</div>
+        </div>
+        <div className="flex flex-wrap gap-2 text-[10px]">
+          <span className={`rounded-full border px-2.5 py-1 ${tone.badge}`}>{repoLabel}</span>
+          {state.data?.packageManager ? (
+            <span className={`rounded-full border px-2.5 py-1 ${tone.badge}`}>{state.data.packageManager}</span>
+          ) : null}
+          <span className={`rounded-full border px-2.5 py-1 ${tone.badge}`}>{focus?.scripts.length ?? 0} scripts</span>
+          <span className={`rounded-full border px-2.5 py-1 ${tone.badge}`}>{scriptGroups.length} groups</span>
+        </div>
+      </div>
+
+      {state.loading ? (
+        <div className="mt-4 rounded-xl border border-desktop-border bg-white/85 px-4 py-5 text-[11px] text-desktop-text-secondary">
+          Loading repository signals...
+        </div>
+      ) : null}
+
+      {unsupportedMessage ? <HarnessUnsupportedState /> : null}
+
+      {state.error && !unsupportedMessage ? (
+        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-5 text-[11px] text-red-700">
+          {state.error}
+        </div>
+      ) : null}
+
+      {!state.loading && !state.error && !unsupportedMessage && state.data ? (
+        <div className="mt-4 space-y-4">
+          <div className={`overflow-hidden rounded-2xl border ${tone.card}`}>
+            <div className="border-b border-desktop-border/70 px-4 py-3">
+              <div className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${tone.title}`}>Overview</div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse text-left">
+                <tbody>
+                  {summaryRows.map((row) => (
+                    <tr key={row.label} className="border-t border-desktop-border/60 first:border-t-0">
+                      <th className="w-28 px-4 py-3 align-top text-[10px] font-semibold uppercase tracking-[0.12em] text-desktop-text-secondary">
+                        {row.label}
+                      </th>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-2">
+                          {row.values.length > 0 ? row.values.map((value) => (
+                            <span key={`${row.label}-${value}`} className={`rounded-full border px-2.5 py-1 text-[10px] ${tone.badge}`}>
+                              {value}
+                            </span>
+                          )) : (
+                            <span className="text-[11px] text-desktop-text-secondary">No signal</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className={`overflow-hidden rounded-2xl border ${tone.card}`}>
+            <div className="border-b border-desktop-border/70 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${tone.title}`}>Entrypoints</div>
+                  <div className="mt-1 text-[11px] text-desktop-text-secondary">
+                    {mode === "build"
+                      ? "每组只显示一个主入口，剩余变体收纳为摘要。"
+                      : "每组只显示一个主入口，剩余 unit / e2e / quality / coverage 变体收纳为摘要。"}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {scriptGroups.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full border-collapse text-left">
+                  <thead className="bg-white/60">
+                    <tr className="text-[10px] uppercase tracking-[0.12em] text-desktop-text-secondary">
+                      <th className="px-4 py-2.5 font-semibold">Group</th>
+                      <th className="px-4 py-2.5 font-semibold">Primary</th>
+                      <th className="px-4 py-2.5 font-semibold">Command</th>
+                      <th className="px-4 py-2.5 font-semibold">Variants</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scriptGroups.map((group) => {
+                      const primary = group.scripts[0];
+                      const variants = group.scripts.slice(1);
+                      return (
+                        <tr key={group.category} className="border-t border-desktop-border/60 first:border-t-0">
+                          <td className="px-4 py-3 align-top">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-semibold text-desktop-text-primary">{group.label}</span>
+                              <span className={`rounded-full border px-2 py-0.5 text-[10px] ${tone.badge}`}>{group.scripts.length}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 align-top text-[11px] font-semibold text-desktop-text-primary">
+                            {primary?.name ?? "—"}
+                          </td>
+                          <td className="px-4 py-3 align-top">
+                            <div className="max-w-[460px] break-all font-mono text-[10px] leading-5 text-desktop-text-secondary">
+                              {primary?.command ?? "—"}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 align-top">
+                            <div className="flex flex-wrap gap-2">
+                              {variants.length > 0 ? summarizeScripts(variants, 3).map((value) => (
+                                <span key={`${group.category}-${value}`} className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
+                                  {value}
+                                </span>
+                              )) : (
+                                <span className="text-[11px] text-desktop-text-secondary">No variants</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="px-4 py-5 text-[11px] text-desktop-text-secondary">
+                No matching scripts were detected for this feedback loop.
+              </div>
+            )}
+          </div>
+
+          {state.data.warnings.length > 0 ? (
+            <div className="space-y-2">
+              {state.data.warnings.map((warning) => (
+                <div key={warning} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-[11px] text-amber-800">
+                  {warning}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}

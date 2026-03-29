@@ -14,6 +14,7 @@ import { HarnessAgentInstructionsPanel } from "@/client/components/harness-agent
 import { HarnessGovernanceLoopGraph } from "@/client/components/harness-governance-loop-graph";
 import { HarnessGitHubActionsFlowPanel } from "@/client/components/harness-github-actions-flow-panel";
 import { HarnessHookRuntimePanel } from "@/client/components/harness-hook-runtime-panel";
+import { HarnessRepoSignalsPanel } from "@/client/components/harness-repo-signals-panel";
 import { HarnessReviewTriggersPanel } from "@/client/components/harness-review-triggers-panel";
 import { HarnessUnsupportedState, getHarnessUnsupportedRepoMessage } from "@/client/components/harness-support-state";
 import { useHarnessSettingsData } from "@/client/hooks/use-harness-settings-data";
@@ -26,17 +27,6 @@ function extractMarkdownCodeBlocks(source: string) {
     language: match[1] || "text",
     code: match[2]?.trim() ?? "",
   })).filter((block) => block.code.length > 0);
-}
-
-function HarnessLoopPlaceholder({ label }: { label: string }) {
-  return (
-    <section className="rounded-2xl border border-desktop-border bg-desktop-bg-primary/60 p-4">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">{label}</div>
-      <div className="mt-3 rounded-xl border border-dashed border-desktop-border bg-desktop-bg-secondary/60 px-4 py-8 text-center">
-        <div className="text-sm font-semibold text-desktop-text-primary">TOBE Continue</div>
-      </div>
-    </section>
-  );
 }
 
 export default function HarnessSettingsPage() {
@@ -159,7 +149,17 @@ export default function HarnessSettingsPage() {
           />
         );
       case "build":
-        return <HarnessLoopPlaceholder label="构建反馈环" />;
+        return (
+          <HarnessRepoSignalsPanel
+            workspaceId={workspaceId}
+            codebaseId={activeRepoCodebaseId}
+            repoPath={activeRepoPath}
+            repoLabel={selectedRepoLabel}
+            mode="build"
+            unsupportedMessage={unsupportedRepoMessage}
+            variant="compact"
+          />
+        );
       case "lint":
         return (
           <HarnessExecutionPlanFlow
@@ -174,7 +174,17 @@ export default function HarnessSettingsPage() {
           />
         );
       case "test":
-        return <HarnessLoopPlaceholder label="测试反馈环" />;
+        return (
+          <HarnessRepoSignalsPanel
+            workspaceId={workspaceId}
+            codebaseId={activeRepoCodebaseId}
+            repoPath={activeRepoPath}
+            repoLabel={selectedRepoLabel}
+            mode="test"
+            unsupportedMessage={unsupportedRepoMessage}
+            variant="compact"
+          />
+        );
       case "review":
         return (
           <HarnessReviewTriggersPanel
