@@ -6,7 +6,6 @@ import { desktopAwareFetch } from "@/client/utils/diagnostics";
 
 import { FitnessAnalysisContent } from "./fitness-analysis-content";
 import {
-  buildFluencyCommandArgs,
   FLUENCY_MODES,
   PROFILE_DEFS,
   PROFILE_ORDER,
@@ -155,7 +154,6 @@ export function FitnessAnalysisPanel({
             source: entry.source,
             durationMs: entry.durationMs,
             report: entry.report,
-            console: entry.console ?? next[profile].console,
             updatedAt: entry.report.generatedAt,
           };
           continue;
@@ -165,7 +163,6 @@ export function FitnessAnalysisPanel({
           next[profile] = {
             state: "empty",
             source: entry.source,
-            console: entry.console ?? next[profile].console,
             error: entry.error ?? "暂无快照",
           };
           continue;
@@ -175,7 +172,6 @@ export function FitnessAnalysisPanel({
           state: "error",
           source: entry.source,
           durationMs: entry.durationMs,
-          console: entry.console ?? next[profile].console,
           error: entry.error ?? "分析失败",
         };
       }
@@ -252,19 +248,11 @@ export function FitnessAnalysisPanel({
     setProfiles((current) => {
       const next = { ...current };
       for (const profile of targetProfiles) {
-        const pendingArgs = buildFluencyCommandArgs(profile, runMode, compareLast, noSave);
         next[profile] = {
           ...next[profile],
           state: "loading",
           error: undefined,
           updatedAt: new Date().toLocaleString(),
-          console: {
-            command: "cargo",
-            args: pendingArgs,
-            stdout: "",
-            stderr: "",
-            data: `$ cargo ${pendingArgs.join(" ")}\n\n[running fluency analysis...]\n[note] This command does not stream step-by-step logs. On success it emits one final JSON report to stdout.\n`,
-          },
         };
       }
       return next;
@@ -325,7 +313,7 @@ export function FitnessAnalysisPanel({
         return next;
       });
     }
-  }, [applyProfiles, compareLast, contextPayload, hasContext, noSave, runMode]);
+  }, [applyProfiles, compareLast, contextPayload, hasContext, noSave]);
 
   const onRunSelectedProfile = useCallback(() => {
     setViewMode("overview");
@@ -350,8 +338,7 @@ export function FitnessAnalysisPanel({
     return clampPercent(selectedReport.currentLevelReadiness) - clampPercent(peerReport.currentLevelReadiness);
   }, [peerReport, selectedReport]);
 
-  const primaryViews = VIEW_MODES.filter((mode) => mode.id !== "console" && mode.id !== "raw");
-  const advancedViews = VIEW_MODES.filter((mode) => mode.id === "console" || mode.id === "raw");
+  const primaryViews = VIEW_MODES;
   const heroModel = buildHeroModel(selectedReport, selectedProfile, selectedState.state);
   const primaryActionLabel = buildPrimaryActionLabel(selectedReport, selectedState.state);
   const activeView = VIEW_MODES.find((mode) => mode.id === viewMode);
@@ -494,23 +481,6 @@ export function FitnessAnalysisPanel({
               />
             ))}
           </div>
-
-          <div className="mt-4 border-t border-desktop-border pt-4">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-desktop-text-secondary">
-              Advanced Debug
-            </div>
-            <div className="mt-2 space-y-2">
-              {advancedViews.map((mode) => (
-                <ViewButton
-                  key={mode.id}
-                  active={viewMode === mode.id}
-                  label={mode.label}
-                  description={mode.description}
-                  onClick={() => setViewMode(mode.id)}
-                />
-              ))}
-            </div>
-          </div>
         </SurfaceCard>
       </aside>
 
@@ -590,11 +560,6 @@ export function FitnessAnalysisPanel({
                 {activeView?.label ?? "总览"}
               </div>
             </div>
-            {viewMode === "console" || viewMode === "raw" ? (
-              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-700">
-                Advanced Debug
-              </span>
-            ) : null}
           </div>
 
           <div className="mt-4">

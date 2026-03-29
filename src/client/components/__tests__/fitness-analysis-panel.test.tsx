@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { desktopAwareFetch } = vi.hoisted(() => ({
@@ -118,7 +118,7 @@ describe("FitnessAnalysisPanel", () => {
     });
   });
 
-  it("surfaces a summary-first workflow and moves debug views into an advanced section", async () => {
+  it("surfaces a summary-first workflow without advanced debug views", async () => {
     render(
       <FitnessAnalysisPanel
         workspaceId="default"
@@ -134,11 +134,7 @@ describe("FitnessAnalysisPanel", () => {
     expect(screen.getByText("Repository")).toBeTruthy();
     expect(screen.getAllByText("Generic").length).toBeGreaterThan(0);
     expect(screen.getByText(/Blockers:/i)).toBeTruthy();
-    expect(screen.getByText("Advanced Debug")).toBeTruthy();
     expect(screen.getByTestId("fitness-analysis-content").textContent).toBe("overview");
-
-    fireEvent.click(screen.getByRole("button", { name: /原始 JSON/i }));
-
-    expect(screen.getByTestId("fitness-analysis-content").textContent).toBe("raw");
+    expect(screen.queryByText("Advanced Debug")).toBeNull();
   });
 });

@@ -2,7 +2,7 @@
 
 export type FitnessProfile = "generic" | "agent_orchestrator";
 export type FluencyRunMode = "deterministic" | "hybrid" | "ai";
-export type ViewMode = "overview" | "capabilities" | "recommendations" | "changes" | "console" | "raw";
+export type ViewMode = "overview" | "capabilities" | "recommendations" | "changes";
 
 export type FitnessProfileState = "idle" | "loading" | "ready" | "empty" | "error";
 
@@ -25,17 +25,6 @@ export type CriterionResult = {
   whyItMatters: string;
   recommendedAction: string;
   evidenceHint: string;
-};
-
-export type FitnessConsole = {
-  command: string;
-  args: string[];
-  data: string;
-  stdout: string;
-  stderr: string;
-  reportText?: string;
-  exitCode?: number | null;
-  signal?: string | null;
 };
 
 export type CellResult = {
@@ -144,7 +133,6 @@ export type ApiProfileEntry = {
   status: "ok" | "missing" | "error";
   source: "analysis" | "snapshot";
   report?: FitnessReport;
-  console?: FitnessConsole;
   error?: string;
   durationMs?: number;
 };
@@ -160,7 +148,6 @@ export type ProfilePanelState = {
   source?: ApiProfileEntry["source"];
   durationMs?: number;
   report?: FitnessReport;
-  console?: FitnessConsole;
   error?: string;
   updatedAt?: string;
 };
@@ -210,8 +197,6 @@ export const VIEW_MODES: Array<{ id: ViewMode; label: string; description: strin
   { id: "capabilities", label: "能力项", description: "按维度拆开每个 level cell 和 criterion 明细" },
   { id: "recommendations", label: "建议动作", description: "查看最值得先做的动作和证据线索" },
   { id: "changes", label: "对比变化", description: "查看这次结果和上一次快照之间的变化" },
-  { id: "console", label: "Console", description: "检查本次执行的命令行输出和 JSON transcript" },
-  { id: "raw", label: "原始 JSON", description: "直接查看后端返回结构，适合排查序列化问题" },
 ];
 
 export function normalizeApiResponse(payload: unknown): ApiProfileEntry[] {
@@ -242,7 +227,6 @@ export function normalizeApiResponse(payload: unknown): ApiProfileEntry[] {
       status: value.status,
       source: value.source,
       report: value.report as FitnessReport | undefined,
-      console: value.console as FitnessConsole | undefined,
       error: typeof value.error === "string" ? value.error : undefined,
       durationMs: typeof value.durationMs === "number" && Number.isFinite(value.durationMs) ? value.durationMs : undefined,
     });
@@ -267,38 +251,6 @@ export function buildAnalysisPayload(context: FitnessAnalysisContext, options?: 
     ...payload,
     ...(options?.mode ? { mode: options.mode } : {}),
   };
-}
-
-export function buildFluencyCommandArgs(
-  profile: FitnessProfile,
-  mode: FluencyRunMode,
-  compareLast: boolean,
-  noSave: boolean,
-) {
-  const args = [
-    "run",
-    "-p",
-    "routa-cli",
-    "--",
-    "fitness",
-    "fluency",
-    "--format",
-    "json",
-    "--profile",
-    profile,
-  ];
-
-  if (mode !== "deterministic") {
-    args.push("--mode", mode);
-  }
-  if (compareLast) {
-    args.push("--compare-last");
-  }
-  if (noSave) {
-    args.push("--no-save");
-  }
-
-  return args;
 }
 
 export function toMessage(error: unknown): string {

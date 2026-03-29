@@ -95,17 +95,6 @@ function parseInstructionSections(source: string) {
   };
 }
 
-function stripMarkdownPreview(source: string) {
-  return source
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/[*_>~-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 export function HarnessAgentInstructionsPanel({
   workspaceId,
   codebaseId,
@@ -267,12 +256,10 @@ export function HarnessAgentInstructionsPanel({
   );
 
   const compactMode = variant === "compact";
-  const sectionPreview = useMemo(() => {
-    const fallback = resolvedInstructionsState.data?.source ?? "";
-    const previewSource = selectedSection?.content ?? fallback;
-    return stripMarkdownPreview(previewSource).slice(0, 220);
-  }, [resolvedInstructionsState.data?.source, selectedSection?.content]);
-  const headingCount = parsedDocument.sections.length;
+  const contentGridClass = compactMode
+    ? "grid-cols-1 xl:grid-cols-[minmax(220px,0.82fr)_minmax(0,1.18fr)]"
+    : "xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]";
+  const contentPanelHeightClass = compactMode ? "h-[320px]" : "h-[380px]";
 
   return (
     <section className={variant === "compact"
@@ -319,37 +306,9 @@ export function HarnessAgentInstructionsPanel({
       ) : null}
 
       {!resolvedInstructionsState.loading && !resolvedInstructionsState.error && !unsupportedMessage && resolvedInstructionsState.data ? (
-        <div className="mt-4 space-y-4">
-          {compactMode ? (
-            <div className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-4 py-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">Selected section</div>
-                  <div className="mt-1 text-sm font-semibold text-desktop-text-primary">
-                    {selectedSection?.title ?? resolvedInstructionsState.data.fileName}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2 text-[10px]">
-                  {selectedSection ? (
-                    <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-desktop-text-secondary">
-                      h{selectedSection.level}
-                    </span>
-                  ) : null}
-                  <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-desktop-text-secondary">
-                    {headingCount} headings
-                  </span>
-                </div>
-              </div>
-              {sectionPreview ? (
-                <div className="mt-2 text-[11px] leading-5 text-desktop-text-secondary">
-                  {sectionPreview}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          <div className={`grid gap-4 ${compactMode ? "grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)]" : "xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"}`}>
-          <div className={`flex ${compactMode ? "h-[184px]" : "h-[380px]"} min-h-0 flex-col`}>
+        <div className="mt-4">
+          <div className={`grid gap-4 ${contentGridClass}`}>
+          <div className={`flex ${contentPanelHeightClass} min-h-0 flex-col`}>
             <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-2 py-2 harness-instructions-tree">
               <UncontrolledTreeEnvironment
                 dataProvider={treeDataProvider}
@@ -390,7 +349,7 @@ export function HarnessAgentInstructionsPanel({
             </div>
           </div>
 
-          <div className={`flex ${compactMode ? "h-[184px]" : "h-[380px]"} min-h-0 flex-col`}>
+          <div className={`flex ${contentPanelHeightClass} min-h-0 flex-col`}>
             <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-4 py-3">
               <MarkdownViewer
                 content={selectedSection?.content ?? resolvedInstructionsState.data.source}

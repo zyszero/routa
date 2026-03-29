@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { TerminalBubble } from "@/client/components/terminal/terminal-bubble";
+import { useMemo } from "react";
 
 import {
   clampPercent,
@@ -550,111 +549,6 @@ function ChangesView({ report }: { report: FitnessReport }) {
   );
 }
 
-function RawView({ report }: { report: FitnessReport }) {
-  const [copied, setCopied] = useState(false);
-  const jsonText = JSON.stringify(report, null, 2);
-
-  return (
-    <div className="space-y-2">
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={async () => {
-            if (typeof window === "undefined") {
-              return;
-            }
-            await navigator.clipboard.writeText(jsonText);
-            setCopied(true);
-            window.setTimeout(() => {
-              setCopied(false);
-            }, 1200);
-          }}
-          className="rounded-full border border-desktop-border px-3 py-1.5 text-xs font-semibold text-desktop-text-secondary hover:bg-desktop-bg-primary/70"
-        >
-          {copied ? "已复制" : "复制 JSON"}
-        </button>
-      </div>
-      <pre className="overflow-x-auto rounded-2xl border border-desktop-border bg-slate-950 p-4 text-xs leading-5 text-slate-100">
-        <code>{jsonText}</code>
-      </pre>
-    </div>
-  );
-}
-
-function ConsoleView({ profileState }: { profileState: ProfilePanelState }) {
-  const consoleState = profileState.console;
-  const [copied, setCopied] = useState(false);
-
-  if (!consoleState?.data) {
-    return (
-      <div className="rounded-2xl border border-dashed border-desktop-border px-4 py-6 text-sm text-desktop-text-secondary">
-        当前没有 console transcript。先运行一次 profile。
-        这条 fluency CLI 不会持续输出内部进度；成功时通常只会在结束后一次性输出最终 JSON 报告和 Cargo 的 stderr。
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="rounded-2xl border border-desktop-border bg-desktop-bg-secondary/60 p-4 text-[11px] text-desktop-text-secondary">
-        <div className="flex flex-wrap gap-x-4 gap-y-2">
-          <span>
-            Command:
-            <span className="ml-1 font-mono text-desktop-text-primary">{consoleState.command}</span>
-          </span>
-          <span>
-            Exit:
-            <span className="ml-1 font-semibold text-desktop-text-primary">
-              {profileState.state === "loading"
-                ? "running"
-                : consoleState.signal ? `signal ${consoleState.signal}` : consoleState.exitCode ?? "unknown"}
-            </span>
-          </span>
-        </div>
-      </div>
-      <TerminalBubble
-        terminalId={`fluency-console-${profileState.updatedAt ?? "latest"}`}
-        command={consoleState.command}
-        args={consoleState.args}
-        data={consoleState.data}
-        exited={profileState.state !== "loading"}
-        exitCode={consoleState.signal ? 130 : typeof consoleState.exitCode === "number" ? consoleState.exitCode : undefined}
-      />
-      {consoleState.reportText ? (
-        <div className="rounded-2xl border border-desktop-border bg-desktop-bg-secondary/60 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">JSON output</div>
-              <div className="mt-1 text-[11px] text-desktop-text-secondary">
-                这是 fluency CLI 最终输出到 stdout 的原始 JSON。
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={async () => {
-                if (typeof window === "undefined") {
-                  return;
-                }
-                await navigator.clipboard.writeText(consoleState.reportText ?? "");
-                setCopied(true);
-                window.setTimeout(() => {
-                  setCopied(false);
-                }, 1200);
-              }}
-              className="rounded-full border border-desktop-border px-3 py-1.5 text-xs font-semibold text-desktop-text-secondary hover:bg-desktop-bg-primary/70"
-            >
-              {copied ? "已复制" : "复制 JSON"}
-            </button>
-          </div>
-          <pre className="mt-3 overflow-x-auto rounded-2xl border border-desktop-border bg-slate-950 p-4 text-xs leading-5 text-slate-100">
-            <code>{consoleState.reportText}</code>
-          </pre>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 export function FitnessAnalysisContent({
   selectedProfile,
   viewMode,
@@ -662,10 +556,6 @@ export function FitnessAnalysisContent({
   report,
   peerReport,
 }: FitnessAnalysisContentProps) {
-  if (viewMode === "console") {
-    return <ConsoleView profileState={profileState} />;
-  }
-
   if (!report) {
     return (
       <div className="rounded-2xl border border-dashed border-desktop-border px-4 py-8 text-sm text-desktop-text-secondary">
@@ -686,10 +576,6 @@ export function FitnessAnalysisContent({
 
   if (viewMode === "changes") {
     return <ChangesView report={report} />;
-  }
-
-  if (viewMode === "raw") {
-    return <RawView report={report} />;
   }
 
   return <OverviewView report={report} peerReport={peerReport} profileState={profileState} />;
