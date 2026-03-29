@@ -82,6 +82,8 @@ type LoopNodeData = {
   tone: LoopTone;
   note?: string;
   active?: boolean;
+  selected?: boolean;
+  onSelect?: () => void;
 };
 
 const PHASE_LABELS: Record<HookPhase, string> = {
@@ -133,6 +135,9 @@ function LoopNodeView({ data }: NodeProps<Node<LoopNodeData>>) {
     commit: "提交反馈环",
     external: "外部反馈环",
   };
+  const selectedClasses = data.selected
+    ? "ring-2 ring-desktop-accent/70 ring-offset-2 ring-offset-white"
+    : "";
 
   return (
     <div className="relative">
@@ -144,9 +149,18 @@ function LoopNodeView({ data }: NodeProps<Node<LoopNodeData>>) {
       <Handle id="source-right" type="source" position={Position.Right} className="!h-2.5 !w-2.5 !border-0 !bg-desktop-border" />
       <Handle id="source-bottom" type="source" position={Position.Bottom} className="!h-2.5 !w-2.5 !border-0 !bg-desktop-border" />
       <Handle id="source-left" type="source" position={Position.Left} className="!h-2.5 !w-2.5 !border-0 !bg-desktop-border" />
-      <div className={`flex min-h-[96px] w-[168px] flex-col justify-between rounded-[24px] border px-4 py-3 shadow-sm ${
-        data.active ? `bg-desktop-bg-primary/96 ${tone.border} ${tone.shadow}` : "border-slate-200 bg-slate-100/90 shadow-black/0"
-      }`}>
+      <button
+        type="button"
+        aria-pressed={data.selected}
+        aria-label={`${layerLabel[data.layer]} ${data.title}${data.note ? `，${data.note}` : ""}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          data.onSelect?.();
+        }}
+        className={`flex min-h-[96px] w-[168px] flex-col justify-between rounded-[24px] border px-4 py-3 text-left shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-desktop-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-white ${
+          data.active ? `bg-desktop-bg-primary/96 ${tone.border} ${tone.shadow}` : "border-slate-200 bg-slate-100/90 shadow-black/0"
+        } ${selectedClasses}`}
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="text-[10px] font-semibold tracking-[0.08em] text-desktop-text-secondary">{layerLabel[data.layer]}</div>
@@ -161,7 +175,7 @@ function LoopNodeView({ data }: NodeProps<Node<LoopNodeData>>) {
             {data.note}
           </div>
         ) : null}
-      </div>
+      </button>
     </div>
   );
 }
@@ -256,6 +270,8 @@ function buildGraph(args: {
   workflowSummary: WorkflowSummary | null;
   dimensionCount: number;
   metricCount: number;
+  selectedNodeId: string;
+  onSelectNode: (nodeId: string) => void;
 }) {
   const {
     hookSummary,
@@ -263,6 +279,8 @@ function buildGraph(args: {
     workflowSummary,
     dimensionCount,
     metricCount,
+    selectedNodeId,
+    onSelectNode,
   } = args;
 
   const nodes: Node<LoopNodeData>[] = [
@@ -272,6 +290,10 @@ function buildGraph(args: {
       tone: "neutral",
       note: "需求澄清 / 任务规划",
       active: false,
+      selected: selectedNodeId === "thinking",
+      onSelect: () => {
+        onSelectNode("thinking");
+      },
     }),
     buildNode("coding", 330, 86, {
       layer: "internal",
@@ -281,6 +303,10 @@ function buildGraph(args: {
         ? `受 ${instructionSummary.fileName} 规范约束`
         : "受开发规范约束",
       active: Boolean(instructionSummary),
+      selected: selectedNodeId === "coding",
+      onSelect: () => {
+        onSelectNode("coding");
+      },
     }),
     buildNode("build", 532, 86, {
       layer: "internal",
@@ -288,6 +314,10 @@ function buildGraph(args: {
       tone: "sky",
       note: "本地集成 / 运行准备",
       active: true,
+      selected: selectedNodeId === "build",
+      onSelect: () => {
+        onSelectNode("build");
+      },
     }),
     buildNode("test", 734, 86, {
       layer: "internal",
@@ -295,6 +325,10 @@ function buildGraph(args: {
       tone: "emerald",
       note: "本地验证 / 回归检查",
       active: dimensionCount > 0 || metricCount > 0,
+      selected: selectedNodeId === "test",
+      onSelect: () => {
+        onSelectNode("test");
+      },
     }),
     buildNode("lint", 128, 248, {
       layer: "commit",
@@ -302,6 +336,10 @@ function buildGraph(args: {
       tone: "emerald",
       note: "静态质量检查",
       active: dimensionCount > 0,
+      selected: selectedNodeId === "lint",
+      onSelect: () => {
+        onSelectNode("lint");
+      },
     }),
     buildNode("precommit", 330, 248, {
       layer: "commit",
@@ -311,6 +349,10 @@ function buildGraph(args: {
         ? `${hookSummary.hookCount} hooks / ${hookSummary.phaseCount} phases`
         : "本地门禁执行",
       active: Boolean(hookSummary),
+      selected: selectedNodeId === "precommit",
+      onSelect: () => {
+        onSelectNode("precommit");
+      },
     }),
     buildNode("review", 532, 248, {
       layer: "commit",
@@ -318,6 +360,10 @@ function buildGraph(args: {
       tone: "emerald",
       note: "规则校验 + review",
       active: dimensionCount > 0,
+      selected: selectedNodeId === "review",
+      onSelect: () => {
+        onSelectNode("review");
+      },
     }),
     buildNode("commit", 734, 248, {
       layer: "commit",
@@ -325,6 +371,10 @@ function buildGraph(args: {
       tone: "neutral",
       note: "进入远程流水线",
       active: false,
+      selected: selectedNodeId === "commit",
+      onSelect: () => {
+        onSelectNode("commit");
+      },
     }),
     buildNode("metrics", 27, 416, {
       layer: "external",
@@ -332,6 +382,10 @@ function buildGraph(args: {
       tone: "emerald",
       note: "Evidence / Issues",
       active: false,
+      selected: selectedNodeId === "metrics",
+      onSelect: () => {
+        onSelectNode("metrics");
+      },
     }),
     buildNode("production", 229, 416, {
       layer: "external",
@@ -339,6 +393,10 @@ function buildGraph(args: {
       tone: "amber",
       note: "真实流量运行",
       active: false,
+      selected: selectedNodeId === "production",
+      onSelect: () => {
+        onSelectNode("production");
+      },
     }),
     buildNode("canary", 431, 416, {
       layer: "external",
@@ -346,6 +404,10 @@ function buildGraph(args: {
       tone: "amber",
       note: "小流量验证 / 渐进放量",
       active: false,
+      selected: selectedNodeId === "canary",
+      onSelect: () => {
+        onSelectNode("canary");
+      },
     }),
     buildNode("staging", 633, 416, {
       layer: "external",
@@ -353,6 +415,10 @@ function buildGraph(args: {
       tone: "violet",
       note: "环境验证 / 验收",
       active: false,
+      selected: selectedNodeId === "staging",
+      onSelect: () => {
+        onSelectNode("staging");
+      },
     }),
     buildNode("post-commit", 835, 416, {
       layer: "external",
@@ -360,6 +426,10 @@ function buildGraph(args: {
       tone: "violet",
       note: "远程校验 / 自动构建",
       active: Boolean(workflowSummary),
+      selected: selectedNodeId === "post-commit",
+      onSelect: () => {
+        onSelectNode("post-commit");
+      },
     }),
   ];
 
@@ -576,8 +646,16 @@ export function HarnessGovernanceLoopGraph({
       workflowSummary,
       dimensionCount,
       metricCount,
+      selectedNodeId: activeSelectedNodeId,
+      onSelectNode: (nodeId) => {
+        if (onSelectedNodeChange) {
+          onSelectedNodeChange(nodeId);
+          return;
+        }
+        setInternalSelectedNodeId(nodeId);
+      },
     }),
-    [hookSummary, instructionSummary, workflowSummary, dimensionCount, metricCount],
+    [activeSelectedNodeId, dimensionCount, hookSummary, instructionSummary, metricCount, onSelectedNodeChange, workflowSummary],
   );
 
   const graphIssues = [...new Set(
@@ -686,11 +764,7 @@ export function HarnessGovernanceLoopGraph({
                   fitView
                   fitViewOptions={{ padding: 0.05, minZoom: 0.55, maxZoom: 1 }}
                   onNodeClick={(_event, node) => {
-                    if (onSelectedNodeChange) {
-                      onSelectedNodeChange(node.id);
-                      return;
-                    }
-                    setInternalSelectedNodeId(node.id);
+                    graph.nodes.find((graphNode) => graphNode.id === node.id)?.data.onSelect?.();
                   }}
                   proOptions={{ hideAttribution: true }}
                 >
