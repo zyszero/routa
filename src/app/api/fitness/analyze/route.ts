@@ -273,6 +273,10 @@ function buildConsoleTranscript(params: {
     lines.push("stdout:");
     lines.push(cleanedStdout);
     lines.push("");
+  } else if (reportText) {
+    lines.push("stdout:");
+    lines.push("[JSON report emitted to stdout and parsed into the Fluency report view]");
+    lines.push("");
   }
 
   if (cleanedStderr) {

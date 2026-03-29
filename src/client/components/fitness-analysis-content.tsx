@@ -484,7 +484,9 @@ function ConsoleView({ profileState }: { profileState: ProfilePanelState }) {
           <span>
             Exit:
             <span className="ml-1 font-semibold text-desktop-text-primary">
-              {consoleState.signal ? `signal ${consoleState.signal}` : consoleState.exitCode ?? "unknown"}
+              {profileState.state === "loading"
+                ? "running"
+                : consoleState.signal ? `signal ${consoleState.signal}` : consoleState.exitCode ?? "unknown"}
             </span>
           </span>
         </div>
@@ -494,8 +496,8 @@ function ConsoleView({ profileState }: { profileState: ProfilePanelState }) {
         command={consoleState.command}
         args={consoleState.args}
         data={consoleState.data}
-        exited
-        exitCode={consoleState.signal ? 130 : typeof consoleState.exitCode === "number" ? consoleState.exitCode : 0}
+        exited={profileState.state !== "loading"}
+        exitCode={consoleState.signal ? 130 : typeof consoleState.exitCode === "number" ? consoleState.exitCode : undefined}
       />
     </div>
   );

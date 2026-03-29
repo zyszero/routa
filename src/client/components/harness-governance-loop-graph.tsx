@@ -329,9 +329,10 @@ function buildGraph(args: {
       });
     }
   };
+  const commitRowY = 268;
   const externalRowStartX = 108;
   const externalRowStep = 202;
-  const externalRowY = 446;
+  const externalRowY = 482;
 
   const nodes: Node<LoopNodeData>[] = [
     buildNode("thinking", 128, 86, {
@@ -396,7 +397,7 @@ function buildGraph(args: {
         handleNavigate("test", direction);
       },
     }),
-    buildNode("lint", 128, 248, {
+    buildNode("lint", 128, commitRowY, {
       nodeId: "lint",
       layer: "commit",
       title: "Lint",
@@ -411,7 +412,7 @@ function buildGraph(args: {
         handleNavigate("lint", direction);
       },
     }),
-    buildNode("precommit", 330, 248, {
+    buildNode("precommit", 330, commitRowY, {
       nodeId: "precommit",
       layer: "commit",
       title: "预提交",
@@ -428,7 +429,7 @@ function buildGraph(args: {
         handleNavigate("precommit", direction);
       },
     }),
-    buildNode("review", 532, 248, {
+    buildNode("review", 532, commitRowY, {
       nodeId: "review",
       layer: "commit",
       title: "代码检视",
@@ -443,7 +444,7 @@ function buildGraph(args: {
         handleNavigate("review", direction);
       },
     }),
-    buildNode("commit", 734, 248, {
+    buildNode("commit", 734, commitRowY, {
       nodeId: "commit",
       layer: "commit",
       title: "提交",
@@ -605,7 +606,7 @@ function buildGraph(args: {
       : []),
   ];
 
-  return { nodes, edges, minHeight: 560 };
+  return { nodes, edges, minHeight: 592 };
 }
 
 function buildDetailSections(args: {

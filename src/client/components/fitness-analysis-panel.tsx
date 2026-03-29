@@ -6,6 +6,7 @@ import { desktopAwareFetch } from "@/client/utils/diagnostics";
 
 import { FitnessAnalysisContent } from "./fitness-analysis-content";
 import {
+  buildFluencyCommandArgs,
   FLUENCY_MODES,
   PROFILE_DEFS,
   PROFILE_ORDER,
@@ -198,11 +199,19 @@ export function FitnessAnalysisPanel({
     setProfiles((current) => {
       const next = { ...current };
       for (const profile of targetProfiles) {
+        const pendingArgs = buildFluencyCommandArgs(profile, runMode, compareLast, noSave);
         next[profile] = {
           ...next[profile],
           state: "loading",
           error: undefined,
           updatedAt: new Date().toLocaleString(),
+          console: {
+            command: "cargo",
+            args: pendingArgs,
+            stdout: "",
+            stderr: "",
+            data: `$ cargo ${pendingArgs.join(" ")}\n\n[running fluency analysis...]\n`,
+          },
         };
       }
       return next;
@@ -263,7 +272,7 @@ export function FitnessAnalysisPanel({
         return next;
       });
     }
-  }, [applyProfiles, compareLast, contextPayload, hasContext, noSave]);
+  }, [applyProfiles, compareLast, contextPayload, hasContext, noSave, runMode]);
 
   const onRunSelectedProfile = useCallback(() => {
     setViewMode("console");

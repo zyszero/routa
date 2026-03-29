@@ -268,6 +268,38 @@ export function buildAnalysisPayload(context: FitnessAnalysisContext, options?: 
   };
 }
 
+export function buildFluencyCommandArgs(
+  profile: FitnessProfile,
+  mode: FluencyRunMode,
+  compareLast: boolean,
+  noSave: boolean,
+) {
+  const args = [
+    "run",
+    "-p",
+    "routa-cli",
+    "--",
+    "fitness",
+    "fluency",
+    "--format",
+    "json",
+    "--profile",
+    profile,
+  ];
+
+  if (mode !== "deterministic") {
+    args.push("--mode", mode);
+  }
+  if (compareLast) {
+    args.push("--compare-last");
+  }
+  if (noSave) {
+    args.push("--no-save");
+  }
+
+  return args;
+}
+
 export function toMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
