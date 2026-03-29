@@ -88,7 +88,8 @@ describe("HarnessGitHubActionsFlowPanel", () => {
     expect(screen.getByText("Loading GitHub Actions workflows...")).not.toBeNull();
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "GitHub Actions Flow Gallery" })).not.toBeNull();
+      expect(screen.getByText("Actions")).not.toBeNull();
+      expect(screen.getByText("Workflows")).not.toBeNull();
       expect(screen.getByRole("button", { name: /Defense/i })).not.toBeNull();
       expect(screen.getAllByRole("button", { name: /Fitness Dimensions/i }).length).toBeGreaterThan(0);
     });

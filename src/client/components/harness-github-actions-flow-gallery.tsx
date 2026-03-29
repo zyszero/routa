@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CodeViewer } from "@/client/components/codemirror/code-viewer";
 import type { GitHubActionsFlow, GitHubActionsJob } from "@/client/hooks/use-harness-settings-data";
 
@@ -15,7 +15,6 @@ type WorkflowJobKind = GitHubActionsJob["kind"];
 
 type WorkflowCategoryDefinition = {
   key: WorkflowCategoryKey;
-  description: string;
   emptyHint: string;
 };
 
@@ -26,22 +25,18 @@ type WorkflowCategoryEntry = WorkflowCategoryDefinition & {
 const CATEGORY_DEFINITIONS: WorkflowCategoryDefinition[] = [
   {
     key: "Validation",
-    description: "PR gates, branch protections, and CI validation loops.",
     emptyHint: "No validation workflows detected.",
   },
   {
     key: "Release",
-    description: "Packaging, publishing, deployment, and release promotion.",
     emptyHint: "No release workflows detected.",
   },
   {
     key: "Automation",
-    description: "Issue automation, workflow dispatch, and repository bots.",
     emptyHint: "No automation workflows detected.",
   },
   {
     key: "Maintenance",
-    description: "Scheduled cleanup, hygiene tasks, and background maintenance.",
     emptyHint: "No maintenance workflows detected.",
   },
 ];
@@ -252,13 +247,12 @@ function CategoryIcon({ category }: { category: WorkflowCategoryKey }) {
   }
 }
 
-function MetricCard({ label, value, detail }: { label: string; value: number; detail: string }) {
+function MetricCard({ label, value }: { label: string; value: number }) {
   return (
-    <article className="rounded-[20px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(245,248,252,0.94))] px-3.5 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
-      <div className="mt-1.5 text-[20px] font-semibold tracking-[-0.03em] text-slate-900">{value}</div>
-      <div className="mt-0.5 text-[10px] leading-5 text-slate-500">{detail}</div>
-    </article>
+    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[10px] shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+      <span className="font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</span>
+      <span className="text-[13px] font-semibold text-slate-900">{value}</span>
+    </div>
   );
 }
 
@@ -272,18 +266,18 @@ function CategoryRail({
   onSelect: (category: WorkflowCategoryKey) => void;
 }) {
   return (
-    <aside className="rounded-[26px] border border-slate-200/80 bg-[radial-gradient(circle_at_top,#ffffff,rgba(255,255,255,0.9)_22%,rgba(242,247,252,0.92)_100%)] p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
+    <aside className="rounded-[24px] border border-slate-200/80 bg-[radial-gradient(circle_at_top,#ffffff,rgba(255,255,255,0.9)_22%,rgba(242,247,252,0.92)_100%)] p-3 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Categories</div>
-          <h3 className="mt-1 text-sm font-semibold text-slate-900">Workflow taxonomy</h3>
+          <h3 className="mt-1 text-[13px] font-semibold text-slate-900">Workflow taxonomy</h3>
         </div>
         <div className="rounded-full border border-slate-200 bg-white/85 px-2.5 py-1 text-[10px] text-slate-500">
           {categories.reduce((sum, category) => sum + category.flows.length, 0)} flows
         </div>
       </div>
 
-      <div className="mt-3.5 space-y-2">
+      <div className="mt-3 space-y-1.5">
         {categories.map((category) => {
           const selected = selectedCategory === category.key;
           const disabled = category.flows.length === 0;
@@ -295,7 +289,7 @@ function CategoryRail({
               disabled={disabled}
               onClick={() => onSelect(category.key)}
               className={cx(
-                "w-full rounded-[20px] border px-3 py-2.5 text-left transition-all",
+                "w-full rounded-[18px] border px-2.5 py-2 text-left transition-all",
                 disabled
                   ? "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400"
                   : selected
@@ -304,9 +298,9 @@ function CategoryRail({
               )}
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-start gap-3">
+                <div className="flex min-w-0 items-center gap-2.5">
                   <span className={cx(
-                    "mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-[10px] border",
+                    "inline-flex h-7 w-7 items-center justify-center rounded-[10px] border",
                     selected ? "border-sky-200 bg-white text-sky-600" : "border-slate-200 bg-slate-50 text-slate-500",
                   )}>
                     <CategoryIcon category={category.key} />
@@ -315,7 +309,6 @@ function CategoryRail({
                     <div className={cx("text-[13px] font-semibold", disabled ? "text-slate-400" : "text-slate-900")}>
                       {category.key}
                     </div>
-                    <div className="mt-0.5 text-[10px] leading-4 text-slate-500">{category.description}</div>
                   </div>
                 </div>
                 <span className={cx(
@@ -699,6 +692,112 @@ function JobInspector({
   );
 }
 
+function WorkflowDetailDialog({
+  flow,
+  activeJob,
+  activeJobId,
+  open,
+  onClose,
+  onJobSelect,
+}: {
+  flow: GitHubActionsFlow | null;
+  activeJob: GitHubActionsJob | null;
+  activeJobId: string;
+  open: boolean;
+  onClose: () => void;
+  onJobSelect: (jobId: string) => void;
+}) {
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose, open]);
+
+  if (!open || !flow) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button
+        type="button"
+        aria-label="Close workflow detail"
+        className="absolute inset-0 bg-slate-950/28 backdrop-blur-[2px]"
+        onClick={onClose}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${flow.name} pipeline detail`}
+        className="relative z-10 flex max-h-[88vh] w-full max-w-[1360px] flex-col overflow-hidden rounded-[28px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.99),rgba(244,248,252,0.97))] shadow-[0_32px_96px_rgba(15,23,42,0.16)]"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200/80 px-4 py-3.5">
+          <div className="min-w-0">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Pipeline detail</div>
+            <h3 className="mt-1 truncate text-[20px] font-semibold tracking-[-0.03em] text-slate-950">{flow.name}</h3>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {normalizeEventTokens(flow.event).map((token) => (
+                <span key={`${flow.id}:dialog:${token}`} className="rounded-full border border-slate-200 bg-white/90 px-2.5 py-1 text-[10px] text-slate-600">
+                  {token}
+                </span>
+              ))}
+              {flow.relativePath ? (
+                <span className="rounded-full border border-slate-200 bg-white/90 px-2.5 py-1 font-mono text-[10px] text-slate-500">
+                  {flow.relativePath}
+                </span>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-slate-200 bg-white/90 px-2.5 py-1 text-[10px] text-slate-600">
+              {flow.jobs.length} jobs
+            </span>
+            <span className="rounded-full border border-slate-200 bg-white/90 px-2.5 py-1 text-[10px] text-slate-600">
+              {summarizeStageCount(flow)} stages
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M18 6 6 18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-auto px-4 py-4">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_340px]">
+            <FlowCanvas
+              flow={flow}
+              activeJobId={activeJobId}
+              onJobSelect={onJobSelect}
+              compactMode={false}
+            />
+            <JobInspector flow={flow} activeJob={activeJob} compactMode={false} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function HarnessGitHubActionsFlowGallery({
   flows,
   repoLabel,
@@ -715,6 +814,7 @@ export function HarnessGitHubActionsFlowGallery({
   const [selectedCategory, setSelectedCategory] = useState<WorkflowCategoryKey>("Validation");
   const [selectedFlowId, setSelectedFlowId] = useState("");
   const [selectedJobId, setSelectedJobId] = useState("");
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
 
   const effectiveCategory = categories.find((category) => category.key === selectedCategory && category.flows.length > 0)?.key ?? firstCategory;
   const activeCategory = categories.find((category) => category.key === effectiveCategory) ?? categories[0];
@@ -722,43 +822,18 @@ export function HarnessGitHubActionsFlowGallery({
   const activeJob = activeFlow?.jobs.find((job) => job.id === selectedJobId) ?? activeFlow?.jobs[0] ?? null;
 
   const cardsSection = (
-    <section className="rounded-[26px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,248,252,0.95))] p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="max-w-2xl">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Repository workflows</div>
-          <h2 className="mt-1.5 text-[24px] font-semibold tracking-[-0.04em] text-slate-950">
-            GitHub Actions Flow Gallery
-          </h2>
-          <p className="mt-1 text-[11px] leading-5 text-slate-500">
-            Structured workflow inventory with grouped triggers and compact execution graphs.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
-          <span className="rounded-full border border-slate-200 bg-white/90 px-2.5 py-1 text-slate-500">
-            Repository
+    <section className="rounded-[24px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,248,252,0.95))] p-3 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex flex-wrap gap-2 text-[10px]">
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold uppercase tracking-[0.14em] text-slate-500">
+            Actions
           </span>
           <span className="rounded-full border border-slate-200 bg-white/90 px-2.5 py-1 font-medium text-slate-700">
             {repoLabel}
           </span>
           <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-sky-700">
-            Gallery view
+            {activeCategory?.key}
           </span>
-        </div>
-      </div>
-
-      <div className={cx("mt-3 grid gap-2", compactMode ? "w-full sm:grid-cols-3" : "lg:grid-cols-3")}>
-        <MetricCard label="Workflows" value={summary.workflowCount} detail="Pipeline definitions" />
-        <MetricCard label="Trigger Types" value={summary.triggerTypeCount} detail="Distinct events" />
-        <MetricCard label="Jobs" value={summary.jobCount} detail="Execution nodes" />
-      </div>
-
-      <div className="mt-3.5 flex flex-wrap items-start justify-between gap-3 border-t border-slate-200/80 pt-3.5">
-        <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Gallery</div>
-          <h3 className="mt-1 text-base font-semibold tracking-[-0.02em] text-slate-900">{activeCategory?.key}</h3>
-          <p className="mt-0.5 text-[11px] leading-5 text-slate-500">{activeCategory?.description}</p>
-        </div>
-        <div className="flex flex-wrap gap-2 text-[10px]">
           <span className="rounded-full border border-slate-200 bg-white/90 px-2.5 py-1 text-slate-500">
             {activeCategory?.flows.length ?? 0} flows
           </span>
@@ -768,10 +843,15 @@ export function HarnessGitHubActionsFlowGallery({
             </span>
           ) : null}
         </div>
+        <div className="flex flex-wrap gap-2">
+          <MetricCard label="Workflows" value={summary.workflowCount} />
+          <MetricCard label="Triggers" value={summary.triggerTypeCount} />
+          <MetricCard label="Jobs" value={summary.jobCount} />
+        </div>
       </div>
 
       {(activeCategory?.flows.length ?? 0) > 0 ? (
-        <div className={cx("mt-3.5 grid gap-3", compactMode ? "grid-cols-1" : "xl:grid-cols-2")}>
+        <div className={cx("mt-3 grid gap-2.5", compactMode ? "grid-cols-1" : "xl:grid-cols-2")}>
           {activeCategory?.flows.map((flow) => (
             <WorkflowCard
               key={flow.id}
@@ -780,6 +860,7 @@ export function HarnessGitHubActionsFlowGallery({
               onSelect={() => {
                 setSelectedFlowId(flow.id);
                 setSelectedJobId("");
+                setIsDetailOpen(true);
               }}
             />
           ))}
@@ -806,17 +887,6 @@ export function HarnessGitHubActionsFlowGallery({
             }}
           />
           {cardsSection}
-          {activeFlow ? (
-            <div className="space-y-3.5">
-              <FlowCanvas
-                flow={activeFlow}
-                activeJobId={activeJob?.id ?? ""}
-                onJobSelect={setSelectedJobId}
-                compactMode
-              />
-              <JobInspector flow={activeFlow} activeJob={activeJob} compactMode />
-            </div>
-          ) : null}
         </div>
       ) : (
         <div className="grid gap-4 xl:grid-cols-[232px_minmax(0,1fr)]">
@@ -829,22 +899,18 @@ export function HarnessGitHubActionsFlowGallery({
               setSelectedJobId("");
             }}
           />
-          <div className="space-y-4">
-            {cardsSection}
-            {activeFlow ? (
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_340px]">
-                <FlowCanvas
-                  flow={activeFlow}
-                  activeJobId={activeJob?.id ?? ""}
-                  onJobSelect={setSelectedJobId}
-                  compactMode={false}
-                />
-                <JobInspector flow={activeFlow} activeJob={activeJob} compactMode={false} />
-              </div>
-            ) : null}
-          </div>
+          <div>{cardsSection}</div>
         </div>
       )}
+
+      <WorkflowDetailDialog
+        flow={activeFlow}
+        activeJob={activeJob}
+        activeJobId={activeJob?.id ?? ""}
+        open={isDetailOpen}
+        onClose={() => setIsDetailOpen(false)}
+        onJobSelect={setSelectedJobId}
+      />
     </div>
   );
 }
