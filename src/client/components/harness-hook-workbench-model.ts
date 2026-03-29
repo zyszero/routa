@@ -190,6 +190,16 @@ const HOOK_CATALOG: HookCatalogEntry[] = [
 ];
 
 const LIFECYCLE_ORDER: HookLifecycleGroup[] = ["commit", "push", "receive", "other"];
+const HOOK_ORDER = new Map([
+  ["pre-commit", 0],
+  ["commit-msg", 1],
+  ["post-commit", 2],
+  ["prepare-commit-msg", 3],
+  ["pre-push", 4],
+  ["pre-receive", 5],
+  ["update", 6],
+  ["post-receive", 7],
+]);
 
 function toTitleToken(value: string): string {
   return value
@@ -432,9 +442,16 @@ export function buildHookWorkbenchEntries(data: HooksResponse | null | undefined
       if (leftIndex !== rightIndex) {
         return leftIndex - rightIndex;
       }
-      if (left.configured !== right.configured) {
-        return left.configured ? -1 : 1;
+
+      const leftHookOrder = HOOK_ORDER.get(left.name);
+      const rightHookOrder = HOOK_ORDER.get(right.name);
+      if (typeof leftHookOrder === "number" || typeof rightHookOrder === "number") {
+        if (typeof leftHookOrder === "number" && typeof rightHookOrder === "number") {
+          return leftHookOrder - rightHookOrder;
+        }
+        return typeof leftHookOrder === "number" ? -1 : 1;
       }
+
       return left.name.localeCompare(right.name);
     });
 }

@@ -305,12 +305,16 @@ function HookLifecycleRail() {
                   <button
                     key={entry.name}
                     type="button"
+                    disabled={dimmed}
                     onClick={() => {
+                      if (dimmed) {
+                        return;
+                      }
                       dispatch({ type: "select-hook", hookName: entry.name });
                     }}
                     className={`w-full rounded-2xl border px-3 py-3 text-left transition ${
                       dimmed
-                        ? "border-slate-200 bg-slate-50/90 text-slate-500"
+                        ? "cursor-not-allowed border-slate-200 bg-slate-50/90 text-slate-500 opacity-80"
                         : selected
                         ? "border-sky-300 bg-sky-50/80 shadow-sm"
                         : "border-desktop-border bg-white/85 hover:bg-desktop-bg-primary"
