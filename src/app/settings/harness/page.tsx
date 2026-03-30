@@ -15,6 +15,7 @@ import { HarnessFitnessFilesDashboard } from "@/client/components/harness-fitnes
 import { HarnessGovernanceLoopGraph } from "@/client/components/harness-governance-loop-graph";
 import { HarnessGitHubActionsFlowPanel } from "@/client/components/harness-github-actions-flow-panel";
 import { HarnessHookRuntimePanel } from "@/client/components/harness-hook-runtime-panel";
+import { HarnessAgentHookPanel } from "@/client/components/harness-agent-hook-panel";
 import { HarnessRepoSignalsPanel } from "@/client/components/harness-repo-signals-panel";
 import { HarnessReviewTriggersPanel } from "@/client/components/harness-review-triggers-panel";
 import { HarnessUnsupportedState, getHarnessUnsupportedRepoMessage } from "@/client/components/harness-support-state";
@@ -101,6 +102,7 @@ export default function HarnessSettingsPage() {
     specsState,
     planState,
     hooksState,
+    agentHooksState,
     instructionsState,
     githubActionsState,
     reloadInstructions,
@@ -214,6 +216,20 @@ export default function HarnessSettingsPage() {
             variant="compact"
           />
         );
+      case "agent-hook":
+        return (
+          <HarnessAgentHookPanel
+            workspaceId={workspaceId}
+            codebaseId={activeRepoCodebaseId}
+            repoPath={activeRepoPath}
+            repoLabel={selectedRepoLabel}
+            unsupportedMessage={unsupportedRepoMessage}
+            data={agentHooksState.data}
+            loading={agentHooksState.loading}
+            error={agentHooksState.error}
+            variant="compact"
+          />
+        );
       default:
         return (
           <div className="space-y-3">
@@ -236,6 +252,9 @@ export default function HarnessSettingsPage() {
   }, [
     activeRepoCodebaseId,
     activeRepoPath,
+    agentHooksState.data,
+    agentHooksState.error,
+    agentHooksState.loading,
     githubActionsState.data,
     githubActionsState.error,
     githubActionsState.loading,
@@ -349,6 +368,8 @@ export default function HarnessSettingsPage() {
           workflowError={githubActionsState.error}
           instructionsData={instructionsState.data}
           instructionsError={instructionsState.error}
+          agentHooksData={agentHooksState.data}
+          agentHooksError={agentHooksState.error}
           fitnessFiles={specFiles}
           selectedNodeId={selectedGovernanceNodeId}
           onSelectedNodeChange={setSelectedGovernanceNodeId}
@@ -376,6 +397,17 @@ export default function HarnessSettingsPage() {
           data={hooksState.data}
           loading={hooksState.loading}
           error={hooksState.error}
+        />
+
+        <HarnessAgentHookPanel
+          workspaceId={workspaceId}
+          codebaseId={activeRepoCodebaseId}
+          repoPath={activeRepoPath}
+          repoLabel={selectedRepoLabel}
+          unsupportedMessage={unsupportedRepoMessage}
+          data={agentHooksState.data}
+          loading={agentHooksState.loading}
+          error={agentHooksState.error}
         />
 
         <HarnessReviewTriggersPanel

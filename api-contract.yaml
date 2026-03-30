@@ -4502,6 +4502,24 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/harness/agent-hooks:
+    get:
+      operationId: getHarnessAgentHooks
+      summary: Read and validate agent hook lifecycle configuration
+      responses:
+        "200":
+          description: Agent hook configuration with validation warnings
+          content:
+            application/json:
+              schema:
+                type: object
+        "500":
+          description: Failed to read agent hooks config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/harness/hooks:
     get:
       operationId: getHarnessHooks

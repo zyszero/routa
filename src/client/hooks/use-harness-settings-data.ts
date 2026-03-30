@@ -139,6 +139,30 @@ export type InstructionsResponse = {
   } | null;
 };
 
+export type AgentHookConfigSummary = {
+  event: string;
+  matcher?: string;
+  type: string;
+  command?: string;
+  url?: string;
+  prompt?: string;
+  timeout: number;
+  blocking: boolean;
+  description?: string;
+};
+
+export type AgentHooksResponse = {
+  generatedAt: string;
+  repoRoot: string;
+  configFile: {
+    relativePath: string;
+    source: string;
+    schema?: string;
+  } | null;
+  hooks: AgentHookConfigSummary[];
+  warnings: string[];
+};
+
 export type GitHubActionsJob = {
   id: string;
   name: string;
@@ -215,6 +239,7 @@ export function useHarnessSettingsData({
   const [hooksState, setHooksState] = useState<QueryState<HooksResponse>>(emptyQueryState);
   const [instructionsState, setInstructionsState] = useState<QueryState<InstructionsResponse>>(emptyQueryState);
   const [githubActionsState, setGithubActionsState] = useState<QueryState<GitHubActionsFlowsResponse>>(emptyQueryState);
+  const [agentHooksState, setAgentHooksState] = useState<QueryState<AgentHooksResponse>>(emptyQueryState);
   const [instructionsRefreshToken, setInstructionsRefreshToken] = useState(0);
 
   useEffect(() => {
@@ -417,6 +442,45 @@ export function useHarnessSettingsData({
     };
   }, [baseQuery]);
 
+  useEffect(() => {
+    if (!baseQuery) {
+      setAgentHooksState(emptyQueryState());
+      return;
+    }
+
+    let cancelled = false;
+    const fetchAgentHooks = async () => {
+      setAgentHooksState((current) => ({ ...current, loading: true, error: null }));
+      try {
+        const response = await fetch(`/api/harness/agent-hooks?${baseQuery.toString()}`);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(typeof payload?.details === "string" ? payload.details : "Failed to load agent hooks");
+        }
+        if (!cancelled) {
+          setAgentHooksState({
+            loading: false,
+            error: null,
+            data: payload as AgentHooksResponse,
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setAgentHooksState({
+            loading: false,
+            error: error instanceof Error ? error.message : String(error),
+            data: null,
+          });
+        }
+      }
+    };
+
+    void fetchAgentHooks();
+    return () => {
+      cancelled = true;
+    };
+  }, [baseQuery]);
+
   const reloadInstructions = useCallback(() => {
     setInstructionsRefreshToken((current) => current + 1);
   }, []);
@@ -425,6 +489,7 @@ export function useHarnessSettingsData({
     specsState,
     planState,
     hooksState,
+    agentHooksState,
     instructionsState,
     githubActionsState,
     reloadInstructions,

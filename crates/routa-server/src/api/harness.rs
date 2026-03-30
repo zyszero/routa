@@ -26,11 +26,40 @@ use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
     Router::new()
+        .route("/agent-hooks", get(get_agent_hooks))
         .route("/github-actions", get(get_github_actions))
         .route("/hooks", get(get_harness_hooks))
         .route("/hooks/preview", get(get_hook_preview))
         .route("/instructions", get(get_harness_instructions))
         .route("/repo-signals", get(get_harness_repo_signals))
+}
+
+async fn get_agent_hooks(
+    State(state): State<AppState>,
+    Query(query): Query<RepoContextQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let repo_root = resolve_repo_root(
+        &state,
+        query.workspace_id.as_deref(),
+        query.codebase_id.as_deref(),
+        query.repo_path.as_deref(),
+        "Missing agent hooks context. Provide workspaceId, codebaseId, or repoPath.",
+    )
+    .await
+    .map_err(map_context_error(
+        "Agent hooks context invalid",
+        "Failed to read agent hooks",
+    ))?;
+
+    let (hooks, config_file, warnings) = load_agent_hook_config(&repo_root);
+
+    Ok(Json(json!({
+        "generatedAt": chrono::Utc::now().to_rfc3339(),
+        "repoRoot": repo_root,
+        "configFile": config_file,
+        "hooks": hooks,
+        "warnings": warnings,
+    })))
 }
 
 async fn get_harness_repo_signals(
@@ -869,4 +898,143 @@ fn map_io_error(
             Json(json_error(public_error, error.to_string())),
         )
     }
+}
+
+const KNOWN_AGENT_EVENTS: &[&str] = &[
+    "SessionStart",
+    "UserPromptSubmit",
+    "PreToolUse",
+    "PostToolUse",
+    "Stop",
+];
+
+const BLOCKABLE_AGENT_EVENTS: &[&str] = &["PreToolUse", "UserPromptSubmit"];
+
+const KNOWN_AGENT_HOOK_TYPES: &[&str] = &["command", "http", "prompt"];
+
+fn load_agent_hook_config(repo_root: &Path) -> (Vec<Value>, Value, Vec<String>) {
+    let config_path = repo_root.join("docs/fitness/runtime/agent-hooks.yaml");
+    let mut warnings = Vec::new();
+
+    if !config_path.exists() {
+        warnings.push(
+            "Missing docs/fitness/runtime/agent-hooks.yaml — no agent hooks configured."
+                .to_string(),
+        );
+        return (Vec::new(), Value::Null, warnings);
+    }
+
+    let raw = match std::fs::read_to_string(&config_path) {
+        Ok(content) => content,
+        Err(_) => {
+            warnings.push("Failed to read agent-hooks.yaml.".to_string());
+            return (Vec::new(), Value::Null, warnings);
+        }
+    };
+
+    let parsed: serde_yaml::Value = serde_yaml::from_str(&raw).unwrap_or_default();
+
+    let config_file = json!({
+        "relativePath": "docs/fitness/runtime/agent-hooks.yaml",
+        "source": raw,
+        "schema": parsed.get("schema").and_then(serde_yaml::Value::as_str),
+    });
+
+    let raw_hooks = match parsed.get("hooks").and_then(serde_yaml::Value::as_sequence) {
+        Some(seq) => seq,
+        None => return (Vec::new(), config_file, warnings),
+    };
+
+    let known_events: HashSet<&str> = KNOWN_AGENT_EVENTS.iter().copied().collect();
+    let blockable_events: HashSet<&str> = BLOCKABLE_AGENT_EVENTS.iter().copied().collect();
+    let known_types: HashSet<&str> = KNOWN_AGENT_HOOK_TYPES.iter().copied().collect();
+
+    let mut hooks = Vec::new();
+
+    for entry in raw_hooks {
+        let mapping = match entry.as_mapping() {
+            Some(m) => m,
+            None => continue,
+        };
+
+        let event = match yaml_str(mapping.get(&serde_yaml::Value::String("event".into()))) {
+            Some(e) if !e.trim().is_empty() => e.trim(),
+            _ => {
+                warnings.push("Skipped hook entry with missing event field.".to_string());
+                continue;
+            }
+        };
+
+        if !known_events.contains(event) {
+            warnings.push(format!(
+                "Unknown agent hook event: \"{event}\". Known events: {}.",
+                KNOWN_AGENT_EVENTS.join(", ")
+            ));
+            continue;
+        }
+
+        let hook_type = yaml_str(mapping.get(&serde_yaml::Value::String("type".into())))
+            .map(str::trim)
+            .unwrap_or("command");
+
+        if !known_types.contains(hook_type) {
+            warnings.push(format!(
+                "Unknown hook type \"{hook_type}\" for event \"{event}\". Known types: {}.",
+                KNOWN_AGENT_HOOK_TYPES.join(", ")
+            ));
+            continue;
+        }
+
+        let blocking_raw = mapping
+            .get(&serde_yaml::Value::String("blocking".into()))
+            .and_then(serde_yaml::Value::as_bool)
+            .unwrap_or(false);
+
+        if blocking_raw && !blockable_events.contains(event) {
+            warnings.push(format!(
+                "Event \"{event}\" does not support blocking. Setting blocking to false."
+            ));
+        }
+        let blocking = blocking_raw && blockable_events.contains(event);
+
+        let timeout = yaml_i64(mapping.get(&serde_yaml::Value::String("timeout".into())))
+            .filter(|t| *t > 0)
+            .unwrap_or(10);
+
+        let matcher = yaml_str(mapping.get(&serde_yaml::Value::String("matcher".into())))
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty());
+        let command = yaml_str(mapping.get(&serde_yaml::Value::String("command".into())));
+        let url = yaml_str(mapping.get(&serde_yaml::Value::String("url".into())));
+        let prompt = yaml_str(mapping.get(&serde_yaml::Value::String("prompt".into())));
+        let description =
+            yaml_str(mapping.get(&serde_yaml::Value::String("description".into())));
+
+        let mut hook = json!({
+            "event": event,
+            "type": hook_type,
+            "timeout": timeout,
+            "blocking": blocking,
+        });
+
+        if let Some(m) = matcher {
+            hook["matcher"] = json!(m);
+        }
+        if let Some(c) = command {
+            hook["command"] = json!(c);
+        }
+        if let Some(u) = url {
+            hook["url"] = json!(u);
+        }
+        if let Some(p) = prompt {
+            hook["prompt"] = json!(p);
+        }
+        if let Some(d) = description {
+            hook["description"] = json!(d);
+        }
+
+        hooks.push(hook);
+    }
+
+    (hooks, config_file, warnings)
 }
