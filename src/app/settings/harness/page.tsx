@@ -195,6 +195,8 @@ export default function HarnessSettingsPage() {
             loading={hooksState.loading}
             error={hooksState.error}
             variant="compact"
+            showDetailToggle
+            defaultShowDetails={false}
           />
         );
       case "commit":

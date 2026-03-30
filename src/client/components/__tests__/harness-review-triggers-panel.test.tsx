@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { HooksResponse } from "@/client/hooks/use-harness-settings-data";
 import { HarnessReviewTriggersPanel } from "../harness-review-triggers-panel";
@@ -253,5 +253,28 @@ describe("HarnessReviewTriggersPanel", () => {
     expect(
       screen.getByText('node --import tsx tools/hook-runtime/src/cli.ts --profile pre-push "$@"'),
     ).not.toBeNull();
+  });
+
+  it("keeps loop sidebar compact until details are requested", () => {
+    render(
+      <HarnessReviewTriggersPanel
+        repoLabel="routa-js"
+        data={createHooksResponse()}
+        variant="compact"
+        showDetailToggle
+        defaultShowDetails={false}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Show details" })).not.toBeNull();
+    expect(screen.getAllByText("src/core/acp/**").length).toBe(2);
+    expect(screen.queryByText("docs/fitness/api-contract.md")).toBeNull();
+    expect(screen.queryByText("Trigger command")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
+
+    expect(screen.getByRole("button", { name: "Hide details" })).not.toBeNull();
+    expect(screen.getByText("docs/fitness/api-contract.md")).not.toBeNull();
+    expect(screen.getByText("Trigger command")).not.toBeNull();
   });
 });

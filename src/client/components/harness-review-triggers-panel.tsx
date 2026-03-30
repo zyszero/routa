@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { HarnessUnsupportedState } from "@/client/components/harness-support-state";
 import type {
   HookFileSummary,
@@ -15,6 +16,8 @@ type ReviewTriggersPanelProps = {
   loading?: boolean;
   error?: string | null;
   variant?: "full" | "compact";
+  showDetailToggle?: boolean;
+  defaultShowDetails?: boolean;
 };
 
 type ReviewDimensionTone = "danger" | "warning" | "info" | "success";
@@ -35,19 +38,6 @@ type ReviewDimensionCard = {
   rules: ReviewTriggerRuleSummary[];
   routingDetails?: ReviewRoutingDetails;
 };
-
-const RISK_RULE_NAMES = new Set([
-  "high_risk_directory_change",
-  "sensitive_contract_or_governance_change",
-  "core_engine_change",
-  "sensitive_release_files",
-]);
-
-const CONFIDENCE_RULE_NAMES = new Set([
-  "fitness_evidence_gap_for_core_paths",
-  "api_contract_evidence_gap",
-  "code_without_evidence",
-]);
 
 const COMPLEXITY_RULE_TYPES = new Set([
   "cross_boundary_change",
@@ -137,6 +127,10 @@ function uniqueLabels(values: string[]): string[] {
   return [...new Set(values.filter((value) => value.trim().length > 0))];
 }
 
+function takeLabels(values: string[], limit: number): string[] {
+  return uniqueLabels(values).slice(0, limit);
+}
+
 function containerClass(compactMode: boolean): string {
   return compactMode
     ? "rounded-2xl border border-amber-200 bg-amber-50/60 p-3"
@@ -148,20 +142,23 @@ function cardGridClass(compactMode: boolean): string {
 }
 
 function isRiskRule(rule: ReviewTriggerRuleSummary): boolean {
-  if (RISK_RULE_NAMES.has(rule.name)) {
-    return true;
-  }
   if (rule.type === "sensitive_file_change") {
     return true;
   }
-  return rule.type === "changed_paths" && rule.severity === "high";
+  if (rule.type === "changed_paths" && rule.severity === "high") {
+    return true;
+  }
+  return rule.severity === "high" && rule.paths.length > 0 && rule.evidencePaths.length === 0;
 }
 
 function isConfidenceRule(rule: ReviewTriggerRuleSummary): boolean {
-  if (CONFIDENCE_RULE_NAMES.has(rule.name)) {
+  if (rule.type === "evidence_gap") {
     return true;
   }
-  return rule.type === "evidence_gap";
+  if (rule.evidencePaths.length > 0) {
+    return true;
+  }
+  return /evidence/i.test(rule.name);
 }
 
 function isComplexityRule(rule: ReviewTriggerRuleSummary): boolean {
@@ -276,6 +273,45 @@ function buildReviewDimensionCards(
       },
     },
   ];
+}
+
+type CompactPreviewSection = {
+  label: string;
+  items: string[];
+};
+
+function buildCompactPreviewSections(card: ReviewDimensionCard): CompactPreviewSection[] {
+  if (card.key === "routing" && card.routingDetails) {
+    const hookFiles = takeLabels(card.routingDetails.hookFiles.map((file) => file.relativePath), 2);
+    const profiles = takeLabels(card.routingDetails.profiles.map((profile) => formatTokenLabel(profile.name)), 2);
+    const actions = takeLabels(card.routingDetails.actions, 2);
+
+    return [
+      { label: "Hooks", items: hookFiles },
+      { label: "Routing", items: profiles.length ? profiles : actions },
+    ].filter((section) => section.items.length > 0);
+  }
+
+  if (card.key === "risk") {
+    return [{ label: "Watch paths", items: takeLabels(card.rules.flatMap((rule) => rule.paths), 3) }]
+      .filter((section) => section.items.length > 0);
+  }
+
+  if (card.key === "confidence") {
+    return [
+      { label: "Watch paths", items: takeLabels(card.rules.flatMap((rule) => rule.paths), 2) },
+      { label: "Evidence paths", items: takeLabels(card.rules.flatMap((rule) => rule.evidencePaths), 2) },
+    ].filter((section) => section.items.length > 0);
+  }
+
+  const thresholds = takeLabels(card.rules.flatMap(buildThresholdTokens), 3);
+  const boundaries = takeLabels(card.rules.flatMap((rule) => rule.boundaries.map((boundary) => formatTokenLabel(boundary.name))), 2);
+  const directories = takeLabels(card.rules.flatMap((rule) => rule.directories), 2);
+
+  return [
+    { label: "Boundaries", items: boundaries },
+    { label: "Thresholds", items: thresholds.length ? thresholds : directories },
+  ].filter((section) => section.items.length > 0);
 }
 
 function DetailLabel({ children }: { children: string }) {
@@ -438,6 +474,30 @@ function RoutingDetailCard({
   );
 }
 
+function CompactPreview({
+  card,
+}: {
+  card: ReviewDimensionCard;
+}) {
+  const sections = buildCompactPreviewSections(card);
+  if (!sections.length) {
+    return null;
+  }
+
+  return (
+    <div className="mt-2.5 border-t border-black/8 pt-2.5">
+      <div className="grid gap-2">
+        {sections.map((section) => (
+          <div key={`${card.key}-${section.label}`}>
+            <DetailLabel>{section.label}</DetailLabel>
+            <CodeTokens items={section.items} tone={card.tone} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function HarnessReviewTriggersPanel({
   repoLabel: _repoLabel,
   unsupportedMessage,
@@ -445,6 +505,8 @@ export function HarnessReviewTriggersPanel({
   loading = false,
   error = null,
   variant = "full",
+  showDetailToggle = false,
+  defaultShowDetails = true,
 }: ReviewTriggersPanelProps) {
   const reviewTriggerFile = data?.reviewTriggerFile ?? null;
   const profiles = data?.profiles ?? [];
@@ -452,13 +514,27 @@ export function HarnessReviewTriggersPanel({
   const reviewProfiles = profiles.filter((profile) => profile.phases.includes("review"));
   const reviewHooks = uniqueLabels(reviewProfiles.flatMap((profile) => profile.hooks));
   const compactMode = variant === "compact";
+  const canToggleDetails = compactMode && showDetailToggle;
+  const [showDetails, setShowDetails] = useState(defaultShowDetails);
   const cards = reviewTriggerFile
     ? buildReviewDimensionCards(reviewTriggerFile.rules, reviewProfiles, reviewHooks, hookFiles)
     : [];
+  const detailsVisible = canToggleDetails ? showDetails : true;
 
   return (
     <section className={containerClass(compactMode)}>
-      <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-800">Review triggers</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-800">Review triggers</div>
+        {canToggleDetails && reviewTriggerFile && reviewTriggerFile.rules.length ? (
+          <button
+            type="button"
+            className="rounded-full border border-amber-200 bg-white/85 px-2.5 py-1 text-[10px] font-semibold text-amber-900 transition-colors hover:bg-white"
+            onClick={() => setShowDetails((current) => !current)}
+          >
+            {detailsVisible ? "Hide details" : "Show details"}
+          </button>
+        ) : null}
+      </div>
 
       {loading ? (
         <div className="mt-2.5 rounded-xl border border-amber-200 bg-white/90 px-4 py-4 text-[11px] text-amber-900/75">
@@ -511,17 +587,21 @@ export function HarnessReviewTriggersPanel({
                   />
                 </div>
 
-                <div className="mt-2.5 border-t border-black/8 pt-2.5">
-                  {card.key === "routing" && card.routingDetails ? (
-                    <RoutingDetailCard details={card.routingDetails} tone={card.tone} />
-                  ) : (
-                    <div className="grid gap-2">
-                      {card.rules.map((rule) => (
-                        <RuleDetailCard key={`${card.key}-${rule.name}`} rule={rule} tone={card.tone} />
-                      ))}
-                    </div>
-                  )}
-                </div>
+                {detailsVisible ? (
+                  <div className="mt-2.5 border-t border-black/8 pt-2.5">
+                    {card.key === "routing" && card.routingDetails ? (
+                      <RoutingDetailCard details={card.routingDetails} tone={card.tone} />
+                    ) : (
+                      <div className="grid gap-2">
+                        {card.rules.map((rule) => (
+                          <RuleDetailCard key={`${card.key}-${rule.name}`} rule={rule} tone={card.tone} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <CompactPreview card={card} />
+                )}
               </article>
             );
           })}
