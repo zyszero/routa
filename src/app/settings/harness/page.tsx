@@ -39,7 +39,7 @@ export default function HarnessSettingsPage() {
   const [selectedRepoOverride, setSelectedRepoOverride] = useState<RepoSelection | null>(null);
   const [selectedTier, setSelectedTier] = useState<TierValue>("normal");
   const [selectedSpecName, setSelectedSpecName] = useState("");
-  const [selectedGovernanceNodeId, setSelectedGovernanceNodeId] = useState("coding");
+  const [selectedGovernanceNodeId, setSelectedGovernanceNodeId] = useState("build");
 
   const activeWorkspaceTitle = useMemo(() => {
     return workspacesHook.workspaces.find((workspace) => workspace.id === workspaceId)?.title
@@ -120,8 +120,7 @@ export default function HarnessSettingsPage() {
   );
   const governanceContextPanel = useMemo(() => {
     switch (selectedGovernanceNodeId) {
-      case "thinking":
-      case "coding":
+      case "build":
         return (
           <HarnessAgentInstructionsPanel
             workspaceId={workspaceId}
@@ -135,33 +134,8 @@ export default function HarnessSettingsPage() {
             variant="compact"
           />
         );
-      case "precommit":
-        return (
-          <HarnessHookRuntimePanel
-            workspaceId={workspaceId}
-            codebaseId={activeRepoCodebaseId}
-            repoPath={activeRepoPath}
-            repoLabel={selectedRepoLabel}
-            unsupportedMessage={unsupportedRepoMessage}
-            data={hooksState.data}
-            loading={hooksState.loading}
-            error={hooksState.error}
-            variant="compact"
-          />
-        );
-      case "build":
-        return (
-          <HarnessRepoSignalsPanel
-            workspaceId={workspaceId}
-            codebaseId={activeRepoCodebaseId}
-            repoPath={activeRepoPath}
-            repoLabel={selectedRepoLabel}
-            mode="build"
-            unsupportedMessage={unsupportedRepoMessage}
-            variant="compact"
-          />
-        );
       case "lint":
+      case "precommit":
         return (
           <HarnessExecutionPlanFlow
             loading={planState.loading}
@@ -228,7 +202,7 @@ export default function HarnessSettingsPage() {
               </div>
             </div>
             <div className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80 p-3 text-[11px] text-desktop-text-secondary">
-              选择 `编码`、`预提交`、`评审`、`测试` 或 `提交后阶段` 节点，可以在这里直接查看对应组件的上下文视图。
+              选择 `编码实现`、`本地验证`、`变更门禁`、`代码评审` 或 `持续交付` 节点，可以在这里直接查看对应组件的上下文视图。
             </div>
           </div>
         );

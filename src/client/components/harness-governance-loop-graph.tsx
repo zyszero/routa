@@ -130,9 +130,10 @@ function LoopNodeView({ data }: NodeProps<Node<LoopNodeData>>) {
   const tone = getNodeToneClasses(data.tone);
   const layerLabel: Record<LoopLayer, string> = {
     internal: "内部反馈环",
-    commit: "提交反馈环",
+    commit: "推送反馈环",
     external: "外部反馈环",
   };
+  const interactive = typeof data.onSelect === "function";
   const selectedClasses = data.selected
     ? "ring-2 ring-desktop-accent/70 ring-offset-2 ring-offset-white"
     : "";
@@ -152,11 +153,18 @@ function LoopNodeView({ data }: NodeProps<Node<LoopNodeData>>) {
         data-governance-node-id={data.nodeId}
         aria-pressed={data.selected}
         aria-label={`${layerLabel[data.layer]} ${data.title}${data.note ? `，${data.note}` : ""}`}
+        disabled={!interactive}
         onClick={(event) => {
+          if (!interactive) {
+            return;
+          }
           event.stopPropagation();
           data.onSelect?.();
         }}
         onKeyDown={(event) => {
+          if (!interactive) {
+            return;
+          }
           const keyToDirection = {
             ArrowUp: "up",
             ArrowDown: "down",
@@ -171,7 +179,9 @@ function LoopNodeView({ data }: NodeProps<Node<LoopNodeData>>) {
           event.stopPropagation();
           data.onNavigate?.(direction);
         }}
-        className={`flex min-h-[96px] w-[168px] flex-col justify-between rounded-[24px] border px-4 py-3 text-left shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-desktop-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-white ${
+        className={`flex min-h-[96px] w-[168px] flex-col justify-between rounded-[24px] border px-4 py-3 text-left shadow-sm transition ${
+          interactive ? "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-desktop-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-white" : "cursor-not-allowed"
+        } ${
           data.active ? `bg-desktop-bg-primary/96 ${tone.border} ${tone.shadow}` : "border-slate-200 bg-slate-100/90 shadow-black/0"
         } ${selectedClasses}`}
       >
@@ -282,8 +292,8 @@ function buildGraph(args: {
   hookSummary: HookSummary | null;
   instructionSummary: InstructionSummary | null;
   workflowSummary: WorkflowSummary | null;
-  dimensionCount: number;
   metricCount: number;
+  hardGateCount: number;
   selectedNodeId: string;
   onSelectNode: (nodeId: string) => void;
 }) {
@@ -291,30 +301,24 @@ function buildGraph(args: {
     hookSummary,
     instructionSummary,
     workflowSummary,
-    dimensionCount,
     metricCount,
+    hardGateCount,
     selectedNodeId,
     onSelectNode,
   } = args;
 
+  const selectableNodeIds = new Set(["build", "test", "precommit", "review", "post-commit"]);
+
   const navigationGraph: Record<string, Partial<Record<"up" | "down" | "left" | "right", string>>> = {
-    thinking: { right: "coding", down: "lint" },
-    coding: { left: "thinking", right: "build", down: "precommit" },
-    build: { left: "coding", right: "test", down: "review" },
-    test: { left: "build", down: "commit" },
-    lint: { up: "thinking", right: "precommit", down: "metrics" },
-    precommit: { up: "coding", left: "lint", right: "review", down: "production" },
-    review: { up: "build", left: "precommit", right: "commit", down: "canary" },
-    commit: { up: "test", left: "review", down: "post-commit" },
-    metrics: { up: "lint", right: "production" },
-    production: { up: "precommit", left: "metrics", right: "canary" },
-    canary: { up: "review", left: "production", right: "staging" },
-    staging: { up: "commit", left: "canary", right: "post-commit" },
-    "post-commit": { up: "commit", left: "staging" },
+    build: { right: "test", down: "review" },
+    test: { left: "build", down: "precommit" },
+    precommit: { up: "test", left: "review" },
+    review: { up: "build", right: "precommit", left: "post-commit" },
+    "post-commit": { right: "review" },
   };
   const handleNavigate = (currentNodeId: string, direction: "up" | "down" | "left" | "right") => {
     const nextNodeId = navigationGraph[currentNodeId]?.[direction];
-    if (!nextNodeId) {
+    if (!nextNodeId || !selectableNodeIds.has(nextNodeId)) {
       return;
     }
     onSelectNode(nextNodeId);
@@ -325,229 +329,165 @@ function buildGraph(args: {
       });
     }
   };
+  const buildSelectionState = (nodeId: string, enabled: boolean) => {
+    if (!enabled) {
+      return {
+        selected: false,
+      };
+    }
+
+    return {
+      selected: selectedNodeId === nodeId,
+      onSelect: () => {
+        onSelectNode(nodeId);
+      },
+      onNavigate: (direction: "up" | "down" | "left" | "right") => {
+        handleNavigate(nodeId, direction);
+      },
+    };
+  };
   const commitRowY = 268;
-  const externalRowStartX = 108;
-  const externalRowStep = 202;
+  const internalRowY = 86;
+  const col1X = 128;
+  const col2X = 330;
+  const col3X = 532;
+  const col4X = 734;
   const externalRowY = 482;
 
   const nodes: Node<LoopNodeData>[] = [
-    buildNode("thinking", 128, 86, {
+    buildNode("thinking", col1X, internalRowY, {
       nodeId: "thinking",
       layer: "internal",
-      title: "思考",
+      title: "需求定义",
       tone: "neutral",
-      note: "需求澄清 / 任务规划",
+      note: "Spec / 需求边界",
       active: false,
-      selected: selectedNodeId === "thinking",
-      onSelect: () => {
-        onSelectNode("thinking");
-      },
-      onNavigate: (direction) => {
-        handleNavigate("thinking", direction);
-      },
+      ...buildSelectionState("thinking", false),
     }),
-    buildNode("coding", 330, 86, {
+    buildNode("coding", col2X, internalRowY, {
       nodeId: "coding",
       layer: "internal",
-      title: "编码",
+      title: "设计决策",
+      tone: "sky",
+      note: "ADR / 设计取舍",
+      active: false,
+      ...buildSelectionState("coding", false),
+    }),
+    buildNode("build", col3X, internalRowY, {
+      nodeId: "build",
+      layer: "internal",
+      title: "编码实现",
       tone: "sky",
       note: instructionSummary
         ? `受 ${instructionSummary.fileName} 规范约束`
-        : "受开发规范约束",
-      active: Boolean(instructionSummary),
-      selected: selectedNodeId === "coding",
-      onSelect: () => {
-        onSelectNode("coding");
-      },
-      onNavigate: (direction) => {
-        handleNavigate("coding", direction);
-      },
-    }),
-    buildNode("build", 532, 86, {
-      nodeId: "build",
-      layer: "internal",
-      title: "构建",
-      tone: "sky",
-      note: "本地集成 / 运行准备",
+        : "代码实现 / 约束执行",
       active: true,
-      selected: selectedNodeId === "build",
-      onSelect: () => {
-        onSelectNode("build");
-      },
-      onNavigate: (direction) => {
-        handleNavigate("build", direction);
-      },
+      ...buildSelectionState("build", true),
     }),
-    buildNode("test", 734, 86, {
+    buildNode("test", col4X, internalRowY, {
       nodeId: "test",
       layer: "internal",
-      title: "测试",
+      title: "本地验证",
       tone: "emerald",
-      note: "本地验证 / 回归检查",
-      active: dimensionCount > 0 || metricCount > 0,
-      selected: selectedNodeId === "test",
-      onSelect: () => {
-        onSelectNode("test");
-      },
-      onNavigate: (direction) => {
-        handleNavigate("test", direction);
-      },
+      note: "测试 / 回归 / smoke",
+      active: true,
+      ...buildSelectionState("test", true),
     }),
-    buildNode("lint", 128, commitRowY, {
-      nodeId: "lint",
-      layer: "commit",
-      title: "Lint",
-      tone: "emerald",
-      note: "静态质量检查",
-      active: dimensionCount > 0,
-      selected: selectedNodeId === "lint",
-      onSelect: () => {
-        onSelectNode("lint");
-      },
-      onNavigate: (direction) => {
-        handleNavigate("lint", direction);
-      },
-    }),
-    buildNode("precommit", 330, commitRowY, {
+    buildNode("precommit", col4X, commitRowY, {
       nodeId: "precommit",
       layer: "commit",
-      title: "预提交",
+      title: "变更门禁",
       tone: "sky",
-      note: hookSummary
-        ? `${hookSummary.hookCount} hooks / ${hookSummary.phaseCount} phases`
-        : "本地门禁执行",
-      active: Boolean(hookSummary),
-      selected: selectedNodeId === "precommit",
-      onSelect: () => {
-        onSelectNode("precommit");
-      },
-      onNavigate: (direction) => {
-        handleNavigate("precommit", direction);
-      },
+      note: metricCount > 0
+        ? `${metricCount} metrics / ${hardGateCount} hard gates`
+        : hookSummary
+          ? `pre-push / ${hookSummary.phaseCount} phases`
+          : "pre-push / execution plan",
+      active: true,
+      ...buildSelectionState("precommit", true),
     }),
-    buildNode("review", 532, commitRowY, {
+    buildNode("review", col3X, commitRowY, {
       nodeId: "review",
       layer: "commit",
-      title: "代码检视",
+      title: "代码评审",
       tone: "emerald",
-      note: "规则校验 + review",
-      active: dimensionCount > 0,
-      selected: selectedNodeId === "review",
-      onSelect: () => {
-        onSelectNode("review");
-      },
-      onNavigate: (direction) => {
-        handleNavigate("review", direction);
-      },
+      note: "规则策略 / 人工 review",
+      active: true,
+      ...buildSelectionState("review", true),
     }),
-    buildNode("commit", 734, commitRowY, {
+    buildNode("commit", col2X, commitRowY, {
       nodeId: "commit",
       layer: "commit",
-      title: "提交",
+      title: "主干集成",
       tone: "neutral",
-      note: "进入远程流水线",
+      note: "merge / trunk",
       active: false,
-      selected: selectedNodeId === "commit",
-      onSelect: () => {
-        onSelectNode("commit");
-      },
-      onNavigate: (direction) => {
-        handleNavigate("commit", direction);
-      },
+      ...buildSelectionState("commit", false),
     }),
-    buildNode("metrics", externalRowStartX, externalRowY, {
-      nodeId: "metrics",
-      layer: "external",
-      title: "度量",
-      tone: "emerald",
-      note: "Evidence / Issues",
-      active: false,
-      selected: selectedNodeId === "metrics",
-      onSelect: () => {
-        onSelectNode("metrics");
-      },
-      onNavigate: (direction) => {
-        handleNavigate("metrics", direction);
-      },
+    buildNode("post-commit", col1X, commitRowY, {
+      nodeId: "post-commit",
+      layer: "commit",
+      title: "持续交付",
+      tone: "violet",
+      note: workflowSummary
+        ? `${workflowSummary.flowCount} flows / ${workflowSummary.jobCount} jobs`
+        : "CI/CD / 自动交付",
+      active: true,
+      ...buildSelectionState("post-commit", true),
     }),
-    buildNode("production", externalRowStartX + externalRowStep, externalRowY, {
-      nodeId: "production",
+    buildNode("release", col1X, externalRowY, {
+      nodeId: "release",
       layer: "external",
-      title: "生产环境",
+      title: "制品发布",
       tone: "amber",
-      note: "真实流量运行",
+      note: "artifact / release",
       active: false,
-      selected: selectedNodeId === "production",
-      onSelect: () => {
-        onSelectNode("production");
-      },
-      onNavigate: (direction) => {
-        handleNavigate("production", direction);
-      },
+      ...buildSelectionState("release", false),
     }),
-    buildNode("canary", externalRowStartX + externalRowStep * 2, externalRowY, {
-      nodeId: "canary",
-      layer: "external",
-      title: "金丝雀发布",
-      tone: "amber",
-      note: "小流量验证 / 渐进放量",
-      active: false,
-      selected: selectedNodeId === "canary",
-      onSelect: () => {
-        onSelectNode("canary");
-      },
-      onNavigate: (direction) => {
-        handleNavigate("canary", direction);
-      },
-    }),
-    buildNode("staging", externalRowStartX + externalRowStep * 3, externalRowY, {
+    buildNode("staging", col2X, externalRowY, {
       nodeId: "staging",
       layer: "external",
-      title: "预发环境",
+      title: "预生产验证",
       tone: "violet",
-      note: "环境验证 / 验收",
+      note: "预发验收 / smoke",
       active: false,
-      selected: selectedNodeId === "staging",
-      onSelect: () => {
-        onSelectNode("staging");
-      },
-      onNavigate: (direction) => {
-        handleNavigate("staging", direction);
-      },
+      ...buildSelectionState("staging", false),
     }),
-    buildNode("post-commit", externalRowStartX + externalRowStep * 4, externalRowY, {
-      nodeId: "post-commit",
+    buildNode("production", col3X, externalRowY, {
+      nodeId: "production",
       layer: "external",
-      title: "CI/CD",
-      tone: "violet",
-      note: "远程校验 / 自动构建",
-      active: Boolean(workflowSummary),
-      selected: selectedNodeId === "post-commit",
-      onSelect: () => {
-        onSelectNode("post-commit");
-      },
-      onNavigate: (direction) => {
-        handleNavigate("post-commit", direction);
-      },
+      title: "生产运行",
+      tone: "amber",
+      note: "真实流量 / 运行状态",
+      active: false,
+      ...buildSelectionState("production", false),
+    }),
+    buildNode("metrics", col4X, externalRowY, {
+      nodeId: "metrics",
+      layer: "external",
+      title: "监控演进",
+      tone: "emerald",
+      note: "监控 / 反馈闭环",
+      active: false,
+      ...buildSelectionState("metrics", false),
     }),
   ];
 
   const edges: Edge[] = [
-    buildEdge("thinking-coding", "thinking", "coding", "source-right", "target-left", "实现", "#64748b"),
-    buildEdge("coding-build", "coding", "build", "source-right", "target-left", "集成", "#0ea5e9"),
+    buildEdge("thinking-coding", "thinking", "coding", "source-right", "target-left", "澄清", "#64748b"),
+    buildEdge("coding-build", "coding", "build", "source-right", "target-left", "实现", "#0ea5e9"),
     buildEdge("build-test", "build", "test", "source-right", "target-left", "验证", "#10b981"),
 
-    buildEdge("lint-precommit", "lint", "precommit", "source-right", "target-left", "门禁", "#0ea5e9"),
-    buildEdge("precommit-review", "precommit", "review", "source-right", "target-left", "送检", "#0ea5e9"),
-    buildEdge("review-commit", "review", "commit", "source-right", "target-left", "提交", "#64748b"),
+    buildEdge("precommit-review", "precommit", "review", "source-left", "target-right", "送审", "#0ea5e9"),
+    buildEdge("review-commit", "review", "commit", "source-left", "target-right", "集成", "#64748b"),
+    buildEdge("commit-post-commit", "commit", "post-commit", "source-left", "target-right", "交付", "#8b5cf6"),
 
-    buildEdge("post-commit-staging", "post-commit", "staging", "source-left", "target-right", "预发", "#8b5cf6"),
-    buildEdge("staging-canary", "staging", "canary", "source-left", "target-right", "放量", "#f59e0b"),
-    buildEdge("canary-production", "canary", "production", "source-left", "target-right", "生产", "#f59e0b"),
-    buildEdge("production-metrics", "production", "metrics", "source-left", "target-right", "", "#059669"),
+    buildEdge("release-staging", "release", "staging", "source-right", "target-left", "预发", "#8b5cf6"),
+    buildEdge("staging-production", "staging", "production", "source-right", "target-left", "上线", "#f59e0b"),
+    buildEdge("production-metrics", "production", "metrics", "source-right", "target-left", "演进", "#059669"),
 
-    buildEdge("test-lint", "test", "lint", "source-bottom", "target-top", "", "#10b981", "6 4"),
-    buildEdge("commit-post-commit", "commit", "post-commit", "source-bottom", "target-top", "", "#8b5cf6", "6 4"),
+    buildEdge("test-precommit", "test", "precommit", "source-bottom", "target-top", "", "#0ea5e9", "6 4"),
+    buildEdge("post-commit-release", "post-commit", "release", "source-bottom", "target-top", "", "#8b5cf6", "6 4"),
     {
       id: "metrics-thinking",
       source: "metrics",
@@ -628,8 +568,6 @@ function buildDetailSections(args: {
     selectedTier,
   } = args;
 
-  const hookNames = (hooksData?.hookFiles ?? []).map((file) => file.name);
-  const profileNames = (hooksData?.profiles ?? []).map((profile) => profile.name);
   const uniquePhases = [...new Set((hooksData?.profiles ?? []).flatMap((profile) => profile.phases ?? []))];
   const workflowNames = (workflowData?.flows ?? []).map((flow) => flow.name);
   const workflowJobs = (workflowData?.flows ?? []).flatMap((flow) => flow.jobs?.map((job) => `${flow.name}: ${job.id}`) ?? []);
@@ -643,9 +581,9 @@ function buildDetailSections(args: {
   switch (selectedNodeId) {
     case "precommit":
       return [
-        { title: "Hook files", items: hookNames.length ? hookNames : ["当前页未发现 hook file"] },
-        { title: "Profiles", items: profileNames.length ? profileNames : ["当前页未发现 profile"] },
-        { title: "Related surface", items: ["Hook system panel", "Commit feedback loop"] },
+        { title: "Fitness", items: [`tier ${selectedTier}`, `${dimensionCount} dimensions`, `${metricCount} metrics`, `${hardGateCount} hard gates`] },
+        { title: "Hook phases", items: uniquePhases.length ? uniquePhases : ["当前页未发现 phase"] },
+        { title: "Related surface", items: ["Execution plan", "Hook system panel"] },
       ] satisfies LoopDetailSection[];
     case "post-commit":
       return [
@@ -653,7 +591,6 @@ function buildDetailSections(args: {
         { title: "Jobs", items: workflowJobs.length ? workflowJobs.slice(0, 8) : ["当前页未发现 job"] },
         { title: "Related surface", items: ["GitHub Actions flow panel", "External feedback loop"] },
       ] satisfies LoopDetailSection[];
-    case "lint":
     case "review":
     case "test":
       return [
@@ -661,7 +598,7 @@ function buildDetailSections(args: {
         { title: "Hook phases", items: uniquePhases.length ? uniquePhases : ["当前页未发现 phase"] },
         { title: "Dimension files", items: dimensionFiles.length ? dimensionFiles.slice(0, 6) : ["当前页未发现 dimension spec"] },
       ] satisfies LoopDetailSection[];
-    case "coding":
+    case "build":
       return [
         { title: "Instruction source", items: [instructionSummary?.fileName ?? "AGENTS.md"] },
         { title: "Context", items: ["当前节点受 instructions 面板支撑"] },
@@ -669,8 +606,8 @@ function buildDetailSections(args: {
       ] satisfies LoopDetailSection[];
     default:
       return [
-        { title: "Current page signals", items: ["点击 `预提交` 查看 pre-commit / pre-push", "点击 `提交后阶段` 查看 actions / jobs"] },
-        { title: "Connected panels", items: ["Instruction file", "Hook system", "Execution plan", "GitHub Actions flow"] },
+        { title: "Current page signals", items: ["亮色节点可点击，灰色节点表示当前没有对应 panel", "点击 `编码实现`、`变更门禁`、`代码评审` 或 `持续交付` 查看上下文"] },
+        { title: "Connected panels", items: ["Instruction file", "Execution plan", "Review triggers", "GitHub Actions flow", "Repo signals"] },
       ] satisfies LoopDetailSection[];
   }
 }
@@ -696,7 +633,7 @@ export function HarnessGovernanceLoopGraph({
   contextPanel,
 }: HarnessGovernanceLoopGraphProps) {
   const hasContext = Boolean(repoPath);
-  const [internalSelectedNodeId, setInternalSelectedNodeId] = useState("coding");
+  const [internalSelectedNodeId, setInternalSelectedNodeId] = useState("build");
   const activeSelectedNodeId = selectedNodeId ?? internalSelectedNodeId;
   const hookSummary = useMemo(() => {
     if (!hooksData) {
@@ -740,8 +677,8 @@ export function HarnessGovernanceLoopGraph({
       hookSummary,
       instructionSummary,
       workflowSummary,
-      dimensionCount,
       metricCount,
+      hardGateCount,
       selectedNodeId: activeSelectedNodeId,
       onSelectNode: (nodeId) => {
         if (onSelectedNodeChange) {
@@ -751,7 +688,7 @@ export function HarnessGovernanceLoopGraph({
         setInternalSelectedNodeId(nodeId);
       },
     }),
-    [activeSelectedNodeId, dimensionCount, hookSummary, instructionSummary, metricCount, onSelectedNodeChange, workflowSummary],
+    [activeSelectedNodeId, hardGateCount, hookSummary, instructionSummary, metricCount, onSelectedNodeChange, workflowSummary],
   );
 
   const graphIssues = [...new Set(
@@ -799,16 +736,16 @@ export function HarnessGovernanceLoopGraph({
         <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <div className="relative overflow-hidden rounded-2xl border border-desktop-border bg-[linear-gradient(180deg,rgba(248,250,252,0.98),rgba(241,245,249,0.98))]">
               <div className="pointer-events-none absolute inset-0">
-                <div className="absolute left-[20px] right-[20px] top-[44px] h-[152px] rounded-[36px] border border-emerald-300/70 bg-emerald-50/35" />
-                <div className="absolute left-[20px] right-[20px] top-[214px] h-[152px] rounded-[36px] border border-sky-300/70 bg-sky-50/35" />
-                <div className="absolute left-[20px] right-[20px] top-[386px] h-[152px] rounded-[36px] border border-violet-300/65 bg-violet-50/35" />
+                <div className="absolute left-[14px] right-[14px] top-[38px] h-[164px] rounded-[40px] border border-emerald-300/70 bg-emerald-50/35" />
+                <div className="absolute left-[14px] right-[14px] top-[208px] h-[164px] rounded-[40px] border border-sky-300/70 bg-sky-50/35" />
+                <div className="absolute left-[14px] right-[14px] top-[380px] h-[164px] rounded-[40px] border border-violet-300/65 bg-violet-50/35" />
 
                 <div className="absolute left-[42px] top-[54px] max-w-[180px] text-left text-slate-600">
                   <div className="text-[11px] font-semibold tracking-[0.06em]">内部反馈环</div>
                 </div>
 
                 <div className="absolute left-[42px] top-[220px] max-w-[180px] text-left text-slate-600">
-                  <div className="text-[11px] font-semibold tracking-[0.06em]">提交反馈环</div>
+                  <div className="text-[11px] font-semibold tracking-[0.06em]">推送反馈环</div>
                 </div>
 
                 <div className="absolute left-[42px] top-[392px] max-w-[180px] text-left text-slate-600">
