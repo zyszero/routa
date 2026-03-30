@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { HooksResponse } from "@/client/hooks/use-harness-settings-data";
 import { HarnessReviewTriggersPanel } from "../harness-review-triggers-panel";
@@ -218,9 +218,10 @@ describe("HarnessReviewTriggersPanel", () => {
     expect(screen.queryByText("Path scope")).toBeNull();
     expect(screen.queryByText("Protected scope")).toBeNull();
     expect(screen.queryByText("Human review routing")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Details/i })).toBeNull();
   });
 
-  it("shows real rule paths and thresholds in expanded details", () => {
+  it("shows real rule paths and thresholds without requiring expansion", () => {
     render(
       <HarnessReviewTriggersPanel
         repoLabel="routa-js"
@@ -228,45 +229,24 @@ describe("HarnessReviewTriggersPanel", () => {
       />,
     );
 
-    const riskCard = screen.getByText("Risk").closest("article");
-    const confidenceCard = screen.getByText("Confidence").closest("article");
-    const complexityCard = screen.getByText("Complexity").closest("article");
-
-    expect(riskCard).not.toBeNull();
-    expect(confidenceCard).not.toBeNull();
-    expect(complexityCard).not.toBeNull();
-
-    fireEvent.click(within(riskCard!).getByRole("button", { name: /Details/i }));
-
-    expect(screen.getByText("src/core/acp/**")).not.toBeNull();
-    expect(screen.getByText("crates/routa-server/src/api/**")).not.toBeNull();
-    expect(screen.getByText("api-contract.yaml")).not.toBeNull();
-
-    fireEvent.click(within(confidenceCard!).getByRole("button", { name: /Details/i }));
-
-    expect(screen.getByText("docs/fitness/api-contract.md")).not.toBeNull();
-    expect(screen.getByText("scripts/fitness/check-api-parity.ts")).not.toBeNull();
-
-    fireEvent.click(within(complexityCard!).getByRole("button", { name: /Details/i }));
-
+    expect(screen.getAllByText("src/core/acp/**").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("crates/routa-server/src/api/**").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("api-contract.yaml").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("docs/fitness/api-contract.md").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("scripts/fitness/check-api-parity.ts").length).toBeGreaterThan(0);
     expect(screen.getByText("min 2 boundaries")).not.toBeNull();
     expect(screen.getByText("max 20 files")).not.toBeNull();
     expect(screen.getByText("+600 lines")).not.toBeNull();
     expect(screen.getByText("-400 lines")).not.toBeNull();
   });
 
-  it("shows routing profiles and hook commands in routing details", () => {
+  it("shows routing profiles and hook commands by default", () => {
     render(
       <HarnessReviewTriggersPanel
         repoLabel="routa-js"
         data={createHooksResponse()}
       />,
     );
-
-    const routingCard = screen.getByText("Routing").closest("article");
-    expect(routingCard).not.toBeNull();
-
-    fireEvent.click(within(routingCard!).getByRole("button", { name: /Details/i }));
 
     expect(screen.getByText("Require Human Review")).not.toBeNull();
     expect(screen.getByText(".husky/pre-push")).not.toBeNull();

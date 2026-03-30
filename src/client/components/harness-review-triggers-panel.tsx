@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { HarnessUnsupportedState } from "@/client/components/harness-support-state";
 import type {
   HookFileSummary,
@@ -452,7 +451,6 @@ export function HarnessReviewTriggersPanel({
   const hookFiles = data?.hookFiles ?? [];
   const reviewProfiles = profiles.filter((profile) => profile.phases.includes("review"));
   const reviewHooks = uniqueLabels(reviewProfiles.flatMap((profile) => profile.hooks));
-  const [expandedCardKey, setExpandedCardKey] = useState<ReviewDimensionCard["key"] | null>(null);
   const compactMode = variant === "compact";
   const cards = reviewTriggerFile
     ? buildReviewDimensionCards(reviewTriggerFile.rules, reviewProfiles, reviewHooks, hookFiles)
@@ -492,7 +490,6 @@ export function HarnessReviewTriggersPanel({
         <div className={cardGridClass(compactMode)}>
           {cards.map((card) => {
             const styles = TONE_STYLES[card.tone];
-            const expanded = expandedCardKey === card.key;
             return (
               <article
                 key={card.key}
@@ -514,31 +511,17 @@ export function HarnessReviewTriggersPanel({
                   />
                 </div>
 
-                <div className="mt-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedCardKey(expanded ? null : card.key)}
-                    aria-expanded={expanded}
-                    className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white/80 px-2.5 py-1 text-[10px] font-medium text-desktop-text-secondary transition-colors hover:bg-white"
-                  >
-                    <span>{expanded ? "Hide" : "Details"}</span>
-                    <span className={`transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}>›</span>
-                  </button>
+                <div className="mt-2.5 border-t border-black/8 pt-2.5">
+                  {card.key === "routing" && card.routingDetails ? (
+                    <RoutingDetailCard details={card.routingDetails} tone={card.tone} />
+                  ) : (
+                    <div className="grid gap-2">
+                      {card.rules.map((rule) => (
+                        <RuleDetailCard key={`${card.key}-${rule.name}`} rule={rule} tone={card.tone} />
+                      ))}
+                    </div>
+                  )}
                 </div>
-
-                {expanded ? (
-                  <div className="mt-2.5 border-t border-black/8 pt-2.5">
-                    {card.key === "routing" && card.routingDetails ? (
-                      <RoutingDetailCard details={card.routingDetails} tone={card.tone} />
-                    ) : (
-                      <div className="grid gap-2">
-                        {card.rules.map((rule) => (
-                          <RuleDetailCard key={`${card.key}-${rule.name}`} rule={rule} tone={card.tone} />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ) : null}
               </article>
             );
           })}
