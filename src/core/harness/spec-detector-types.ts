@@ -13,6 +13,7 @@ export type SpecArtifactType =
   | "tasks"
   | "proposal"
   | "plan"
+  | "spec"
   | "contract"
   | "data-model"
   | "research"

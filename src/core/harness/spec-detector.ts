@@ -68,7 +68,27 @@ function inferArtifactType(fileName: string): SpecArtifactType {
     config: "config",
     "project-context": "context",
   };
-  return mapping[lower] ?? "other";
+  if (mapping[lower]) return mapping[lower];
+
+  // Partial match: if the filename contains a known keyword, use that type
+  const keywords: [string, SpecArtifactType][] = [
+    ["requirement", "requirements"],
+    ["design", "design"],
+    ["task", "tasks"],
+    ["bugfix", "bugfix"],
+    ["proposal", "proposal"],
+    ["plan", "plan"],
+    ["prd", "prd"],
+    ["architecture", "architecture"],
+    ["epic", "epic"],
+    ["story", "story"],
+  ];
+  for (const [keyword, type] of keywords) {
+    if (lower.includes(keyword)) return type;
+  }
+
+  // Qoder/generic spec files: treat as spec (feature spec)
+  return "spec";
 }
 
 function readJsonFile(filePath: string): Record<string, unknown> | null {

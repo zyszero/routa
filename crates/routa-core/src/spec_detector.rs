@@ -115,7 +115,32 @@ fn infer_artifact_type(file_name: &str) -> &'static str {
         "architecture" => "architecture",
         "config" => "config",
         "project-context" => "context",
-        _ => "other",
+        _ => {
+            // Partial match: if the filename contains a known keyword, use that type
+            if lower.contains("requirement") {
+                "requirements"
+            } else if lower.contains("design") {
+                "design"
+            } else if lower.contains("task") {
+                "tasks"
+            } else if lower.contains("bugfix") {
+                "bugfix"
+            } else if lower.contains("proposal") {
+                "proposal"
+            } else if lower.contains("plan") {
+                "plan"
+            } else if lower.contains("prd") {
+                "prd"
+            } else if lower.contains("architecture") {
+                "architecture"
+            } else if lower.contains("epic") {
+                "epic"
+            } else if lower.contains("story") {
+                "story"
+            } else {
+                "spec"
+            }
+        }
     }
 }
 

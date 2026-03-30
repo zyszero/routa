@@ -145,6 +145,14 @@ export default function HarnessSettingsPage() {
     saveRepoSelection("harness", workspaceId, activeRepoSelection);
   }, [activeRepoSelection, workspaceId]);
 
+  // Auto-select "thinking" node when spec sources are detected
+  useEffect(() => {
+    const sources = specSourcesState.data?.sources;
+    if (sources && sources.length > 0 && selectedGovernanceNodeId === "build") {
+      setSelectedGovernanceNodeId("thinking");
+    }
+  }, [specSourcesState.data, selectedGovernanceNodeId]);
+
   const governanceContextPanel = useMemo(() => {
     switch (selectedGovernanceNodeId) {
       case "thinking":

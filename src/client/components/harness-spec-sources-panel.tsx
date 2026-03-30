@@ -66,6 +66,7 @@ const TYPE_LABELS: Record<string, string> = {
   design: "Design",
   tasks: "Tasks",
   bugfix: "Bugfix",
+  spec: "Spec",
   proposal: "Proposal",
   plan: "Plan",
   prd: "PRD",
@@ -135,43 +136,36 @@ function ChevronIcon({ expanded, className }: { expanded: boolean; className?: s
 }
 
 function KiroFeatureTree({ features }: { features: SpecFeature[] }) {
-  const [expandedFeature, setExpandedFeature] = useState<string | null>(null);
+  const [expandedFeatures, setExpandedFeatures] = useState<Set<string>>(new Set());
+
+  const toggle = (name: string) => {
+    setExpandedFeatures((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  };
 
   return (
     <div className="space-y-1">
       {features.map((feature) => {
-        const isExpanded = expandedFeature === feature.name;
-        const reqDocs = feature.documents.filter((d) => d.type === "requirements");
-        const otherDocs = feature.documents.filter((d) => d.type !== "requirements");
-        const badge = feature.configKiro?.specType;
+        const isExpanded = expandedFeatures.has(feature.name);
 
         return (
           <div key={feature.name}>
             <button
               type="button"
               className="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-[10px] hover:bg-desktop-bg-secondary/60"
-              onClick={() => setExpandedFeature(isExpanded ? null : feature.name)}
+              onClick={() => toggle(feature.name)}
             >
               <ChevronIcon expanded={isExpanded} />
               <span className="font-medium text-desktop-text-primary">{feature.name}</span>
-              {badge && (
-                <span className="rounded bg-violet-50 px-1 py-0.5 text-[8px] text-violet-600">{badge}</span>
-              )}
               <span className="ml-auto text-[9px] text-desktop-text-secondary">
                 {feature.documents.length} doc{feature.documents.length !== 1 ? "s" : ""}
               </span>
             </button>
 
-            {/* always show requirements inline */}
-            {reqDocs.map((doc) => (
-              <div key={doc.path} className="ml-5 flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[10px]">
-                <SpecTypeTag type={doc.type} />
-                <span className="min-w-0 truncate font-mono text-desktop-text-primary">{doc.path}</span>
-              </div>
-            ))}
-
-            {/* design/tasks/bugfix - shown on expand */}
-            {isExpanded && otherDocs.map((doc) => (
+            {isExpanded && feature.documents.map((doc) => (
               <div key={doc.path} className="ml-5 flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[10px]">
                 <SpecTypeTag type={doc.type} />
                 <span className="min-w-0 truncate font-mono text-desktop-text-primary">{doc.path}</span>
@@ -199,8 +193,8 @@ function FlatSpecList({ specs }: { specs: SpecSource["children"] }) {
 
 function SpecSourceCard({ source, expanded, onToggle }: { source: SpecSource; expanded: boolean; onToggle: () => void }) {
   const icon = SYSTEM_ICONS[source.system] ?? source.system.charAt(0).toUpperCase();
-  const specCount = source.children.length;
   const hasFeatures = source.features && source.features.length > 0;
+  const specCount = hasFeatures ? source.features!.length : source.children.length;
 
   return (
     <div className={`rounded-xl border transition-colors ${
@@ -264,10 +258,10 @@ function SpecSourceCard({ source, expanded, onToggle }: { source: SpecSource; ex
   );
 }
 
-function SourceGroup({ title, sources, expandedKey, onToggle }: {
+function SourceGroup({ title, sources, expandedKeys, onToggle }: {
   title: string;
   sources: SpecSource[];
-  expandedKey: string | null;
+  expandedKeys: Set<string>;
   onToggle: (key: string) => void;
 }) {
   if (sources.length === 0) return null;
@@ -284,8 +278,8 @@ function SourceGroup({ title, sources, expandedKey, onToggle }: {
             <SpecSourceCard
               key={key}
               source={source}
-              expanded={expandedKey === key}
-              onToggle={() => onToggle(expandedKey === key ? "" : key)}
+              expanded={expandedKeys.has(key)}
+              onToggle={() => onToggle(key)}
             />
           );
         })}
@@ -302,11 +296,21 @@ export function HarnessSpecSourcesPanel({
   error,
   variant = "full",
 }: SpecSourcesPanelProps) {
-  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
+  const toggleKey = (key: string) => {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
   const sources = data?.sources ?? [];
   const { nativeTools, frameworks, integrations, legacy } = groupSourcesByCategory(sources);
 
-  const totalSpecs = sources.reduce((sum, s) => sum + s.children.length, 0);
+  const totalSpecs = sources.reduce((sum, s) => {
+    if (s.features && s.features.length > 0) return sum + s.features.length;
+    return sum + s.children.length;
+  }, 0);
   const highConfidenceCount = sources.filter((s) => s.confidence === "high").length;
 
   const isCompact = variant === "compact";
@@ -343,8 +347,8 @@ export function HarnessSpecSourcesPanel({
             <SpecSourceCard
               key={key}
               source={source}
-              expanded={expandedKey === key}
-              onToggle={() => setExpandedKey(expandedKey === key ? null : key)}
+              expanded={expandedKeys.has(key)}
+              onToggle={() => toggleKey(key)}
             />
           );
         })}
@@ -411,10 +415,10 @@ export function HarnessSpecSourcesPanel({
 
         {!loading && !unsupportedMessage && sources.length > 0 && (
           <div className="mt-3 space-y-3">
-            <SourceGroup title="Native Tools" sources={nativeTools} expandedKey={expandedKey} onToggle={setExpandedKey} />
-            <SourceGroup title="Frameworks" sources={frameworks} expandedKey={expandedKey} onToggle={setExpandedKey} />
-            <SourceGroup title="Integrations" sources={integrations} expandedKey={expandedKey} onToggle={setExpandedKey} />
-            <SourceGroup title="Legacy" sources={legacy} expandedKey={expandedKey} onToggle={setExpandedKey} />
+            <SourceGroup title="Native Tools" sources={nativeTools} expandedKeys={expandedKeys} onToggle={toggleKey} />
+            <SourceGroup title="Frameworks" sources={frameworks} expandedKeys={expandedKeys} onToggle={toggleKey} />
+            <SourceGroup title="Integrations" sources={integrations} expandedKeys={expandedKeys} onToggle={toggleKey} />
+            <SourceGroup title="Legacy" sources={legacy} expandedKeys={expandedKeys} onToggle={toggleKey} />
           </div>
         )}
 
