@@ -4,6 +4,7 @@ import { useState } from "react";
 import type {
   SpecConfidence,
   SpecDetectionResponse,
+  SpecFeature,
   SpecSource,
   SpecSourceKind,
   SpecStatus,
@@ -26,7 +27,7 @@ const KIND_LABELS: Record<SpecSourceKind, string> = {
 };
 
 const STATUS_LABELS: Record<SpecStatus, string> = {
-  "artifacts-present": "Has Artifacts",
+  "artifacts-present": "Has Specs",
   "installed-only": "Installed Only",
   archived: "Archived",
   legacy: "Legacy",
@@ -58,6 +59,22 @@ const SYSTEM_ICONS: Record<string, string> = {
   openspec: "OS",
   "spec-kit": "SK",
   bmad: "B",
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  requirements: "Requirements",
+  design: "Design",
+  tasks: "Tasks",
+  bugfix: "Bugfix",
+  proposal: "Proposal",
+  plan: "Plan",
+  prd: "PRD",
+  architecture: "Architecture",
+  epic: "Epic",
+  story: "Story",
+  context: "Context",
+  config: "Config",
+  other: "Other",
 };
 
 function groupSourcesByCategory(sources: SpecSource[]) {
@@ -95,7 +112,7 @@ function KindBadge({ kind }: { kind: SpecSourceKind }) {
   );
 }
 
-function ArtifactTypeTag({ type }: { type: string }) {
+function SpecTypeTag({ type }: { type: string }) {
   return (
     <span className="inline-flex items-center rounded border border-desktop-border bg-desktop-bg-primary px-1.5 py-0.5 text-[9px] font-mono text-desktop-text-secondary">
       {type}
@@ -103,9 +120,87 @@ function ArtifactTypeTag({ type }: { type: string }) {
   );
 }
 
+function ChevronIcon({ expanded, className }: { expanded: boolean; className?: string }) {
+  return (
+    <svg
+      className={`h-3 w-3 text-desktop-text-secondary transition-transform ${expanded ? "rotate-90" : ""} ${className ?? ""}`}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+    </svg>
+  );
+}
+
+function KiroFeatureTree({ features }: { features: SpecFeature[] }) {
+  const [expandedFeature, setExpandedFeature] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-1">
+      {features.map((feature) => {
+        const isExpanded = expandedFeature === feature.name;
+        const reqDocs = feature.documents.filter((d) => d.type === "requirements");
+        const otherDocs = feature.documents.filter((d) => d.type !== "requirements");
+        const badge = feature.configKiro?.specType;
+
+        return (
+          <div key={feature.name}>
+            <button
+              type="button"
+              className="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-[10px] hover:bg-desktop-bg-secondary/60"
+              onClick={() => setExpandedFeature(isExpanded ? null : feature.name)}
+            >
+              <ChevronIcon expanded={isExpanded} />
+              <span className="font-medium text-desktop-text-primary">{feature.name}</span>
+              {badge && (
+                <span className="rounded bg-violet-50 px-1 py-0.5 text-[8px] text-violet-600">{badge}</span>
+              )}
+              <span className="ml-auto text-[9px] text-desktop-text-secondary">
+                {feature.documents.length} doc{feature.documents.length !== 1 ? "s" : ""}
+              </span>
+            </button>
+
+            {/* always show requirements inline */}
+            {reqDocs.map((doc) => (
+              <div key={doc.path} className="ml-5 flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[10px]">
+                <SpecTypeTag type={doc.type} />
+                <span className="min-w-0 truncate font-mono text-desktop-text-primary">{doc.path}</span>
+              </div>
+            ))}
+
+            {/* design/tasks/bugfix - shown on expand */}
+            {isExpanded && otherDocs.map((doc) => (
+              <div key={doc.path} className="ml-5 flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[10px]">
+                <SpecTypeTag type={doc.type} />
+                <span className="min-w-0 truncate font-mono text-desktop-text-primary">{doc.path}</span>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function FlatSpecList({ specs }: { specs: SpecSource["children"] }) {
+  return (
+    <div className="space-y-0.5">
+      {specs.map((spec) => (
+        <div key={spec.path} className="flex items-center gap-2 rounded px-1.5 py-0.5 text-[10px] hover:bg-desktop-bg-secondary/60">
+          <SpecTypeTag type={spec.type} />
+          <span className="min-w-0 truncate font-mono text-desktop-text-primary">{spec.path}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SpecSourceCard({ source, expanded, onToggle }: { source: SpecSource; expanded: boolean; onToggle: () => void }) {
   const icon = SYSTEM_ICONS[source.system] ?? source.system.charAt(0).toUpperCase();
-  const artifactCount = source.children.length;
+  const specCount = source.children.length;
+  const hasFeatures = source.features && source.features.length > 0;
 
   return (
     <div className={`rounded-xl border transition-colors ${
@@ -113,10 +208,10 @@ function SpecSourceCard({ source, expanded, onToggle }: { source: SpecSource; ex
     }`}>
       <button
         type="button"
-        className="flex w-full items-start gap-3 px-3 py-2.5 text-left"
+        className="flex w-full items-start gap-3 px-3 py-2 text-left"
         onClick={onToggle}
       >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-desktop-border bg-desktop-bg-secondary text-[11px] font-bold text-desktop-text-primary">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-desktop-border bg-desktop-bg-secondary text-[10px] font-bold text-desktop-text-primary">
           {icon}
         </div>
         <div className="min-w-0 flex-1">
@@ -125,7 +220,7 @@ function SpecSourceCard({ source, expanded, onToggle }: { source: SpecSource; ex
             <KindBadge kind={source.kind} />
             <ConfidenceBadge confidence={source.confidence} />
           </div>
-          <div className="mt-1 flex items-center gap-2">
+          <div className="mt-0.5 flex items-center gap-2">
             <StatusBadge status={source.status} />
             <span className="text-[10px] text-desktop-text-secondary">
               {source.rootPath}
@@ -133,9 +228,9 @@ function SpecSourceCard({ source, expanded, onToggle }: { source: SpecSource; ex
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {artifactCount > 0 && (
+          {specCount > 0 && (
             <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2 py-0.5 text-[10px] text-desktop-text-secondary">
-              {artifactCount} artifact{artifactCount !== 1 ? "s" : ""}
+              {specCount} spec{specCount !== 1 ? "s" : ""}
             </span>
           )}
           <svg
@@ -151,46 +246,18 @@ function SpecSourceCard({ source, expanded, onToggle }: { source: SpecSource; ex
       </button>
 
       {expanded && (
-        <div className="border-t border-desktop-border px-3 py-2.5">
-          {/* Evidence */}
-          {source.evidence.length > 0 && (
-            <div className="mb-2">
-              <div className="text-[9px] font-semibold uppercase tracking-wider text-desktop-text-secondary">Evidence</div>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {source.evidence.map((ev) => (
-                  <span
-                    key={ev}
-                    className="inline-flex rounded border border-desktop-border bg-desktop-bg-secondary px-1.5 py-0.5 font-mono text-[9px] text-desktop-text-secondary"
-                  >
-                    {ev}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Artifacts */}
-          {source.children.length > 0 && (
-            <div>
-              <div className="text-[9px] font-semibold uppercase tracking-wider text-desktop-text-secondary">Artifacts</div>
-              <div className="mt-1 space-y-0.5">
-                {source.children.map((artifact) => (
-                  <div key={artifact.path} className="flex items-center gap-2 rounded px-1.5 py-1 text-[10px] hover:bg-desktop-bg-secondary/60">
-                    <ArtifactTypeTag type={artifact.type} />
-                    <span className="min-w-0 truncate font-mono text-desktop-text-primary">{artifact.path}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {source.children.length === 0 && source.status === "installed-only" && (
+        <div className="max-h-80 overflow-y-auto border-t border-desktop-border px-3 py-2">
+          {hasFeatures ? (
+            <KiroFeatureTree features={source.features!} />
+          ) : source.children.length > 0 ? (
+            <FlatSpecList specs={source.children} />
+          ) : source.status === "installed-only" ? (
             <div className="rounded-lg border border-sky-200 bg-sky-50/50 px-2.5 py-2 text-[10px] text-sky-700">
               {source.system === "qoder"
-                ? "Qoder integration detected. No official native spec directory confirmed."
-                : `${source.system} integration detected, but no spec artifacts found.`}
+                ? "Qoder integration detected. No spec documents found."
+                : `${source.system} integration detected, but no spec documents found.`}
             </div>
-          )}
+          ) : null}
         </div>
       )}
     </div>
@@ -239,7 +306,7 @@ export function HarnessSpecSourcesPanel({
   const sources = data?.sources ?? [];
   const { nativeTools, frameworks, integrations, legacy } = groupSourcesByCategory(sources);
 
-  const totalArtifacts = sources.reduce((sum, s) => sum + s.children.length, 0);
+  const totalSpecs = sources.reduce((sum, s) => sum + s.children.length, 0);
   const highConfidenceCount = sources.filter((s) => s.confidence === "high").length;
 
   const isCompact = variant === "compact";
@@ -255,7 +322,7 @@ export function HarnessSpecSourcesPanel({
             <span className="text-[10px] text-desktop-text-secondary">Loading...</span>
           ) : (
             <span className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2 py-0.5 text-[10px] text-desktop-text-secondary">
-              {sources.length} source{sources.length !== 1 ? "s" : ""} · {totalArtifacts} artifact{totalArtifacts !== 1 ? "s" : ""}
+              {sources.length} source{sources.length !== 1 ? "s" : ""} · {totalSpecs} spec{totalSpecs !== 1 ? "s" : ""}
             </span>
           )}
         </div>
@@ -306,7 +373,7 @@ export function HarnessSpecSourcesPanel({
                   {sources.length} source{sources.length !== 1 ? "s" : ""}
                 </span>
                 <span className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
-                  {totalArtifacts} artifact{totalArtifacts !== 1 ? "s" : ""}
+                  {totalSpecs} spec{totalSpecs !== 1 ? "s" : ""}
                 </span>
                 {highConfidenceCount > 0 && (
                   <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] text-emerald-700">
