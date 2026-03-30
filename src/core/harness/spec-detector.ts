@@ -5,6 +5,7 @@ import type {
   SpecArtifactType,
   SpecConfidence,
   SpecDetectionResponse,
+  SpecFeature,
   SpecSource,
   SpecStatus,
 } from "./spec-detector-types";
@@ -70,6 +71,15 @@ function inferArtifactType(fileName: string): SpecArtifactType {
   return mapping[lower] ?? "other";
 }
 
+function readJsonFile(filePath: string): Record<string, unknown> | null {
+  try {
+    const content = fs.readFileSync(filePath, "utf-8");
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+
 // ----- Kiro -----
 
 function detectKiro(repoRoot: string): SpecSource[] {
@@ -78,27 +88,51 @@ function detectKiro(repoRoot: string): SpecSource[] {
   const kiroRoot = path.join(repoRoot, ".kiro");
 
   if (dirExists(kiroSpecsDir)) {
-    const features = listDirs(kiroSpecsDir);
-    const artifacts: SpecArtifact[] = [];
+    const featureDirs = listDirs(kiroSpecsDir);
+    const allArtifacts: SpecArtifact[] = [];
+    const features: SpecFeature[] = [];
     const evidence: string[] = [];
 
-    for (const feature of features) {
+    for (const feature of featureDirs) {
       const featureDir = path.join(kiroSpecsDir, feature);
       const files = listFiles(featureDir);
+      const documents: SpecArtifact[] = [];
+
       for (const file of files) {
         if (file.endsWith(".md")) {
-          artifacts.push({
+          const artifact: SpecArtifact = {
             type: inferArtifactType(file),
             path: relPath(repoRoot, path.join(featureDir, file)),
-          });
+          };
+          documents.push(artifact);
+          allArtifacts.push(artifact);
         }
       }
+
+      // Parse .config.kiro for feature metadata
+      let configKiro: SpecFeature["configKiro"];
+      const configPath = path.join(featureDir, ".config.kiro");
+      if (fileExists(configPath)) {
+        const parsed = readJsonFile(configPath);
+        if (parsed) {
+          configKiro = {
+            specId: String(parsed.specId ?? ""),
+            workflowType: parsed.workflowType ? String(parsed.workflowType) : undefined,
+            specType: parsed.specType ? String(parsed.specType) : undefined,
+          };
+        }
+      }
+
+      if (documents.length > 0 || configKiro) {
+        features.push({ name: feature, configKiro, documents });
+      }
+
       if (files.length > 0) {
         evidence.push(`.kiro/specs/${feature}/ (${files.length} files)`);
       }
     }
 
-    if (artifacts.length > 0) {
+    if (allArtifacts.length > 0) {
       sources.push({
         kind: "native-tool",
         system: "kiro",
@@ -106,7 +140,8 @@ function detectKiro(repoRoot: string): SpecSource[] {
         confidence: "high",
         status: "artifacts-present",
         evidence,
-        children: artifacts,
+        children: allArtifacts,
+        features,
       });
     } else {
       sources.push({
@@ -155,6 +190,29 @@ function detectQoder(repoRoot: string): SpecSource[] {
 
   if (!dirExists(qoderRoot)) return sources;
 
+  // Check for native spec artifacts in .qoder/specs/
+  const qoderSpecsDir = path.join(qoderRoot, "specs");
+  if (dirExists(qoderSpecsDir)) {
+    const specFiles = listFiles(qoderSpecsDir).filter((f) => f.endsWith(".md"));
+    if (specFiles.length > 0) {
+      const artifacts: SpecArtifact[] = specFiles.map((f) => ({
+        type: inferArtifactType(f),
+        path: relPath(repoRoot, path.join(qoderSpecsDir, f)),
+      }));
+      const evidence = specFiles.map((f) => `.qoder/specs/${f}`);
+      sources.push({
+        kind: "native-tool",
+        system: "qoder",
+        rootPath: relPath(repoRoot, qoderSpecsDir),
+        confidence: "high",
+        status: "artifacts-present",
+        evidence,
+        children: artifacts,
+      });
+    }
+  }
+
+  // Check for integration dirs (commands, skills, rules)
   const integrationDirs = ["commands", "skills", "rules"];
   const foundIntegrations: string[] = [];
   for (const dir of integrationDirs) {

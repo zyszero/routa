@@ -30,6 +30,18 @@ export type SpecArtifact = {
   path: string;
 };
 
+export type KiroConfig = {
+  specId: string;
+  workflowType?: string;
+  specType?: string;
+};
+
+export type SpecFeature = {
+  name: string;
+  configKiro?: KiroConfig;
+  documents: SpecArtifact[];
+};
+
 export type SpecSource = {
   kind: SpecSourceKind;
   system: SpecSystem;
@@ -38,6 +50,7 @@ export type SpecSource = {
   status: SpecStatus;
   evidence: string[];
   children: SpecArtifact[];
+  features?: SpecFeature[];
 };
 
 export type SpecDetectionResponse = {

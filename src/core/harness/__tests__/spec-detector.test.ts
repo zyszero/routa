@@ -26,10 +26,14 @@ describe("detectSpecSources", () => {
 
   // -- Kiro --
 
-  it("detects Kiro native spec with artifacts", () => {
+  it("detects Kiro native spec with artifacts and features", () => {
     writeFile(path.join(tmpDir, ".kiro/specs/auth/requirements.md"), "# Auth requirements");
     writeFile(path.join(tmpDir, ".kiro/specs/auth/design.md"), "# Auth design");
     writeFile(path.join(tmpDir, ".kiro/specs/auth/tasks.md"), "# Auth tasks");
+    writeFile(
+      path.join(tmpDir, ".kiro/specs/auth/.config.kiro"),
+      JSON.stringify({ specId: "abc123", workflowType: "design-first", specType: "feature" }),
+    );
 
     const result = detectSpecSources(tmpDir);
     const kiroSource = result.sources.find((s) => s.system === "kiro" && s.kind === "native-tool");
@@ -41,6 +45,16 @@ describe("detectSpecSources", () => {
     expect(kiroSource!.children.map((c) => c.type)).toContain("requirements");
     expect(kiroSource!.children.map((c) => c.type)).toContain("design");
     expect(kiroSource!.children.map((c) => c.type)).toContain("tasks");
+
+    // 3-tier hierarchy
+    expect(kiroSource!.features).toBeDefined();
+    expect(kiroSource!.features!.length).toBe(1);
+    expect(kiroSource!.features![0].name).toBe("auth");
+    expect(kiroSource!.features![0].documents.length).toBe(3);
+    expect(kiroSource!.features![0].configKiro).toBeDefined();
+    expect(kiroSource!.features![0].configKiro!.specId).toBe("abc123");
+    expect(kiroSource!.features![0].configKiro!.workflowType).toBe("design-first");
+    expect(kiroSource!.features![0].configKiro!.specType).toBe("feature");
   });
 
   it("detects Kiro integration-only when no specs exist", () => {
@@ -70,7 +84,27 @@ describe("detectSpecSources", () => {
 
   // -- Qoder --
 
-  it("detects Qoder as integration-only", () => {
+  it("detects Qoder native specs in .qoder/specs/", () => {
+    writeFile(path.join(tmpDir, ".qoder/specs/my-feature.md"), "# My feature spec");
+    writeFile(path.join(tmpDir, ".qoder/specs/another-feature.md"), "# Another feature");
+    mkdirp(path.join(tmpDir, ".qoder/commands"));
+
+    const result = detectSpecSources(tmpDir);
+    const nativeSource = result.sources.find((s) => s.system === "qoder" && s.kind === "native-tool");
+
+    expect(nativeSource).toBeDefined();
+    expect(nativeSource!.confidence).toBe("high");
+    expect(nativeSource!.status).toBe("artifacts-present");
+    expect(nativeSource!.children.length).toBe(2);
+    expect(nativeSource!.evidence).toContain(".qoder/specs/my-feature.md");
+
+    // Should also detect integration
+    const integrationSource = result.sources.find((s) => s.system === "qoder" && s.kind === "tool-integration");
+    expect(integrationSource).toBeDefined();
+    expect(integrationSource!.status).toBe("installed-only");
+  });
+
+  it("detects Qoder as integration-only when no specs exist", () => {
     mkdirp(path.join(tmpDir, ".qoder/commands"));
     mkdirp(path.join(tmpDir, ".qoder/skills"));
     mkdirp(path.join(tmpDir, ".qoder/rules"));
