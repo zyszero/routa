@@ -1447,6 +1447,9 @@ describe("KanbanTab agent prompt flow", () => {
         systemPrompt: expect.stringContaining("You are the KanbanTask Agent"),
       }),
     );
+    await waitFor(() => {
+      expect(screen.queryByDisplayValue("Investigate lane issue")).toBeNull();
+    });
 
   });
 
@@ -1495,5 +1498,6 @@ describe("KanbanTab agent prompt flow", () => {
         systemPrompt: expect.stringContaining("你是当前工作区的看板任务代理"),
       }),
     );
+    expect(screen.getByDisplayValue("调查 lane 问题")).toBeTruthy();
   });
 });

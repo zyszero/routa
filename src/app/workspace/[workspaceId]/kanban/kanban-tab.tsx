@@ -284,11 +284,12 @@ export function KanbanTab({
         mcpProfile: "kanban-planning",
         systemPrompt: planningPrompt,
       });
-      if (sessionId) {
-        openAgentPanel(sessionId);
-        scheduleKanbanRefreshBurst(onRefresh);
-      }
+      if (!sessionId) return;
+      openAgentPanel(sessionId);
+      scheduleKanbanRefreshBurst(onRefresh);
       setAgentInput("");
+    } catch (error) {
+      console.error("[kanban] Failed to submit Kanban agent prompt:", error);
     } finally {
       setAgentLoading(false);
     }

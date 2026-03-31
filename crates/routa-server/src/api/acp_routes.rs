@@ -400,9 +400,7 @@ async fn acp_rpc(
 
             let launch_options = SessionLaunchOptions {
                 specialist_id: specialist_id.clone(),
-                specialist_system_prompt: specialist
-                    .as_ref()
-                    .and_then(build_specialist_system_prompt),
+                specialist_system_prompt: params.get("systemPrompt").and_then(|v| v.as_str()).map(str::trim).filter(|prompt| !prompt.is_empty()).map(str::to_string).or_else(|| specialist.as_ref().and_then(build_specialist_system_prompt)),
                 allowed_native_tools: derive_allowed_native_tools(specialist_id.as_deref()),
                 ..SessionLaunchOptions::default()
             };
@@ -629,9 +627,7 @@ async fn acp_rpc(
                     .or(Some("CRAFTER".to_string()));
                 let launch_options = SessionLaunchOptions {
                     specialist_id: specialist_id.clone(),
-                    specialist_system_prompt: specialist
-                        .as_ref()
-                        .and_then(build_specialist_system_prompt),
+                    specialist_system_prompt: params.get("systemPrompt").and_then(|v| v.as_str()).map(str::trim).filter(|prompt| !prompt.is_empty()).map(str::to_string).or_else(|| specialist.as_ref().and_then(build_specialist_system_prompt)),
                     allowed_native_tools: derive_allowed_native_tools(specialist_id.as_deref()),
                     ..SessionLaunchOptions::default()
                 };

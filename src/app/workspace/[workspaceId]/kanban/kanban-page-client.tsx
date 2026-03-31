@@ -401,7 +401,16 @@ export function KanbanPageClient() {
 
     const defaultCodebase = codebases.find((c) => c.isDefault) ?? codebases[0];
     const cwd = defaultCodebase?.repoPath;
-    const provider = options?.provider ?? acp.selectedProvider ?? undefined;
+    const preferredProvider = options?.provider ?? acp.selectedProvider ?? undefined;
+    const provider = acp.providers.find(
+      (candidate) => candidate.id === preferredProvider && candidate.status !== "unavailable",
+    )?.id
+      ?? acp.providers.find((candidate) => candidate.status !== "unavailable")?.id
+      ?? preferredProvider;
+
+    if (provider && provider !== acp.selectedProvider) {
+      acp.setProvider(provider);
+    }
 
     const result = await acp.createSession(
       cwd,
