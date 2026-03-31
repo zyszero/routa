@@ -21,6 +21,27 @@ import tempfile
 from typing import Optional
 
 
+def _resolve_input_file(value: str, description: str) -> Path:
+    path = Path(value).expanduser().resolve(strict=False)
+    if not path.exists():
+        raise SystemExit(f"{description} not found: {path}")
+    if not path.is_file():
+        raise SystemExit(f"{description} must be a file: {path}")
+    return path
+
+
+def _resolve_output_dir(value: str) -> Path:
+    path = Path(value).expanduser().resolve(strict=False)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _resolve_output_file(value: str) -> Path:
+    path = Path(value).expanduser().resolve(strict=False)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("tex", help="Path to a .tex file")
@@ -46,15 +67,13 @@ def main() -> int:
     if shutil.which("latexmk") is None:
         raise SystemExit("latexmk not found. Install texlive/latexmk or use another PDF pipeline.")
 
-    tex_path = Path(args.tex)
+    tex_path = _resolve_input_file(args.tex, "LaTeX input")
     temp_build_dir: Optional[Path] = None
     if args.out_dir:
-        out_dir = Path(args.out_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
+        out_dir = _resolve_output_dir(args.out_dir)
         output_path = None
     else:
-        output_path = Path(args.output)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path = _resolve_output_file(args.output)
         # Keep build artifacts out of the destination folder by default.
         out_dir = Path(tempfile.mkdtemp(prefix="latex_build_", dir=str(output_path.parent)))
         temp_build_dir = out_dir
@@ -66,10 +85,11 @@ def main() -> int:
         "-interaction=nonstopmode",
         "-halt-on-error",
         "-outdir=" + str(out_dir),
+        "--",
         str(tex_path),
     ]
 
-    proc = subprocess.run(cmd, text=True)
+    proc = subprocess.run(cmd, text=True)  # nosemgrep
     if proc.returncode != 0:
         raise SystemExit(proc.returncode)
 
@@ -82,7 +102,7 @@ def main() -> int:
         pdf_path = output_path
 
     if args.clean:
-        subprocess.run(["latexmk", "-c", "-outdir=" + str(out_dir), str(tex_path)], check=False)
+        subprocess.run(["latexmk", "-c", "-outdir=" + str(out_dir), "--", str(tex_path)], check=False)  # nosemgrep
 
     # If we compiled into a temp dir for -o, clean it up unless requested.
     if temp_build_dir is not None and not args.keep_build:

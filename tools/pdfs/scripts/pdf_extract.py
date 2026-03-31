@@ -31,6 +31,8 @@ import json
 import os
 import re
 import subprocess
+import sys
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -596,13 +598,18 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.cmd == "info":
-        # Delegate to pdf_inspect for consistency
-        cmd = ["python", str(Path(__file__).with_name("pdf_inspect.py")), args.input_pdf]
-        if args.password:
-            cmd += ["--password", args.password]
+        from pdf_inspect import _print_human, inspect_pdf
+
+        input_pdf = Path(args.input_pdf)
+        if not input_pdf.exists():
+            print(f"ERROR: not found: {input_pdf}", file=sys.stderr)
+            return 2
+        summary = inspect_pdf(input_pdf, password=args.password)
         if args.json:
-            cmd += ["--json"]
-        return subprocess.call(cmd)
+            print(json.dumps(asdict(summary), indent=2, ensure_ascii=True))
+        else:
+            _print_human(summary)
+        return 0
 
     if args.cmd == "text":
         return cmd_text(args)

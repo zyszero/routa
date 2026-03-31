@@ -628,19 +628,6 @@ fn detect_bmad(repo_root: &Path) -> Vec<SpecSource> {
                 }
             }
 
-            let adr_dir = docs_dir.join("adr");
-            if dir_exists(&adr_dir) {
-                for file in list_files(&adr_dir) {
-                    if file.to_lowercase().ends_with(".md") {
-                        artifacts.push(SpecArtifact {
-                            artifact_type: "design".to_string(),
-                            path: format!("docs/adr/{file}"),
-                        });
-                        evidence.push(format!("docs/adr/{file}"));
-                    }
-                }
-            }
-
             for dir_name in &["prd", "PRD"] {
                 let prd_dir = docs_dir.join(dir_name);
                 if dir_exists(&prd_dir) {
@@ -992,6 +979,16 @@ mod tests {
             .unwrap();
         assert_eq!(bmad.confidence, "high");
         assert_eq!(bmad.status, "artifacts-present");
+    }
+
+    #[test]
+    fn ignores_adr_only_repos_for_bmad_legacy_detection() {
+        let tmp = setup();
+        let root = tmp.path();
+        write_file(&root.join("docs/adr/0001-example.md"), "# ADR");
+
+        let report = detect_spec_sources(root).unwrap();
+        assert!(!report.sources.iter().any(|s| s.system == "bmad"));
     }
 
     #[test]

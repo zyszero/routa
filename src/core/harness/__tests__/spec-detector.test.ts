@@ -257,6 +257,15 @@ describe("detectSpecSources", () => {
     expect(bmadSource!.evidence).toContain(".claude/skills/bmad-planner/");
   });
 
+  it("does not treat ADR markdown alone as BMAD legacy evidence", () => {
+    writeFile(path.join(tmpDir, "docs/adr/0001-example.md"), "# ADR");
+
+    const result = detectSpecSources(tmpDir);
+    const bmadSource = result.sources.find((s) => s.system === "bmad");
+
+    expect(bmadSource).toBeUndefined();
+  });
+
   // -- Multiple sources --
 
   it("supports multiple sources coexisting", () => {

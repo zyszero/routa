@@ -537,14 +537,6 @@ function detectBmad(repoRoot: string): SpecSource[] {
         }
       }
 
-      const adrDir = path.join(docsDir, "adr");
-      if (dirExists(adrDir)) {
-        for (const file of listFiles(adrDir).filter((entry) => entry.toLowerCase().endsWith(".md"))) {
-          artifacts.push({ type: "design", path: `docs/adr/${file}` });
-          evidence.push(`docs/adr/${file}`);
-        }
-      }
-
       for (const dirName of ["prd", "PRD"]) {
         if (dirExists(path.join(docsDir, dirName))) {
           for (const file of listFiles(path.join(docsDir, dirName))) {

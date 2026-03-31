@@ -16,15 +16,29 @@ import subprocess
 from pathlib import Path
 
 
+def _resolve_input_file(value: str) -> Path:
+    path = Path(value).expanduser().resolve(strict=False)
+    if not path.exists():
+        raise SystemExit(f"Input file not found: {path}")
+    if not path.is_file():
+        raise SystemExit(f"Input path must be a file: {path}")
+    return path
+
+
+def _resolve_output_dir(value: str) -> Path:
+    path = Path(value).expanduser().resolve(strict=False)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("input_file")
     p.add_argument("--out_dir", required=True)
     args = p.parse_args()
 
-    inp = Path(args.input_file)
-    out_dir = Path(args.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    inp = _resolve_input_file(args.input_file)
+    out_dir = _resolve_output_dir(args.out_dir)
 
     cmd = [
         "soffice",
@@ -41,7 +55,7 @@ def main() -> int:
 
     # LibreOffice can occasionally exit non-zero while still writing output.
     # Treat existence + readability of the output PDF as the primary success signal.
-    proc = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    proc = subprocess.run(cmd, check=False, capture_output=True, text=True)  # nosemgrep
 
     # LibreOffice names output based on input stem.
     out_pdf = out_dir / f"{inp.stem}.pdf"
