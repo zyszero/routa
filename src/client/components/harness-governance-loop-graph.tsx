@@ -451,7 +451,7 @@ function buildGraph(args: {
         ? `${metricCount} metrics / ${hardGateCount} hard gates`
         : hookSummary
           ? `pre-push / ${hookSummary.phaseCount} phases`
-          : "pre-push / execution plan",
+          : "pre-push / Entrix Fitness",
       active: true,
       ...buildSelectionState("precommit", true),
     }),
@@ -641,7 +641,7 @@ function buildDetailSections(args: {
       return [
         { title: "Fitness", items: [`tier ${selectedTier}`, `${dimensionCount} dimensions`, `${metricCount} metrics`, `${hardGateCount} hard gates`] },
         { title: "Hook phases", items: uniquePhases.length ? uniquePhases : ["当前页未发现 phase"] },
-        { title: "Related surface", items: ["Execution plan", "Hook systems panel"] },
+        { title: "Related surface", items: ["Entrix Fitness", "Hook systems panel"] },
       ] satisfies LoopDetailSection[];
     case "post-commit":
       return [
@@ -677,7 +677,7 @@ function buildDetailSections(args: {
     default:
       return [
         { title: "Current page signals", items: ["亮色节点可点击，Unavailable 节点会直接说明缺失的信号或面板", "点击 `编码实现`、`本地验证`、`变更门禁`、`代码评审`、`持续交付` 或 `制品发布` 查看上下文"] },
-        { title: "Connected panels", items: ["Instruction file", "Execution plan", "Review triggers", "CI/CD", "Repo signals"] },
+        { title: "Connected panels", items: ["Instruction file - CLAUDE.md", "Entrix Fitness", "Review triggers", "CI/CD", "Repo signals"] },
       ] satisfies LoopDetailSection[];
   }
 }

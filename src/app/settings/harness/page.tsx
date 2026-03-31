@@ -254,7 +254,7 @@ export default function HarnessSettingsPage() {
             <div className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80 p-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">Connected surfaces</div>
               <div className="mt-2 flex flex-wrap gap-2">
-                {["Instruction file", "Hook systems", "Execution plan", "CI/CD"].map((label) => (
+                {["Instruction file - CLAUDE.md", "Hook systems", "Entrix Fitness", "CI/CD"].map((label) => (
                   <span key={label} className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-[10px] text-desktop-text-primary">
                     {label}
                   </span>
@@ -333,7 +333,7 @@ export default function HarnessSettingsPage() {
       <div className="space-y-4">
         <SettingsPageHeader
           title="Harness"
-          description="把 Spec Sources、Instruction file、Hook systems、Review triggers、Fitness files 与 CI/CD 串成一张仓库治理总览。"
+          description="把 Spec Sources、Instruction file - CLAUDE.md、Hook systems、Review triggers、Entrix Fitness 与 CI/CD 串成一张仓库治理总览。"
           metadata={[
             { label: "fitness", value: specsState.loading ? "..." : `${dimensionSpecs.length} dimensions` },
             { label: "dispatch", value: planState.loading ? "..." : `${planState.data?.metricCount ?? 0} metrics` },
@@ -457,7 +457,7 @@ export default function HarnessSettingsPage() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Discovery</div>
-                  <h3 className="mt-1 text-sm font-semibold text-desktop-text-primary">Fitness files</h3>
+                  <h3 className="mt-1 text-sm font-semibold text-desktop-text-primary">Entrix Fitness</h3>
                 </div>
                 <div className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
                   {specFiles.length} items

@@ -297,7 +297,7 @@ function buildPlanGraph(
   nodes.push(
     buildNode("root", rootX, stageY, {
       kind: "root",
-      title: "Execution Plan",
+      title: "Entrix Fitness",
       subtitle: `${plan.dimensionCount} dimensions · ${plan.metricCount} metrics`,
       meta: [`tier ${plan.tier}`, `scope ${plan.scope}`, `${plan.hardGateCount} hard gates`],
     }),
@@ -569,7 +569,7 @@ export function HarnessExecutionPlanFlow({
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Execution plan</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Entrix Fitness</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="rounded-full border border-desktop-border bg-desktop-bg-primary p-0.5">

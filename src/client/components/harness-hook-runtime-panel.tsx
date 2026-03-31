@@ -116,7 +116,7 @@ export function HarnessHookRuntimePanel({
 
   const description = "Runtime hooks invoked in local hook workflows.";
 
-  const systemAction = <span className="text-[10px] text-desktop-text-secondary">Runtime</span>;
+  const systemAction = <span className="text-[10px] text-desktop-text-secondary">Hook systems</span>;
 
   if (resolvedState.loading) {
     return (

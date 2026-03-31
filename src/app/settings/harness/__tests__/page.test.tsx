@@ -176,7 +176,7 @@ vi.mock("@/client/components/harness-agent-instructions-panel", () => ({
     onAuditRerun?: () => void;
   }) => (
     <div data-testid={`instruction-panel-${variant}`}>
-      <span>Instruction file</span>
+      <span>Instruction file - CLAUDE.md</span>
       {onAuditRerun ? (
         <button type="button" onClick={onAuditRerun}>
           rerun-audit-{variant}
@@ -222,7 +222,7 @@ vi.mock("@/client/components/harness-hook-runtime-panel", () => ({
 
 vi.mock("@/client/components/harness-agent-hook-panel", () => ({
   HarnessAgentHookPanel: ({ variant = "full" }: { variant?: "full" | "compact" }) => (
-    <div data-testid={`agent-hook-panel-${variant}`}>Agent hook system</div>
+    <div data-testid={`agent-hook-panel-${variant}`}>Hook systems</div>
   ),
 }));
 
@@ -297,7 +297,7 @@ describe("HarnessSettingsPage", () => {
 
     expect(screen.getByTestId("selected-node-id").textContent).toBe("build");
     expect(screen.getByTestId("context-panel-state").textContent).toBe("present");
-    expect(screen.getAllByText("Instruction file")).toHaveLength(2);
+    expect(screen.getAllByText("Instruction file - CLAUDE.md")).toHaveLength(2);
     expect(screen.getByTestId("instruction-panel-full")).not.toBeNull();
     expect(screen.getByTestId("instruction-panel-compact")).not.toBeNull();
   });

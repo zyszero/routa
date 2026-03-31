@@ -99,7 +99,7 @@ export function HarnessAgentHookPanel({
     : agentHooksState;
 
   const description = "Policy hooks that configure agent-side runtime behavior.";
-  const systemAction = <span className="text-[10px] text-desktop-text-secondary">Agent runtime</span>;
+  const systemAction = <span className="text-[10px] text-desktop-text-secondary">Hook systems</span>;
 
   if (resolvedState.loading) {
     return (

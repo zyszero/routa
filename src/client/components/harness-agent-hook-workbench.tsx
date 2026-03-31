@@ -479,8 +479,8 @@ export function HarnessAgentHookWorkbench({
       <section className="rounded-2xl border border-desktop-border bg-desktop-bg-secondary/55 p-3 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Agent hook system</div>
-            <h3 className="mt-0.5 text-sm font-semibold text-desktop-text-primary">Agent Hook Workbench</h3>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Hook systems</div>
+            <h3 className="mt-0.5 text-sm font-semibold text-desktop-text-primary">Hook Systems Workbench</h3>
           </div>
           <div className="flex gap-2">
             <span className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2.5 py-1 text-[10px] text-desktop-text-secondary">

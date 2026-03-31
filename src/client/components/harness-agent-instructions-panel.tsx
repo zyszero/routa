@@ -403,10 +403,10 @@ export function HarnessAgentInstructionsPanel({
 
   return (
     <HarnessSectionCard
-      eyebrow="Instruction file"
+      eyebrow="Instruction file - CLAUDE.md"
       title={resolvedInstructionsState.data?.fileName ?? "CLAUDE.md / AGENTS.md"}
       actions={headerActions}
-      description={`Governance instruction entry file for ${repoLabel}.`}
+      description="Repository-level instruction file that defines governance and automation preferences for harness analysis."
       variant={variant}
     >
 

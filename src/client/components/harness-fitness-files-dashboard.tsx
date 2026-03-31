@@ -70,8 +70,8 @@ export function HarnessFitnessFilesDashboard({
 
   return (
     <HarnessSectionCard
-      title="Fitness files"
-      description="Spec-derived radar score from `docs/fitness`."
+      title="Entrix Fitness"
+      description="Entrix fitness manifest and dimension scoring surfaces."
       variant="full"
       actions={
         loading ? <span className="text-[10px] text-desktop-text-secondary">Loading...</span> : null
