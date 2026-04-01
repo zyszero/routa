@@ -15,15 +15,29 @@ vi.mock("../specialist-review.js", () => ({
   runReviewTriggerSpecialist: runReviewTriggerSpecialistMock,
 }));
 
-vi.mock("../../../../src/core/harness/codeowners", () => ({
-  loadCodeownersRules: loadCodeownersRulesMock,
-  resolveOwnership: resolveOwnershipMock,
-  buildOwnershipRoutingContext: buildOwnershipRoutingContextMock,
-}));
+vi.mock("../../../../src/core/harness/codeowners", () => {
+  const mockModule = {
+    loadCodeownersRules: loadCodeownersRulesMock,
+    resolveOwnership: resolveOwnershipMock,
+    buildOwnershipRoutingContext: buildOwnershipRoutingContextMock,
+  };
 
-vi.mock("../../../../src/core/harness/review-triggers", () => ({
-  loadReviewTriggerRules: loadReviewTriggerRulesMock,
-}));
+  return {
+    ...mockModule,
+    default: mockModule,
+  };
+});
+
+vi.mock("../../../../src/core/harness/review-triggers", () => {
+  const mockModule = {
+    loadReviewTriggerRules: loadReviewTriggerRulesMock,
+  };
+
+  return {
+    ...mockModule,
+    default: mockModule,
+  };
+});
 
 import { runReviewTriggerPhase } from "../review.js";
 
