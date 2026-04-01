@@ -193,30 +193,22 @@ export function DesktopSidebar({
       }`}
       data-testid="desktop-shell-sidebar"
     >
-      <div className={`border-b border-desktop-border px-2 py-2 ${collapsed ? "relative" : "flex items-center justify-between gap-2"}`}>
+      <div className={`border-b border-desktop-border px-2 py-2 ${collapsed ? "flex items-center justify-center" : "flex items-center justify-between gap-2"}`}>
         {!collapsed ? (
           <Link
             href="/"
-            className="flex items-center gap-1.5 rounded-xl px-2 py-1 text-[11px] font-semibold text-desktop-text-primary hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+            className="flex items-center gap-1.5 rounded-xl px-2 py-1 text-sm font-semibold text-desktop-text-primary hover:bg-desktop-bg-active hover:text-desktop-text-primary"
             title="Routa"
           >
             <Image src="/logo.svg" alt="Routa" width={18} height={18} className="rounded-md" />
             <span>Routa</span>
           </Link>
-        ) : (
-          <Link
-            href="/"
-            className="absolute left-2 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-xl p-1 text-desktop-text-primary"
-            title="Routa"
-          >
-            <Image src="/logo.svg" alt="Routa" width={18} height={18} className="rounded-md" />
-          </Link>
-        )}
+        ) : null}
         <button
           type="button"
           onClick={onToggleCollapse}
           className={`flex items-center rounded-xl text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary ${
-            collapsed ? "mx-auto h-10 w-10 justify-center" : "h-10 w-10 justify-center"
+            collapsed ? "h-10 w-10 justify-center" : "h-10 w-10 justify-center"
           }`}
           title={collapsed ? t.nav.openSidebar : t.nav.closeSidebar}
           aria-label={collapsed ? t.nav.openSidebar : t.nav.closeSidebar}
