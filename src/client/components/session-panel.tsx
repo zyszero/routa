@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import { desktopAwareFetch } from "../utils/diagnostics";
 import { useTranslation } from "@/i18n";
+import { Folder, Zap } from "lucide-react";
+
 
 export interface SessionInfo {
   sessionId: string;
@@ -167,9 +169,7 @@ export function SessionPanel({
           workspaceGroups.map((group) => (
             <div key={group.id} className="bg-slate-50 dark:bg-slate-900/30 rounded-lg border border-slate-200 dark:border-slate-800">
               <div className="px-3 py-2 flex items-center gap-2 border-b border-slate-200 dark:border-slate-800">
-                <svg className="w-3 h-3 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
-                </svg>
+                <Folder className="w-3 h-3 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
                 <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{group.title}</span>
                 <span className="ml-auto text-[10px] text-slate-400">{group.sessions.length}</span>
               </div>
@@ -353,9 +353,7 @@ function SessionItem({
   const { t } = useTranslation();
   const isChild = indent > 0;
   const roleIcon = isChild ? (
-    <svg className="w-3 h-3 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-    </svg>
+    <Zap className="w-3 h-3 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
   ) : null;
 
   return (

@@ -6,6 +6,8 @@ import {TaskProgressBar, TaskInfo} from "@/client/components/task-progress-bar";
 import {summarizeToolOutput, ToolInputTable, ToolOutputView} from "@/client/components/tool-call-content";
 import {normalizeThoughtContent} from "@/client/components/chat-panel/thought-content";
 import { inferToolDisplayName } from "@/client/components/tool-display-name";
+import { ChevronDown, ChevronRight, FileText, Search, SquarePen } from "lucide-react";
+
 
 interface AskUserQuestionOption {
     label: string;
@@ -148,12 +150,7 @@ function ThoughtBubble({content}: { content: string }) {
         <div className="w-full">
             <button type="button" onClick={() => setExpanded((e) => !e)} className="w-full text-left group">
                 <div className="flex items-center gap-1.5 mb-0.5">
-                    <svg
-                        className={`w-3 h-3 text-slate-400 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
-                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                    >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
-                    </svg>
+                    <ChevronRight className={`w-3 h-3 text-slate-400 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
                     <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                         Thinking
                     </span>
@@ -233,27 +230,21 @@ function getToolIcon(kind?: string, toolName?: string): React.ReactNode {
         // Read file - Document icon
         case "read-file":
             return (
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
+                <FileText className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
             );
 
         // Edit/Write file - Pencil icon
         case "edit-file":
         case "write-file":
             return (
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
+                <SquarePen className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
             );
 
         // Glob/Grep - Search icon
         case "glob":
         case "grep":
             return (
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+                <Search className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
             );
 
         // Web operations - Globe icon
@@ -396,12 +387,7 @@ function ToolBubble({
                         {outputSummary}
                     </span>
                 )}
-                <svg
-                    className={`w-2.5 h-2.5 text-slate-400 transition-transform duration-150 shrink-0 ${expanded ? "rotate-90" : ""}`}
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
-                </svg>
+                <ChevronRight className={`w-2.5 h-2.5 text-slate-400 transition-transform duration-150 shrink-0 ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
             </button>
             {expanded && (hasInput || hasOutput) && (
                 <div className={`mt-1 ml-4 rounded-md border ${styling.bgClass} ${styling.borderClass} overflow-hidden`}>
@@ -592,12 +578,7 @@ function TaskBubble({
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 shrink-0">
             {statusLabel}
           </span>
-                    <svg
-                        className={`w-3 h-3 text-slate-400 transition-transform duration-150 shrink-0 ${expanded ? "rotate-180" : ""}`}
-                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                    >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
-                    </svg>
+                    <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform duration-150 shrink-0 ${expanded ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
                 </button>
                 {expanded && (prompt || content) && (
                     <div

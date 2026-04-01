@@ -25,6 +25,8 @@ import {
 import type { ColumnAutomationConfig } from "./kanban-settings-modal";
 import type { KanbanBoardInfo, SessionInfo, TaskInfo, WorktreeInfo } from "../types";
 import type { KanbanRepoChanges } from "./kanban-file-changes-types";
+import { ChevronRight } from "lucide-react";
+
 
 interface SpecialistOption {
   id: string;
@@ -231,15 +233,7 @@ export function KanbanBoardSurface({
                 aria-label={fileChangesOpen ? "Close file changes drawer" : "Open file changes drawer"}
                 title={`${fileChangesSummary.changedFiles} changed file${fileChangesSummary.changedFiles === 1 ? "" : "s"}`}
               >
-                <svg
-                  className={`h-3.5 w-3.5 text-slate-400 transition-transform ${fileChangesOpen ? "rotate-180" : ""}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={1.8}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
+                <ChevronRight className={`h-3.5 w-3.5 text-slate-400 transition-transform ${fileChangesOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}/>
                 <span>Changes</span>
                 <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] text-slate-500 dark:bg-[#191c28] dark:text-slate-400">
                   {fileChangesSummary.changedFiles}

@@ -2,6 +2,8 @@
 
 import React from "react";
 import type { KanbanRepoChanges, KanbanFileChangeItem, KanbanFileChangeStatus } from "./kanban-file-changes-types";
+import { ChevronRight } from "lucide-react";
+
 
 interface KanbanFileChangesPanelProps {
   repos: KanbanRepoChanges[];
@@ -145,15 +147,7 @@ export function KanbanFileChangesPanel({
                               <span>{formatChangeSummary(repo)}</span>
                             </div>
                           </div>
-                          <svg
-                            className={`mt-1 h-4 w-4 shrink-0 text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={1.8}
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                          </svg>
+                          <ChevronRight className={`mt-1 h-4 w-4 shrink-0 text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}/>
                         </button>
 
                         {expanded && (

@@ -21,6 +21,8 @@ import { useState, useMemo } from "react";
 import { CodeViewer } from "./codemirror";
 import { common, createLowlight } from "lowlight";
 import { toHtml } from "hast-util-to-html";
+import { Check } from "lucide-react";
+
 
 const lowlight = createLowlight(common);
 
@@ -162,9 +164,7 @@ export function CodeBlock({
             title="Copy to clipboard"
           >
             {copied ? (
-              <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
+              <Check className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
             ) : (
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />

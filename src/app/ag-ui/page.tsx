@@ -16,6 +16,8 @@ import Link from "next/link";
 import { v4 as uuidv4 } from "uuid";
 import { useWorkspaces } from "@/client/hooks/use-workspaces";
 import { Select } from "@/client/components/select";
+import { ChevronLeft } from "lucide-react";
+
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -708,9 +710,7 @@ export default function AGUIPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Link href="/" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
+              <ChevronLeft viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"/>
             </Link>
             <div>
               <h1

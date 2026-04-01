@@ -33,6 +33,8 @@ import { type AgentRole, type SpecialistOption, useSessionPageBootstrap } from "
 import { useSessionCrafters } from "./use-session-crafters";
 import { RepoSlideSessionPanel } from "./repo-slide-session-panel";
 import { Select } from "@/client/components/select";
+import { ChevronDown, X } from "lucide-react";
+
 
 interface SessionRecord {
   sessionId: string;
@@ -666,9 +668,7 @@ export function SessionPageClient() {
                 </optgroup>
               )}
             </Select>
-            <svg className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-[var(--dt-text-secondary)] pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
+            <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-[var(--dt-text-secondary)] pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
           </div>
         }
         rightSlot={
@@ -881,9 +881,7 @@ export function SessionPageClient() {
                 title="Close (Esc)"
                 aria-label="Close"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
               </button>
             </div>
             <div className="h-[calc(80vh-44px)]">

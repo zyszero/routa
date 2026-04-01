@@ -10,6 +10,8 @@
  */
 
 import { useRef, useEffect, useState, useCallback } from "react";
+import { ChevronRight } from "lucide-react";
+
 
 // xterm.js types - actual imports are dynamic (browser-only)
 type XTerminal = import("@xterm/xterm").Terminal;
@@ -237,21 +239,7 @@ export function TerminalBubble({
           <span className="text-[10px] text-slate-500 shrink-0">
             {statusText}
           </span>
-          <svg
-            className={`w-3 h-3 text-slate-500 transition-transform duration-150 shrink-0 ${
-              expanded ? "rotate-90" : ""
-            }`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M9 5l7 7-7 7"
-            />
-          </svg>
+          <ChevronRight className={`w-3 h-3 text-slate-500 transition-transform duration-150 shrink-0 ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
         </button>
 
         {/* Terminal content */}

@@ -10,6 +10,8 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { X } from "lucide-react";
+
 
 interface MermaidRendererProps {
   code: string;
@@ -230,9 +232,7 @@ export function MermaidRenderer({
               className="absolute top-3 right-3 z-10 p-1.5 rounded bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 cursor-pointer"
               title="Close fullscreen"
             >
-              <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <X className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
             </button>
             <div
               className="flex-1 flex items-center justify-center p-10 overflow-hidden [&_svg]:w-full [&_svg]:h-full"

@@ -18,6 +18,8 @@ import {
   type TeamTaskNode,
   type SessionLaneItem,
 } from "./team-run-page-model";
+import { Check } from "lucide-react";
+
 
 export function ObjectiveSidebarSection({
   objective,
@@ -305,9 +307,7 @@ function TaskStatusGlyph({ status }: { status: NormalizedTaskStatus }) {
   if (status === "done") {
     return (
       <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
-        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-        </svg>
+        <Check className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}/>
       </div>
     );
   }

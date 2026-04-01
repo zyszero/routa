@@ -36,6 +36,8 @@ import type { FileMatch } from "../hooks/use-file-search";
 import { isDarkThemeActive } from "../utils/theme";
 import { AcpProviderDropdown } from "./acp-provider-dropdown";
 import { useTranslation } from "@/i18n";
+import { ChevronDown, Zap } from "lucide-react";
+
 
 const lowlight = createLowlight(common);
 
@@ -1002,9 +1004,7 @@ export function TiptapInput({
                 </span>
                 {modelLoading
                   ? <span className="w-3 h-3 border border-slate-400 border-t-transparent rounded-full animate-spin" />
-                  : <svg className={`w-3 h-3 text-slate-400 transition-transform ${modelDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
+                  : <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${modelDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
                 }
               </button>
 
@@ -1099,9 +1099,7 @@ export function TiptapInput({
           {/* Usage indicator (shown when we have usage data) */}
           {usageInfo && (
             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-500 dark:text-slate-400 font-mono" title={`Input: ${usageInfo.inputTokens.toLocaleString()} tokens\nOutput: ${usageInfo.outputTokens.toLocaleString()} tokens`}>
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
+              <Zap className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
               <span>{usageInfo.totalTokens.toLocaleString()}</span>
               <span className="text-slate-400 dark:text-slate-500">tokens</span>
             </div>

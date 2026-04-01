@@ -16,6 +16,8 @@ import { replayTracesAsEventBridge } from "@/core/trace/trace-replay";
 import { MarkdownViewer } from "./markdown/markdown-viewer";
 import { CodeBlock } from "./code-block";
 import { useTranslation } from "@/i18n";
+import { ChevronRight } from "lucide-react";
+
 
 // ─── Block colors ──────────────────────────────────────────────────────────
 
@@ -177,9 +179,7 @@ function ReadBlockCard({ event }: { event: WorkspaceAgentEvent & { type: "read_b
         <span className={`text-[11px] font-medium ${color.text}`}>{event.toolName}</span>
         <span className={`text-[10px] ${event.status === "completed" ? "text-emerald-600" : event.status === "failed" ? "text-red-600" : "text-amber-600"}`}>{statusIcon}</span>
         <span className="text-[10px] text-slate-500 dark:text-slate-400 ml-auto">{event.files.length} file{event.files.length !== 1 ? "s" : ""}</span>
-        <svg className={`w-3 h-3 text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
+        <ChevronRight className={`w-3 h-3 text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
       </button>
       {expanded && (
         <div className="mt-1 ml-4 border-l-2 border-blue-200 pl-3 dark:border-blue-800/40">
@@ -209,9 +209,7 @@ function FileChangesCard({ event }: { event: WorkspaceAgentEvent & { type: "file
         <span className={`text-[11px] font-medium ${color.text}`}>{event.toolName}</span>
         <span className={`text-[10px] ${event.status === "completed" ? "text-emerald-600" : event.status === "failed" ? "text-red-600" : "text-amber-600"}`}>{statusIcon}</span>
         <span className="text-[10px] text-slate-500 dark:text-slate-400 ml-auto">{event.changes.length} change{event.changes.length !== 1 ? "s" : ""}</span>
-        <svg className={`w-3 h-3 text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
+        <ChevronRight className={`w-3 h-3 text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
       </button>
       {expanded && (
         <div className="mt-1 ml-4 space-y-1 border-l-2 border-amber-200 pl-3 dark:border-amber-800/40">
@@ -246,9 +244,7 @@ function TerminalCard({ event }: { event: WorkspaceAgentEvent & { type: "termina
         {event.command && (
           <code className="text-[10px] font-mono text-slate-500 dark:text-slate-400 truncate max-w-xs">{event.command}</code>
         )}
-        <svg className={`w-3 h-3 text-slate-400 ml-auto transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
+        <ChevronRight className={`w-3 h-3 text-slate-400 ml-auto transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
       </button>
       {expanded && (event.command || event.output) && (
         <div className="mt-1 ml-4 rounded-md overflow-hidden border border-slate-200 dark:border-slate-700/60">
@@ -288,9 +284,7 @@ function McpCard({ event }: { event: WorkspaceAgentEvent & { type: "mcp_block" }
         <span className="text-[10px]">{color.icon}</span>
         <span className={`text-[11px] font-medium ${color.text}`}>{event.toolName}</span>
         <span className={`text-[10px] ${event.status === "completed" ? "text-emerald-600" : event.status === "failed" ? "text-red-600" : "text-amber-600"}`}>{statusIcon}</span>
-        <svg className={`w-3 h-3 text-slate-400 ml-auto transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
+        <ChevronRight className={`w-3 h-3 text-slate-400 ml-auto transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
       </button>
       {expanded && (
         <div className="mt-1 ml-4 space-y-2 border-l-2 border-blue-200 pl-3 dark:border-blue-800/40">
@@ -331,9 +325,7 @@ function GenericToolCard({ event }: { event: WorkspaceAgentEvent & { type: "tool
         <span className={`text-[11px] font-medium ${color.text}`}>{event.toolName}</span>
         {event.title && <span className="text-[10px] text-slate-500 dark:text-slate-400">{event.title}</span>}
         <span className={`text-[10px] ${event.status === "completed" ? "text-emerald-600" : event.status === "failed" ? "text-red-600" : "text-amber-600"}`}>{statusIcon}</span>
-        <svg className={`w-3 h-3 text-slate-400 ml-auto transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
+        <ChevronRight className={`w-3 h-3 text-slate-400 ml-auto transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
       </button>
       {expanded && (
         <div className="mt-1 ml-4 pl-3 border-l-2 border-amber-200 dark:border-amber-800/40 space-y-2">

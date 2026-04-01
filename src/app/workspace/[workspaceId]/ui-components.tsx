@@ -1,6 +1,8 @@
 // Small reusable UI components for the workspace dashboard
 
 import React from "react";
+import { Check, CircleCheck, Clock, X } from "lucide-react";
+
 
 // ─── Tab Button ────────────────────────────────────────────────────
 
@@ -109,9 +111,7 @@ export function TaskStatusIcon({ status }: { status: string }) {
   if (s === "COMPLETED") {
     return (
       <div className="w-7 h-7 rounded-md bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center shrink-0">
-        <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-        </svg>
+        <Check className="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}/>
       </div>
     );
   }
@@ -235,9 +235,7 @@ export function OverlayModal({
             title="Close (Esc)"
             aria-label="Close"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
           </button>
         </div>
         <div className="h-[calc(80vh-44px)]">{children}</div>
@@ -270,9 +268,7 @@ export function BgTaskStatusIcon({ status }: { status: string }) {
   const cls = colorMap[status] ?? "text-slate-400";
   if (status === "COMPLETED") {
     return (
-      <svg className={`w-4 h-4 ${cls} shrink-0`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
+      <CircleCheck className={`w-4 h-4 ${cls} shrink-0`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
     );
   }
   if (status === "FAILED" || status === "CANCELLED") {
@@ -283,9 +279,7 @@ export function BgTaskStatusIcon({ status }: { status: string }) {
     );
   }
   return (
-    <svg className={`w-4 h-4 ${cls} shrink-0`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
+    <Clock className={`w-4 h-4 ${cls} shrink-0`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
   );
 }
 

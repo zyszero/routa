@@ -10,6 +10,8 @@ import type {
   SpecStatus,
 } from "@/core/harness/spec-detector-types";
 import { HarnessSectionCard, HarnessSectionStateFrame } from "@/client/components/harness-section-card";
+import { ChevronDown, ChevronRight } from "lucide-react";
+
 
 type SpecSourcesPanelProps = {
   repoLabel: string;
@@ -123,15 +125,7 @@ function SpecTypeTag({ type }: { type: string }) {
 
 function ChevronIcon({ expanded, className }: { expanded: boolean; className?: string }) {
   return (
-    <svg
-      className={`h-3 w-3 text-desktop-text-secondary transition-transform ${expanded ? "rotate-90" : ""} ${className ?? ""}`}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-    </svg>
+    <ChevronRight className={`h-3 w-3 text-desktop-text-secondary transition-transform ${expanded ? "rotate-90" : ""} ${className ?? ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
   );
 }
 
@@ -228,15 +222,7 @@ function SpecSourceCard({ source, expanded, onToggle }: { source: SpecSource; ex
               {specCount} spec{specCount !== 1 ? "s" : ""}
             </span>
           )}
-          <svg
-            className={`h-3.5 w-3.5 text-desktop-text-secondary transition-transform ${expanded ? "rotate-180" : ""}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
+          <ChevronDown className={`h-3.5 w-3.5 text-desktop-text-secondary transition-transform ${expanded ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
         </div>
       </button>
 

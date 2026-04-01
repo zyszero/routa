@@ -15,6 +15,8 @@ import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
 import { ShellHeaderControls } from "@/client/components/shell-header-controls";
 import type { WorkspaceData } from "@/client/hooks/use-workspaces";
 import { useTranslation } from "@/i18n";
+import { ChevronRight } from "lucide-react";
+
 
 export interface AppHeaderProps {
   /** Current workspace ID (used for logo link and switcher) */
@@ -106,9 +108,7 @@ export function AppHeader({
       {/* ── Workspace switcher area ── */}
       {isDashboard ? (
         <>
-          <svg className="w-4 h-4 mx-2.5 text-gray-300 dark:text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-          </svg>
+          <ChevronRight className="w-4 h-4 mx-2.5 text-gray-300 dark:text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}/>
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
             <span className="text-[13px] font-medium text-gray-700 dark:text-gray-300 truncate max-w-[180px]">

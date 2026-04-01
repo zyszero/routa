@@ -7,6 +7,8 @@ import { RepoPicker, type RepoSelection } from "@/client/components/repo-picker"
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
 import type { OnboardingMode } from "@/client/utils/onboarding";
 import { useTranslation } from "@/i18n";
+import { ChevronDown, Columns2, Plus, SquareArrowOutUpRight } from "lucide-react";
+
 
 interface FeaturedSkill {
   name: string;
@@ -564,9 +566,7 @@ export function HomeTodoPreview({
       <div className="mb-5 flex flex-col items-start gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-[#45678f] dark:text-slate-400">
-            <svg className="h-4 w-4 text-[#1d6fd6] dark:text-sky-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
-            </svg>
+            <Columns2 className="h-4 w-4 text-[#1d6fd6] dark:text-sky-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
             Live Tasks
           </div>
           <div className="mt-2 font-['Avenir_Next_Condensed','Avenir_Next','Segoe_UI','Helvetica_Neue',sans-serif] text-[2.2rem] font-semibold tracking-[-0.05em] text-[#081120] dark:text-white">
@@ -1032,9 +1032,7 @@ export function WorkspaceCards({
             className="inline-flex items-center gap-1 rounded-full border border-sky-200/70 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-[#45678f] transition-colors hover:border-sky-300 hover:text-[#081120] dark:border-[#2a3042] dark:text-slate-400 dark:hover:border-[#39415a] dark:hover:text-slate-200"
           >
             View all
-            <svg className={`h-2.5 w-2.5 transition-transform ${showWorkspacesMenu ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
+            <ChevronDown className={`h-2.5 w-2.5 transition-transform ${showWorkspacesMenu ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
           </button>
           {showWorkspacesMenu && (
             <div className="absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-2xl border border-sky-200/70 bg-white py-1 shadow-lg dark:border-[#1c1f2e] dark:bg-[#12141c]">
@@ -1100,9 +1098,7 @@ export function WorkspaceCards({
                     className="rounded-full border border-transparent p-1 text-[#1d6fd6] opacity-0 transition-opacity hover:border-sky-100 hover:text-[#38bdf8] group-hover:opacity-100 dark:text-sky-500 dark:hover:border-sky-900/30 dark:hover:text-sky-300"
                     title="Open Kanban board"
                   >
-                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
-                    </svg>
+                    <Columns2 className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
                   </Link>
                   <Link
                     href={`/workspace/${workspace.id}`}
@@ -1110,9 +1106,7 @@ export function WorkspaceCards({
                     className="rounded-full border border-transparent p-1 text-slate-400 opacity-0 transition-opacity hover:border-slate-200 hover:text-slate-600 group-hover:opacity-100 dark:hover:border-[#2a3042] dark:hover:text-slate-300"
                     title="Open overview"
                   >
-                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                    </svg>
+                    <SquareArrowOutUpRight className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
                   </Link>
                 </div>
               </div>
@@ -1153,9 +1147,7 @@ export function WorkspaceCards({
         >
           <div className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-50 transition-colors group-hover:bg-sky-100 dark:bg-[#1a1d2c] dark:group-hover:bg-sky-900/30">
-              <svg className="h-4 w-4 text-sky-500 transition-colors group-hover:text-sky-700 dark:text-slate-500 dark:group-hover:text-sky-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
+              <Plus className="h-4 w-4 text-sky-500 transition-colors group-hover:text-sky-700 dark:text-slate-500 dark:group-hover:text-sky-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
             </span>
             <div>
               <div className="text-sm font-medium text-[#081120] transition-colors group-hover:text-[#1d6fd6] dark:text-slate-300 dark:group-hover:text-sky-300">

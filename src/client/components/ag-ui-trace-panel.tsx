@@ -15,6 +15,8 @@ import { AGUIEventType } from "@/core/ag-ui/event-adapter";
 import { replayTracesAsAGUI } from "@/core/trace/trace-replay";
 import { MarkdownViewer } from "./markdown/markdown-viewer";
 import { useTranslation } from "@/i18n";
+import { ChevronRight } from "lucide-react";
+
 
 // ─── Event colors (same as ag-ui page) ────────────────────────────────────
 
@@ -263,9 +265,7 @@ function EventCard({ event }: { event: AGUIBaseEvent }) {
         <span className={`font-mono font-semibold ${color.text}`}>{event.type}</span>
         <span className="text-slate-400 truncate flex-1">{summaryParts.join(" | ")}</span>
         <span className="text-slate-400 shrink-0">{ts}</span>
-        <svg className={`w-2.5 h-2.5 text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
+        <ChevronRight className={`w-2.5 h-2.5 text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
       </button>
       {expanded && (
         <pre className="mt-1 text-[9px] font-mono text-slate-600 dark:text-slate-400 whitespace-pre-wrap max-h-40 overflow-auto border-t border-slate-200 dark:border-slate-700 pt-1">
@@ -354,9 +354,7 @@ function AGUIToolCard({ tool }: { tool: ToolCallGroup }) {
         <span className={`text-[10px] ${hasResult ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
           {hasResult ? "✓" : "⏳"}
         </span>
-        <svg className={`w-3 h-3 text-slate-400 ml-auto transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
+        <ChevronRight className={`w-3 h-3 text-slate-400 ml-auto transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
       </button>
       {expanded && (
         <div className="mt-1 ml-4 pl-3 border-l-2 border-amber-200 dark:border-amber-800/40 space-y-2">
@@ -394,9 +392,7 @@ function AGUICustomCard({ event }: { event: AGUIBaseEvent }) {
       >
         <span className="text-[10px] text-slate-500">⚙</span>
         <span className="text-[10px] font-medium text-slate-600 dark:text-slate-400">{name}</span>
-        <svg className={`w-2.5 h-2.5 text-slate-400 ml-auto transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
+        <ChevronRight className={`w-2.5 h-2.5 text-slate-400 ml-auto transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
       </button>
       {expanded && (
         <pre className="ml-4 mt-1 text-[9px] font-mono text-slate-600 dark:text-slate-400 whitespace-pre-wrap max-h-32 overflow-auto">

@@ -10,6 +10,8 @@
  */
 
 import { useState, useMemo } from "react";
+import { ChevronDown } from "lucide-react";
+
 
 export interface TaskInfo {
   id: string;
@@ -112,15 +114,7 @@ export function TaskProgressBar({ tasks, fileChanges, className = "" }: TaskProg
           )}
 
           {/* Expand/collapse icon */}
-          <svg
-            className={`w-3 h-3 text-slate-400 transition-transform duration-200 shrink-0 ${expanded ? "rotate-180" : ""}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
+          <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform duration-200 shrink-0 ${expanded ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
         </button>
 
         {/* Progress bar - only show if we have tasks */}

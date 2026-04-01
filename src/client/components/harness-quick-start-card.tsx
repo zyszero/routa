@@ -1,6 +1,8 @@
 "use client";
 
 import { useTranslation } from "@/i18n";
+import { RefreshCw, Zap } from "lucide-react";
+
 
 type QuickStartAction = {
   id: string;
@@ -58,9 +60,7 @@ export function HarnessQuickStartCard({
       title: t.settings.harness.quickStart.checkCICD || "检查 CI/CD 流程",
       description: `查看 ${workflowCount} 个 GitHub Actions workflows`,
       icon: (
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-        </svg>
+        <RefreshCw className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"/>
       ),
       onClick: () => onNavigateToSection("ci-cd"),
     },
@@ -97,9 +97,7 @@ export function HarnessQuickStartCard({
   return (
     <div className="rounded-lg border border-desktop-border bg-desktop-bg-secondary/80 p-2.5">
       <div className="mb-1.5 flex items-center gap-1.5">
-        <svg className="h-4 w-4 text-desktop-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-        </svg>
+        <Zap className="h-4 w-4 text-desktop-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor"/>
         <h2 className="text-[12px] font-semibold text-desktop-text-primary">
           {t.settings.harness.quickStart.title || "快速开始"}
         </h2>

@@ -20,6 +20,8 @@ import { MermaidRenderer } from "./markdown/mermaid-renderer";
 import { normalizeThoughtContent } from "./chat-panel/thought-content";
 import { getToolEventLabel } from "./chat-panel/tool-call-name";
 import { useTranslation } from "@/i18n";
+import { Check, ChevronDown, ChevronRight, TriangleAlert, Zap } from "lucide-react";
+
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -425,9 +427,7 @@ export function CraftersView({
                 </div>
               ) : activeAgent.status === "error" ? (
                 <div className="space-y-2 text-red-500 dark:text-red-400">
-                  <svg className="w-5 h-5 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
+                  <TriangleAlert className="w-5 h-5 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
                   <div>{t.tasks.agentFailedToStart}</div>
                 </div>
               ) : (
@@ -466,12 +466,7 @@ function CrafterMessageBubble({ message }: { message: CrafterMessage }) {
           className="w-full text-left"
         >
           <div className="flex items-center gap-1.5 mb-0.5">
-            <svg
-              className={`w-3 h-3 text-slate-400 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
-              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
+            <ChevronRight className={`w-3 h-3 text-slate-400 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
             <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
               {t.tasks.thinking}
             </span>
@@ -507,12 +502,7 @@ function CrafterMessageBubble({ message }: { message: CrafterMessage }) {
           <span className="text-[9px] text-slate-400 dark:text-slate-500 ml-auto">
             {message.toolStatus ?? "pending"}
           </span>
-          <svg
-            className={`w-2.5 h-2.5 text-slate-400 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
+          <ChevronRight className={`w-2.5 h-2.5 text-slate-400 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
         </button>
         {expanded && (
           <div className="px-2.5 py-1.5 text-[10px] font-mono text-slate-600 dark:text-slate-400 whitespace-pre-wrap max-h-32 overflow-y-auto bg-white dark:bg-[#0f1117]">
@@ -605,23 +595,17 @@ function TaskCard({
     ),
     confirmed: (
       <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-blue-600">
-        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-        </svg>
+        <Check className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}/>
       </div>
     ),
     running: (
       <div className="flex h-5 w-5 shrink-0 animate-pulse items-center justify-center rounded-md bg-amber-500">
-        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-        </svg>
+        <Zap className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
       </div>
     ),
     completed: (
       <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-500">
-        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-        </svg>
+        <Check className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}/>
       </div>
     ),
   };
@@ -649,15 +633,7 @@ function TaskCard({
             </p>
           )}
         </div>
-        <svg
-          className={`mt-0.5 h-4 w-4 shrink-0 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
+        <ChevronDown className={`mt-0.5 h-4 w-4 shrink-0 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
       </div>
 
       {/* Expanded content */}
@@ -705,9 +681,7 @@ function TaskCard({
                 )}
                 {task.status === "completed" && (
                   <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
+                    <Check className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
                     {t.common.completed}
                   </span>
                 )}

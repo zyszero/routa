@@ -22,6 +22,8 @@ import { TracesViewTabs, type TraceViewTab } from "@/client/components/traces-vi
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
 import { useWorkspaces } from "@/client/hooks/use-workspaces";
 import type { TraceRecord } from "@/core/trace";
+import { FileText } from "lucide-react";
+
 
 interface Session {
   sessionId: string;
@@ -326,19 +328,7 @@ function TracePageContent() {
                   </div>
                 ) : sessions.length === 0 ? (
                   <div className="p-4 text-center">
-                    <svg
-                      className="mx-auto mb-3 h-12 w-12 text-desktop-text-primary"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={1.5}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                      />
-                    </svg>
+                    <FileText className="mx-auto mb-3 h-12 w-12 text-desktop-text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}/>
                     <p className="text-xs text-desktop-text-secondary">No sessions found</p>
                     <p className="mt-1 text-[10px] text-desktop-text-muted">
                       Start a conversation to create traces
@@ -443,19 +433,7 @@ function TracePageContent() {
             ) : (
               <div className="h-full flex items-center justify-center p-8">
                 <div className="text-center">
-                  <svg
-                    className="mx-auto mb-4 h-16 w-16 text-desktop-text-primary"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={1.5}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
-                  </svg>
+                  <FileText className="mx-auto mb-4 h-16 w-16 text-desktop-text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}/>
                   <p className="mb-2 text-[13px] text-desktop-text-secondary">
                     No session selected
                   </p>

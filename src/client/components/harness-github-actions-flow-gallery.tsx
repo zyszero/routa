@@ -8,6 +8,8 @@ import {
   normalizeGitHubWorkflowEventTokens,
   type GitHubWorkflowCategory,
 } from "@/core/github/workflow-classifier";
+import { ArrowRight } from "lucide-react";
+
 
 type HarnessGitHubActionsFlowGalleryProps = {
   flows: GitHubActionsFlow[];
@@ -246,9 +248,7 @@ function MiniDagPreview({ flow }: { flow: GitHubActionsFlow }) {
         {visibleLanes.map((laneJobs, laneIndex) => (
           <div key={`${flow.id}:lane:${laneIndex}`} className="flex items-start gap-1.5">
             <div className="flex h-7 items-center text-slate-300">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m0 0-4-4m4 4-4 4" />
-              </svg>
+              <ArrowRight className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}/>
             </div>
             <div className="w-24 shrink-0 space-y-0.5">
               {laneJobs.slice(0, 1).map((job) => (
@@ -272,9 +272,7 @@ function MiniDagPreview({ flow }: { flow: GitHubActionsFlow }) {
         {hiddenLaneCount > 0 ? (
           <div className="flex items-start gap-1.5">
             <div className="flex h-7 items-center text-slate-300">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m0 0-4-4m4 4-4 4" />
-              </svg>
+              <ArrowRight className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}/>
             </div>
             <div className="w-[4.5rem] shrink-0 rounded-[14px] border border-dashed border-slate-200/80 bg-white/70 px-2 py-1.5 text-[9px] text-slate-500">
               +{hiddenLaneCount} more stages
@@ -412,9 +410,7 @@ function FlowCanvas({
           {lanes.map((laneJobs, laneIndex) => (
             <div key={`${flow.id}:canvas-lane:${laneIndex}`} className="flex items-start gap-3">
               <div className="flex h-10 items-center text-slate-300">
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m0 0-4-4m4 4-4 4" />
-                </svg>
+                <ArrowRight className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}/>
               </div>
               <div className={cx("shrink-0 space-y-2.5", compactMode ? "w-60" : "w-64")}>
                 <div className="pl-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">{formatStageLabel(laneIndex)}</div>

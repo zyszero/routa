@@ -17,6 +17,8 @@ import { useSkills, type UseSkillsState, type UseSkillsActions, type CatalogType
 import type { SkillsShSkill, GithubCatalogSkill } from "../skill-client";
 import { MarkdownViewer } from "./markdown/markdown-viewer";
 import { useTranslation } from "@/i18n";
+import { ChevronRight, Download, PieChart, Search, X } from "lucide-react";
+
 
 interface SkillPanelProps {
   /** Pass a shared useSkills() instance to keep sidebar and chat in sync */
@@ -76,9 +78,7 @@ export function SkillPanel({ skillsHook: externalHook }: SkillPanelProps) {
           onClick={() => setCollapsed((v) => !v)}
           className="flex items-center gap-1.5 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
         >
-          <svg className={`w-3 h-3 text-slate-400 transition-transform ${collapsed ? "" : "rotate-90"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
+          <ChevronRight className={`w-3 h-3 text-slate-400 transition-transform ${collapsed ? "" : "rotate-90"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
           <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
           </svg>
@@ -126,18 +126,9 @@ export function SkillPanel({ skillsHook: externalHook }: SkillPanelProps) {
                       }`}
                   >
                     <div className="flex items-center gap-1.5">
-                      <svg
-                        className={`w-3 h-3 shrink-0 transition-transform duration-150 ${expandedSkill === skill.name
-                          ? "rotate-90 text-blue-500 dark:text-blue-400"
-                          : "text-slate-400 group-hover:text-slate-500 dark:group-hover:text-slate-300"
-                          }`}
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                      </svg>
+                      <ChevronRight className={`w-3 h-3 shrink-0 transition-transform duration-150 ${expandedSkill === skill.name
+        ? "rotate-90 text-blue-500 dark:text-blue-400"
+        : "text-slate-400 group-hover:text-slate-500 dark:group-hover:text-slate-300"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
                       <span className="text-xs font-medium truncate">
                         /{skill.name}
                       </span>
@@ -375,9 +366,7 @@ function SkillCatalogModal({
               onClick={onClose}
               className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <X className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
             </button>
           </div>
 
@@ -391,9 +380,7 @@ function SkillCatalogModal({
                 }`}
             >
               <span className="flex items-center justify-center gap-1.5">
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+                <Search className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
                 skills.sh
               </span>
             </button>
@@ -418,15 +405,7 @@ function SkillCatalogModal({
         <div className="px-5 pt-3">
           {catalogType === "skillssh" ? (
             <div className="flex items-center rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#161922] overflow-hidden">
-              <svg
-                className="w-3.5 h-3.5 ml-3 text-slate-400 shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+              <Search className="w-3.5 h-3.5 ml-3 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
               <input
                 ref={inputRef}
                 type="text"
@@ -439,10 +418,7 @@ function SkillCatalogModal({
                 }}
               />
               {catalogLoading && (
-                <svg className="w-3.5 h-3.5 mr-3 animate-spin text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
+                <PieChart className="w-3.5 h-3.5 mr-3 animate-spin text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24"/>
               )}
             </div>
           ) : (
@@ -468,10 +444,7 @@ function SkillCatalogModal({
                   className="px-3 py-2 text-xs font-medium text-white bg-slate-700 hover:bg-slate-800 dark:bg-slate-600 dark:hover:bg-slate-500 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
                 >
                   {catalogLoading ? (
-                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
+                    <PieChart className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"/>
                   ) : (
                     t.skills.load
                   )}
@@ -669,10 +642,7 @@ function SkillCatalogModal({
               >
                 {catalogInstalling ? (
                   <>
-                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
+                    <PieChart className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"/>
                     {t.skills.installingSkills}
                   </>
                 ) : (
@@ -760,19 +730,7 @@ function SkillCloneModal({
             onClick={onClose}
             className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
           >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            <X className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
           </button>
         </div>
 
@@ -891,42 +849,12 @@ function SkillCloneModal({
             >
               {cloning ? (
                 <>
-                  <svg
-                    className="w-3 h-3 animate-spin"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
+                  <PieChart className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"/>
                   {t.skills.cloneAction}...
                 </>
               ) : (
                 <>
-                  <svg
-                    className="w-3 h-3"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                    />
-                  </svg>
+                  <Download className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}/>
                   {t.skills.cloneAction}
                 </>
               )}
@@ -1020,9 +948,7 @@ function SkillUploadModal({
             onClick={onClose}
             className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
           </button>
         </div>
 

@@ -20,6 +20,8 @@ import type { LaneHandoffInfo, LaneSessionInfo, SessionKanbanContext } from "@/c
 import { MarkdownViewer } from "./markdown/markdown-viewer";
 import { ToolInputTable, ToolOutputView } from "./tool-call-content";
 import { useTranslation } from "@/i18n";
+import { ChevronRight, FileText } from "lucide-react";
+
 
 interface TracePanelProps {
   sessionId: string | null;
@@ -292,15 +294,7 @@ function InlineToolView({
         onClick={() => setExpanded(!expanded)}
         className="group flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800/30 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors w-full text-left"
       >
-        <svg
-          className={`w-3 h-3 text-amber-400 transition-transform shrink-0 ${expanded ? "rotate-90" : ""}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
+        <ChevronRight className={`w-3 h-3 text-amber-400 transition-transform shrink-0 ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
         <span className="text-[10px] text-amber-500 dark:text-amber-400">🔧</span>
         <code className="text-[11px] font-mono font-medium text-amber-700 dark:text-amber-300">
           {toolName}
@@ -528,15 +522,7 @@ function AgentResponseBlock({
             onClick={() => setThoughtsExpanded(!thoughtsExpanded)}
             className="flex items-center gap-1.5 mb-2 text-[10px] text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300"
           >
-            <svg
-              className={`w-3 h-3 transition-transform ${thoughtsExpanded ? "rotate-90" : ""}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
+            <ChevronRight className={`w-3 h-3 transition-transform ${thoughtsExpanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
             💭 {thoughts.length} thought{thoughts.length > 1 ? "s" : ""}
           </button>
         )}
@@ -732,19 +718,7 @@ export function TracePanel({ sessionId }: TracePanelProps) {
       {/* Header */}
       <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <svg
-            className="w-4 h-4 text-slate-500 dark:text-slate-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-            />
-          </svg>
+          <FileText className="w-4 h-4 text-slate-500 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
           <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
             {t.trace.agentTrace}
           </span>
@@ -887,19 +861,7 @@ export function TracePanel({ sessionId }: TracePanelProps) {
       {!loading && !error && filteredRecords.length === 0 && (
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="text-center">
-            <svg
-              className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
+            <FileText className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}/>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               {sessionId ? t.trace.noTracesForSession : t.trace.selectSessionToView}
             </p>

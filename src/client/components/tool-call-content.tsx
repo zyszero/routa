@@ -5,6 +5,8 @@ import { CodeBlock } from "./code-block";
 import { CodeRetrievalViewer } from "./code-retrieval-viewer";
 import { FileOutputViewer, parseFileOutput } from "./file-output-viewer";
 import { MarkdownViewer } from "./markdown/markdown-viewer";
+import { ChevronRight } from "lucide-react";
+
 
 function JsonNode({ value, depth = 0 }: { value: unknown; depth?: number }) {
   const [collapsed, setCollapsed] = useState(depth > 1);
@@ -253,15 +255,7 @@ export function ToolOutputView({
             onClick={() => setRichTextExpanded((current) => !current)}
             className="flex items-center gap-1.5 text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider hover:text-slate-600 dark:hover:text-slate-300"
           >
-            <svg
-              className={`w-3 h-3 transition-transform ${richTextExpanded ? "rotate-90" : ""}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
+            <ChevronRight className={`w-3 h-3 transition-transform ${richTextExpanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
             Output (Rendered)
           </button>
           <span className="text-[9px] text-slate-400 dark:text-slate-500">{richTextContent.length} chars</span>

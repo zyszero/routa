@@ -2,6 +2,8 @@ import { useTranslation } from "@/i18n";
 import { Select } from "@/client/components/select";
 import { QueueStatusBadge } from "./kanban-tab-helpers";
 import type { KanbanBoardInfo } from "../types";
+import { Columns2 } from "lucide-react";
+
 
 interface KanbanTabHeaderProps {
   tasksCount: number;
@@ -34,9 +36,7 @@ export function KanbanTabHeader({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-h-6 items-center gap-2">
-          <svg className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
-          </svg>
+          <Columns2 className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}/>
           <h1 className="text-[13px] font-semibold text-slate-900 dark:text-slate-100">{t.kanban.kanbanBoard}</h1>
           {tasksCount > 0 && (
             <span className="text-[11px] text-slate-500 dark:text-slate-400" data-testid="kanban-task-count">
