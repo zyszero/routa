@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useTranslation } from "@/i18n";
 
 import { DesktopAppShell } from "./desktop-app-shell";
 import { Settings } from "lucide-react";
@@ -32,12 +31,9 @@ export function SettingsRouteShell({
   workspaceSwitcher,
   contentClassName,
 }: SettingsRouteShellProps) {
-  const { t } = useTranslation();
-  void title;
-  void description;
   void badgeLabel;
-  void icon;
   void summary;
+  void description;
 
   return (
     <DesktopAppShell
@@ -45,8 +41,8 @@ export function SettingsRouteShell({
       workspaceTitle={workspaceTitle}
       workspaceSwitcher={workspaceSwitcher ?? (
         <div className="flex items-center gap-1.5 rounded-xl border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1.5 text-[11px] text-desktop-text-primary">
-          <Settings className="h-3 w-3 text-desktop-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
-          <span>{t.settings.title}</span>
+          <span>{icon ?? <Settings className="h-3 w-3 text-desktop-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} />}</span>
+          <span>{title}</span>
         </div>
       )}
     >
