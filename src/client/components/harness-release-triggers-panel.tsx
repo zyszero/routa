@@ -387,11 +387,11 @@ function DimensionCard({
 }
 
 export function HarnessReleaseTriggersPanel({
-  repoLabel,
+  repoLabel: _repoLabel,
   unsupportedMessage,
   data,
-  loading,
-  error,
+  loading = false,
+  error = null,
   variant = "full",
 }: ReleaseTriggersPanel) {
   const releaseTriggerFile = data?.releaseTriggerFile ?? null;
@@ -410,56 +410,63 @@ export function HarnessReleaseTriggersPanel({
       title="Release Surface Governance"
       description="Layered triggers that guard what goes into each release: exposure surface, artifact drift, packaging boundary changes, and supply-chain capability drift."
       variant={variant}
-      badge={releaseTriggerFile ? `${releaseTriggerFile.ruleCount} rules` : undefined}
+      actions={releaseTriggerFile ? (
+        <span className="rounded-full border border-desktop-border bg-desktop-bg-primary/65 px-2.5 py-1 text-[10px] font-semibold text-desktop-text-primary">
+          {releaseTriggerFile.ruleCount} rules
+        </span>
+      ) : null}
     >
-      <HarnessSectionStateFrame
-        loading={!!loading}
-        error={error ?? null}
-        unsupportedMessage={unsupportedMessage ?? null}
-        repoLabel={repoLabel}
-      >
-        {!loading && !error && !unsupportedMessage && !releaseTriggerFile ? (
-          <div className="rounded-lg border border-desktop-border bg-desktop-bg-primary/80 px-3 py-3 text-[11px] text-desktop-text-secondary">
-            No <code className="font-mono">docs/fitness/release-triggers.yaml</code> found for this repository.
+      {loading ? (
+        <HarnessSectionStateFrame tone="warning">Loading release trigger policies...</HarnessSectionStateFrame>
+      ) : null}
+
+      {unsupportedMessage ? (
+        <HarnessUnsupportedState className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-5 text-[11px] text-amber-800" />
+      ) : null}
+
+      {error && !unsupportedMessage ? (
+        <HarnessSectionStateFrame tone="error">{error}</HarnessSectionStateFrame>
+      ) : null}
+
+      {!loading && !error && !unsupportedMessage && !releaseTriggerFile ? (
+        <HarnessSectionStateFrame tone="warning">
+          No <code className="font-mono">docs/fitness/release-triggers.yaml</code> found for this repository.
+        </HarnessSectionStateFrame>
+      ) : null}
+
+      {!loading && !error && !unsupportedMessage && releaseTriggerFile && !releaseTriggerFile.rules.length ? (
+        <HarnessSectionStateFrame tone="warning">
+          <code className="font-mono">release-triggers.yaml</code> exists but defines no rules.
+        </HarnessSectionStateFrame>
+      ) : null}
+
+      {!loading && !error && !unsupportedMessage && releaseTriggerFile && releaseTriggerFile.rules.length ? (
+        <div className="mt-3 rounded-xl border border-desktop-border px-4 py-4">
+          <div className="mb-2.5 flex flex-wrap gap-2">
+            {blockReleaseCount > 0 && (
+              <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-semibold text-rose-700">
+                {formatCount(blockReleaseCount, "block")} release
+              </span>
+            )}
+            {requireReviewCount > 0 && (
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-800">
+                {formatCount(requireReviewCount, "human review")}
+              </span>
+            )}
+            {warnCount > 0 && (
+              <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-semibold text-sky-700">
+                {formatCount(warnCount, "warn")}
+              </span>
+            )}
           </div>
-        ) : null}
 
-        {!loading && !error && !unsupportedMessage && releaseTriggerFile && !releaseTriggerFile.rules.length ? (
-          <div className="rounded-lg border border-desktop-border bg-desktop-bg-primary/80 px-3 py-3 text-[11px] text-desktop-text-secondary">
-            <code className="font-mono">release-triggers.yaml</code> exists but defines no rules.
+          <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
+            {cards.map((card) => (
+              <DimensionCard key={card.key} card={card} showDetails={showDetails} />
+            ))}
           </div>
-        ) : null}
-
-        {!loading && !error && !unsupportedMessage && releaseTriggerFile && releaseTriggerFile.rules.length ? (
-          <div>
-            <div className="flex flex-wrap gap-2 mb-2.5">
-              {blockReleaseCount > 0 && (
-                <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-semibold text-rose-700">
-                  {formatCount(blockReleaseCount, "block")} release
-                </span>
-              )}
-              {requireReviewCount > 0 && (
-                <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-800">
-                  {formatCount(requireReviewCount, "human review")}
-                </span>
-              )}
-              {warnCount > 0 && (
-                <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-semibold text-sky-700">
-                  {formatCount(warnCount, "warn")}
-                </span>
-              )}
-            </div>
-
-            <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
-              {cards.map((card) => (
-                <DimensionCard key={card.key} card={card} showDetails={showDetails} />
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {unsupportedMessage ? <HarnessUnsupportedState /> : null}
-      </HarnessSectionStateFrame>
+        </div>
+      ) : null}
     </HarnessSectionCard>
   );
 }
