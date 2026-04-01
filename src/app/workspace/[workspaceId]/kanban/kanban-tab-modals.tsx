@@ -1,6 +1,7 @@
 "use client";
 
 import type { Dispatch, SetStateAction } from "react";
+import Link from "next/link";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
 import { RepoPicker, type RepoSelection } from "@/client/components/repo-picker";
 import { useTranslation } from "@/i18n";
@@ -71,6 +72,12 @@ export function KanbanCodebaseModal({
           <div className="flex items-center gap-2">
             {!editingCodebase && (
               <>
+                <Link
+                  href={`/workspace/${selectedCodebase.workspaceId}/codebases/${selectedCodebase.id}/reposlide`}
+                  className="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+                >
+                  Open RepoSlide
+                </Link>
                 <button
                   onClick={onRequestRemoveCodebase}
                   className="text-sm text-rose-500 hover:text-rose-600 dark:text-rose-400 dark:hover:text-rose-300"

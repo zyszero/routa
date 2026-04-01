@@ -255,8 +255,96 @@ describe("SessionPageClient", () => {
     render(<SessionPageClient />);
 
     await waitFor(() => {
-      expect(mockPrompt).toHaveBeenCalledWith("continue execution");
+      expect(mockPrompt).toHaveBeenCalledWith("continue execution", undefined);
     });
+  });
+
+  it("loads skill context for a structured pending prompt before sending", async () => {
+    storePendingPrompt("session-1", {
+      text: "build repo slides",
+      skillName: "slide-skill",
+      skillRepoPath: "/tmp/routa/tools/ppt-template",
+    });
+    acpState.updates = [
+      { update: { sessionUpdate: "acp_status", status: "ready" } },
+    ];
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/skills?name=slide-skill&repoPath=%2Ftmp%2Frouta%2Ftools%2Fppt-template") {
+        return {
+          ok: true,
+          json: async () => ({
+            name: "slide-skill",
+            content: "Use this skill as reference material when creating slides.",
+          }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({ session: {}, sessions: [], specialists: [], globalMode: "essential" }),
+      } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SessionPageClient />);
+
+    await waitFor(() => {
+      expect(mockPrompt).toHaveBeenCalledWith("build repo slides", {
+        skillName: "slide-skill",
+        skillContent: "Use this skill as reference material when creating slides.",
+      });
+    });
+  });
+
+  it("renders RepoSlide session results when launched from RepoSlide", async () => {
+    navState.searchParams = new URLSearchParams("source=reposlide&codebaseId=cb-1");
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/specialists") {
+        return { ok: true, json: async () => ({ specialists: [] }) } as Response;
+      }
+      if (url === "/api/sessions/session-1") {
+        return { ok: true, json: async () => ({ session: {} }) } as Response;
+      }
+      if (url === "/api/sessions?parentSessionId=session-1") {
+        return { ok: true, json: async () => ({ sessions: [] }) } as Response;
+      }
+      if (url === "/api/mcp/tools") {
+        return { ok: true, json: async () => ({ globalMode: "essential" }) } as Response;
+      }
+      if (url === "/api/sessions/session-1/reposlide-result") {
+        return {
+          ok: true,
+          json: async () => ({
+            latestEventKind: "agent_message",
+            result: {
+              status: "completed",
+              deckPath: "/tmp/repo-slide-output/demo-deck.pptx",
+              downloadUrl: "/api/sessions/session-1/reposlide-result/download",
+              latestAssistantMessage: "Saved PPTX to /tmp/repo-slide-output/demo-deck.pptx\nSlide outline:\n- Intro\n- Architecture",
+              summary: "Saved PPTX to /tmp/repo-slide-output/demo-deck.pptx\nSlide outline:\n- Intro\n- Architecture",
+              updatedAt: "2026-04-01T03:00:00.000Z",
+            },
+          }),
+        } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SessionPageClient />);
+
+    expect(await screen.findByText("RepoSlide Run")).toBeTruthy();
+    expect(await screen.findByText("Deck ready for download")).toBeTruthy();
+    expect(await screen.findByText("/tmp/repo-slide-output/demo-deck.pptx")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Download PPTX" }).getAttribute("href")).toBe(
+      "/api/sessions/session-1/reposlide-result/download",
+    );
+    expect(screen.getByRole("link", { name: "Back to RepoSlide" }).getAttribute("href")).toBe(
+      "/workspace/default/codebases/cb-1/reposlide",
+    );
   });
 
   it("patches the global tool mode when the header toggle changes", async () => {

@@ -1,13 +1,16 @@
 use axum::{
     extract::{Path, Query, State},
+    http::HeaderMap,
     routing::{get, post},
     Json, Router,
 };
 use chrono::{DateTime, Utc};
+use regex::Regex;
 use routa_core::trace::{TraceEventType, TraceQuery, TraceReader};
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
+use std::path::{Path as FsPath, PathBuf};
 
 use crate::application::sessions::{
     ListSessionsQuery as SessionListQuery, SessionApplicationService,
@@ -26,6 +29,11 @@ pub fn router() -> Router<AppState> {
         )
         .route("/{session_id}/history", get(get_session_history))
         .route("/{session_id}/transcript", get(get_session_transcript))
+        .route("/{session_id}/reposlide-result", get(get_reposlide_result))
+        .route(
+            "/{session_id}/reposlide-result/download",
+            get(download_reposlide_result),
+        )
         .route("/{session_id}/context", get(get_session_context))
         .route("/{session_id}/disconnect", post(disconnect_session))
 }
@@ -62,6 +70,32 @@ struct TranscriptMessage {
     tool_raw_output: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     raw_data: Option<Value>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RepoSlideResultPayload {
+    session_id: String,
+    result: RepoSlideSessionResult,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latest_event_kind: Option<String>,
+    source: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RepoSlideSessionResult {
+    status: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    deck_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    download_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latest_assistant_message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    summary: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    updated_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -251,6 +285,68 @@ async fn get_session_transcript(
     })?))
 }
 
+async fn get_reposlide_result(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ServerError> {
+    let transcript = load_session_transcript(&state, &session_id).await?;
+    let session_cwd = load_session_cwd(&state, &session_id).await?;
+    let mut result = extract_reposlide_result(&transcript.messages);
+    if resolve_reposlide_deck_file(FsPath::new(&session_cwd), result.deck_path.as_deref()).is_some()
+    {
+        result.download_url = Some(build_reposlide_download_url(&session_id));
+    }
+
+    Ok(Json(
+        serde_json::to_value(RepoSlideResultPayload {
+            session_id,
+            result,
+            latest_event_kind: transcript.latest_event_kind,
+            source: transcript.source,
+        })
+        .map_err(|error| {
+            ServerError::Internal(format!(
+                "Failed to serialize RepoSlide result payload: {}",
+                error
+            ))
+        })?,
+    ))
+}
+
+async fn download_reposlide_result(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<(HeaderMap, Vec<u8>), ServerError> {
+    let transcript = load_session_transcript(&state, &session_id).await?;
+    let session_cwd = load_session_cwd(&state, &session_id).await?;
+    let result = extract_reposlide_result(&transcript.messages);
+    let artifact =
+        resolve_reposlide_deck_file(FsPath::new(&session_cwd), result.deck_path.as_deref())
+            .ok_or_else(|| {
+                ServerError::NotFound("RepoSlide deck is not available for download".to_string())
+            })?;
+    let bytes = std::fs::read(&artifact.path).map_err(|error| {
+        ServerError::NotFound(format!("Failed to read RepoSlide deck: {}", error))
+    })?;
+
+    let mut headers = HeaderMap::new();
+    headers.insert("cache-control", "no-store".parse().unwrap());
+    headers.insert(
+        "content-type",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            .parse()
+            .unwrap(),
+    );
+    headers.insert(
+        "content-disposition",
+        format!("attachment; filename=\"{}\"", artifact.file_name)
+            .parse()
+            .unwrap(),
+    );
+
+    Ok((headers, bytes))
+}
+
 /// GET /api/sessions/{session_id}/context — Get hierarchical context for a session.
 ///
 /// Returns the session's parent, children, siblings, and recent workspace sessions.
@@ -308,6 +404,151 @@ fn build_transcript_payload(
         latest_event_kind,
         messages: preferred_messages,
     }
+}
+
+async fn load_session_transcript(
+    state: &AppState,
+    session_id: &str,
+) -> Result<SessionTranscriptPayload, ServerError> {
+    let service = SessionApplicationService::new(state.clone());
+    let history = service.get_session_history(session_id, true).await?;
+    let cwd = std::env::current_dir()
+        .map_err(|error| ServerError::Internal(format!("Failed to get cwd: {}", error)))?;
+    let traces = TraceReader::new(&cwd)
+        .query(&TraceQuery {
+            session_id: Some(session_id.to_string()),
+            ..TraceQuery::default()
+        })
+        .await
+        .map_err(|error| ServerError::Internal(format!("Failed to query traces: {}", error)))?;
+
+    Ok(build_transcript_payload(session_id, history, traces))
+}
+
+async fn load_session_cwd(state: &AppState, session_id: &str) -> Result<String, ServerError> {
+    if let Some(session) = state.acp_manager.get_session(session_id).await {
+        return Ok(session.cwd);
+    }
+
+    state
+        .acp_session_store
+        .get(session_id)
+        .await?
+        .map(|session| session.cwd)
+        .ok_or_else(|| ServerError::NotFound("Session not found".to_string()))
+}
+
+fn extract_reposlide_result(messages: &[TranscriptMessage]) -> RepoSlideSessionResult {
+    let latest_assistant = messages
+        .iter()
+        .rev()
+        .find(|message| message.role == "assistant" && !message.content.trim().is_empty());
+
+    let Some(latest_assistant) = latest_assistant else {
+        return RepoSlideSessionResult {
+            status: "running",
+            deck_path: None,
+            download_url: None,
+            latest_assistant_message: None,
+            summary: None,
+            updated_at: None,
+        };
+    };
+
+    let deck_path = extract_pptx_path(&latest_assistant.content);
+    RepoSlideSessionResult {
+        status: if deck_path.is_some() {
+            "completed"
+        } else {
+            "running"
+        },
+        deck_path,
+        download_url: None,
+        latest_assistant_message: Some(latest_assistant.content.clone()),
+        summary: Some(summarize_reposlide_content(&latest_assistant.content)),
+        updated_at: Some(latest_assistant.timestamp.clone()),
+    }
+}
+
+fn extract_pptx_path(content: &str) -> Option<String> {
+    let pattern = Regex::new(r#"((?:/|[A-Za-z]:\\)[^\s"'`]+?\.pptx)\b"#).ok()?;
+    pattern
+        .captures(content)
+        .and_then(|captures| captures.get(1))
+        .map(|match_value| match_value.as_str().to_string())
+}
+
+fn summarize_reposlide_content(content: &str) -> String {
+    content
+        .lines()
+        .map(str::trim_end)
+        .filter(|line| !line.trim().is_empty())
+        .take(12)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn build_reposlide_download_url(session_id: &str) -> String {
+    format!(
+        "/api/sessions/{}/reposlide-result/download",
+        urlencoding::encode(session_id)
+    )
+}
+
+#[derive(Debug)]
+struct RepoSlideDeckFile {
+    path: PathBuf,
+    file_name: String,
+}
+
+fn resolve_reposlide_deck_file(
+    session_cwd: &FsPath,
+    deck_path: Option<&str>,
+) -> Option<RepoSlideDeckFile> {
+    let deck_path = deck_path?;
+    let candidate = FsPath::new(deck_path);
+    if !candidate.is_absolute() {
+        return None;
+    }
+    if candidate
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.eq_ignore_ascii_case("pptx"))
+        != Some(true)
+    {
+        return None;
+    }
+
+    let absolute_path = std::fs::canonicalize(candidate).ok()?;
+    let metadata = std::fs::metadata(&absolute_path).ok()?;
+    if !metadata.is_file() {
+        return None;
+    }
+
+    let allowed_roots = [
+        std::fs::canonicalize(session_cwd).ok(),
+        std::fs::canonicalize(std::env::temp_dir()).ok(),
+    ];
+    if !allowed_roots
+        .iter()
+        .flatten()
+        .any(|root| is_within_root(&absolute_path, root))
+    {
+        return None;
+    }
+
+    Some(RepoSlideDeckFile {
+        file_name: absolute_path.file_name()?.to_string_lossy().to_string(),
+        path: absolute_path,
+    })
+}
+
+fn is_within_root(target_path: &FsPath, root_path: &FsPath) -> bool {
+    if target_path == root_path {
+        return true;
+    }
+
+    target_path.starts_with(root_path)
 }
 
 fn history_to_transcript_messages(history: &[Value]) -> Vec<TranscriptMessage> {
@@ -688,7 +929,10 @@ mod tests {
     use routa_core::trace::{Contributor, TraceEventType, TraceRecord};
     use serde_json::json;
 
-    use super::{build_transcript_payload, history_to_transcript_messages};
+    use super::{
+        build_transcript_payload, extract_reposlide_result, history_to_transcript_messages,
+        resolve_reposlide_deck_file, TranscriptMessage,
+    };
 
     #[test]
     fn consolidate_message_history_merges_chunks_for_same_session() {
@@ -818,5 +1062,69 @@ mod tests {
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].role, "thought");
         assert_eq!(messages[0].content, "The user");
+    }
+
+    #[test]
+    fn extract_reposlide_result_detects_completed_deck() {
+        let messages = vec![TranscriptMessage {
+            id: "m1".to_string(),
+            role: "assistant",
+            content: "Saved PPTX to /tmp/reposlide/demo-deck.pptx\nSlide outline:\n- Intro"
+                .to_string(),
+            timestamp: "2026-04-01T03:00:00Z".to_string(),
+            tool_name: None,
+            tool_status: None,
+            tool_call_id: None,
+            tool_raw_input: None,
+            tool_raw_output: None,
+            raw_data: None,
+        }];
+
+        let result = extract_reposlide_result(&messages);
+        assert_eq!(result.status, "completed");
+        assert_eq!(
+            result.deck_path.as_deref(),
+            Some("/tmp/reposlide/demo-deck.pptx")
+        );
+        assert!(result.download_url.is_none());
+        assert!(result.summary.unwrap_or_default().contains("Slide outline"));
+    }
+
+    #[test]
+    fn extract_reposlide_result_defaults_to_running_without_assistant_output() {
+        let result = extract_reposlide_result(&[]);
+        assert_eq!(result.status, "running");
+        assert!(result.deck_path.is_none());
+    }
+
+    #[test]
+    fn resolve_reposlide_deck_file_allows_temp_pptx_artifacts() {
+        let session_dir = tempfile::tempdir().unwrap();
+        let output_dir = tempfile::tempdir().unwrap();
+        let deck_path = output_dir.path().join("demo-deck.pptx");
+        std::fs::write(&deck_path, b"demo").unwrap();
+
+        let artifact = resolve_reposlide_deck_file(session_dir.path(), deck_path.to_str());
+
+        assert_eq!(
+            artifact.as_ref().map(|value| value.file_name.as_str()),
+            Some("demo-deck.pptx")
+        );
+    }
+
+    #[test]
+    fn resolve_reposlide_deck_file_rejects_paths_outside_session_and_temp_roots() {
+        let session_dir = tempfile::tempdir().unwrap();
+        let repo_root = std::env::current_dir().unwrap();
+        let external_dir = tempfile::Builder::new()
+            .prefix("reposlide-external-")
+            .tempdir_in(&repo_root)
+            .unwrap();
+        let deck_path = external_dir.path().join("demo-deck.pptx");
+        std::fs::write(&deck_path, b"demo").unwrap();
+
+        let artifact = resolve_reposlide_deck_file(session_dir.path(), deck_path.to_str());
+
+        assert!(artifact.is_none());
     }
 }

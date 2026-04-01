@@ -166,6 +166,19 @@ fn resolve_static_target(path: &str) -> (String, &'static str) {
                 placeholder_with_suffix("workspace/__placeholder__/team", suffix),
                 content,
             )
+        } else if segments.len() >= 4 && segments[1] == "codebases" && segments[3] == "reposlide" {
+            let suffix = if segments.len() > 4 {
+                &segments[4..]
+            } else {
+                &[][..]
+            };
+            (
+                placeholder_with_suffix(
+                    "workspace/__placeholder__/codebases/__placeholder__/reposlide",
+                    suffix,
+                ),
+                content,
+            )
         } else if !segments.is_empty() {
             let suffix = if segments.len() > 1 {
                 &segments[1..]
@@ -435,6 +448,17 @@ mod tests {
             resolve_static_target("/workspace/default/team/session-123.txt");
         assert_eq!(target, "workspace/__placeholder__/team/__placeholder__.txt");
         assert_eq!(content_type, "text/x-component; charset=utf-8");
+    }
+
+    #[test]
+    fn resolves_workspace_reposlide_placeholder() {
+        let (target, content_type) =
+            resolve_static_target("/workspace/ws-1/codebases/cb-1/reposlide");
+        assert_eq!(
+            target,
+            "workspace/__placeholder__/codebases/__placeholder__/reposlide.html"
+        );
+        assert_eq!(content_type, "text/html; charset=utf-8");
     }
 }
 
