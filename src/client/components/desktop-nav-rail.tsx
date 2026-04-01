@@ -11,7 +11,7 @@ import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslation } from "@/i18n";
-import { Columns2, LayoutGrid, Settings } from "lucide-react";
+import { Columns2, LayoutGrid, Settings, House, Share2 } from "lucide-react";
 
 
 interface DesktopNavRailProps {
@@ -30,9 +30,7 @@ export function DesktopNavRail({
       label: t.nav.home,
       href: "/",
       icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
-        </svg>
+        <House className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}/>
       ),
     },
     {
@@ -56,12 +54,7 @@ export function DesktopNavRail({
       label: t.nav.team,
       href: `/workspace/${workspaceId}/team`,
       icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-          <circle cx="7.5" cy="8" r="2.25" />
-          <circle cx="16.5" cy="8" r="2.25" />
-          <circle cx="12" cy="16" r="2.25" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9.5 8h5M8.75 9.9l2 3.55m4.5-3.55-2 3.55" />
-        </svg>
+        <Share2 className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}/>
       ),
     },
   ];

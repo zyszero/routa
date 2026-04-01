@@ -11,6 +11,8 @@
 
 import { useRef, useEffect, useState, useCallback } from "react";
 import { getPlatformBridge } from "@/core/platform";
+import { Terminal as TerminalIcon1 } from "lucide-react";
+
 
 // xterm.js types - actual imports are dynamic (browser-only)
 type XTerminal = import("@xterm/xterm").Terminal;
@@ -229,19 +231,7 @@ export function PtyTerminal({
     <div className="flex flex-col rounded-lg border border-gray-700 overflow-hidden">
       {/* Header */}
       <div className="px-3 py-1.5 bg-[#161b22] border-b border-gray-700 flex items-center gap-2">
-        <svg
-          className="w-3.5 h-3.5 text-green-400 shrink-0"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-          />
-        </svg>
+        <TerminalIcon1 className="w-3.5 h-3.5 text-green-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
         <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shrink-0" />
         <span className="text-xs font-mono text-gray-300 truncate flex-1">
           {command || "Terminal"} {args?.join(" ") || ""}

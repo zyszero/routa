@@ -16,7 +16,7 @@ import Link from "next/link";
 import { v4 as uuidv4 } from "uuid";
 import { useWorkspaces } from "@/client/hooks/use-workspaces";
 import { Select } from "@/client/components/select";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, X } from "lucide-react";
 
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -859,10 +859,7 @@ export default function AGUIPage() {
                 onClick={() => setShowEvents(false)}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
+                <X viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"/>
               </button>
             </div>
 

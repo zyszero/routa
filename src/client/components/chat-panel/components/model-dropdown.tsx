@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Monitor } from "lucide-react";
 
 
 interface ModelDropdownProps {
@@ -75,9 +75,7 @@ export function ModelDropdown({
         onClick={handleToggle}
         className="flex items-center gap-1.5 pl-2 pr-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-transparent transition-colors"
       >
-        <svg className="w-3 h-3 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-        </svg>
+        <Monitor className="w-3 h-3 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
         <span className="truncate max-w-30">{displayName}</span>
         {loading ? (
           <span className="w-3 h-3 border border-slate-400 border-t-transparent rounded-full animate-spin" />

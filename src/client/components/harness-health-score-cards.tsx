@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslation } from "@/i18n";
-import { RefreshCw, TriangleAlert, Zap } from "lucide-react";
+import { RefreshCw, TriangleAlert, Zap, ArrowUp, ArrowDown, CircleCheck } from "lucide-react";
 
 
 type StatCardProps = {
@@ -80,14 +80,10 @@ function StatCard({ label, value, max, description, trend, color = "blue", icon 
           {trend && trend !== "stable" && (
             <div className="mt-1 flex items-center gap-1">
               {trend === "up" || (typeof trend === "string" && trend.startsWith("+")) ? (
-                <svg className="h-3 w-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                </svg>
+                <ArrowUp className="h-3 w-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"/>
               ) : null}
               {trend === "down" || (typeof trend === "string" && trend.startsWith("-")) ? (
-                <svg className="h-3 w-3 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                </svg>
+                <ArrowDown className="h-3 w-3 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"/>
               ) : null}
               <span className="text-[10px] font-medium">{trend}</span>
             </div>
@@ -126,9 +122,7 @@ export function HarnessHealthScoreCards({
         description={`${dimensionCount} dimensions`}
         color="emerald"
         icon={
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
+          <CircleCheck className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"/>
         }
       />
       <StatCard

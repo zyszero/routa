@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import type { LaneHandoffInfo, LaneSessionInfo, SessionKanbanContext } from "@/client/types/kanban-context";
 import { desktopAwareFetch, shouldSuppressTeardownError } from "../utils/diagnostics";
 import { useTranslation } from "@/i18n";
-import { SquarePen, Trash2, Zap } from "lucide-react";
+import { SquarePen, Trash2, Zap, ArrowUp, ArrowDown } from "lucide-react";
 
 
 interface SessionInfo {
@@ -509,9 +509,7 @@ export function SessionContextPanel({
                 label="Parent"
                 highlighted={context.parent.sessionId === focusedSessionId}
                 icon={
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                  </svg>
+                  <ArrowUp className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
                 }
               />
             )}
@@ -546,9 +544,7 @@ export function SessionContextPanel({
             {context.children.length > 0 && (
               <div className="space-y-0.5">
                 <div className="flex items-center gap-1.5 px-2 py-1">
-                  <svg className="w-3 h-3 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                  </svg>
+                  <ArrowDown className="w-3 h-3 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
                   <span className="text-[10px] text-slate-400 dark:text-slate-500">
                     {context.children.length} Child Session{context.children.length > 1 ? "s" : ""}
                   </span>

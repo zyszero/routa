@@ -2,6 +2,8 @@
 
 import type { CodebaseData } from "../hooks/use-workspaces";
 import { Select } from "./select";
+import { CodeXml } from "lucide-react";
+
 
 interface CodebasePickerProps {
   codebases: CodebaseData[];
@@ -19,9 +21,7 @@ export function CodebasePicker({ codebases, selectedRepoPath, onSelect }: Codeba
     const cb = codebases[0];
     return (
       <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 max-w-[200px]">
-        <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-        </svg>
+        <CodeXml className="w-3 h-3 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
         <span className="truncate">{cb.label ?? cb.repoPath.split("/").pop()}</span>
       </div>
     );
@@ -29,9 +29,7 @@ export function CodebasePicker({ codebases, selectedRepoPath, onSelect }: Codeba
 
   return (
     <div className="flex items-center gap-1">
-      <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-      </svg>
+      <CodeXml className="w-3 h-3 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
       <Select
         value={effective ?? ""}
         onChange={(e) => onSelect(e.target.value)}

@@ -36,7 +36,7 @@ import type { FileMatch } from "../hooks/use-file-search";
 import { isDarkThemeActive } from "../utils/theme";
 import { AcpProviderDropdown } from "./acp-provider-dropdown";
 import { useTranslation } from "@/i18n";
-import { ChevronDown, Zap } from "lucide-react";
+import { ChevronDown, Zap, Monitor } from "lucide-react";
 
 
 const lowlight = createLowlight(common);
@@ -996,9 +996,7 @@ export function TiptapInput({
                 className={modelButtonClass}
                 title="Select model"
               >
-                <svg className="w-3 h-3 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
+                <Monitor className="w-3 h-3 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
                 <span className={`font-medium truncate ${isHero ? "max-w-[180px] text-slate-700 dark:text-slate-200" : "max-w-[140px] text-slate-700 dark:text-slate-300"}`}>
                   {selectedModel ? selectedModel.split("/").pop() : "Default model"}
                 </span>

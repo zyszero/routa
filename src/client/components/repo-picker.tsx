@@ -14,7 +14,7 @@ import { desktopAwareFetch } from "../utils/diagnostics";
 import { createPortal } from "react-dom";
 import { BranchSelector } from "./branch-selector";
 import { useTranslation } from "@/i18n";
-import { Check, Download, PieChart, Search, X, GitBranch } from "lucide-react";
+import { Check, Download, PieChart, Search, X, GitBranch, Book, Folder } from "lucide-react";
 
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -491,9 +491,7 @@ export function RepoPicker({
               active={activeTab === "existing"}
               onClick={() => setActiveTab("existing")}
             >
-              <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
-                <path fillRule="evenodd" d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1h-8a1 1 0 00-1 1v6.708A2.486 2.486 0 014.5 9h8V1.5z" />
-              </svg>
+              <Book className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor"/>
               Repositories
             </TabButton>
             {allowClone ? (
@@ -512,9 +510,7 @@ export function RepoPicker({
               active={activeTab === "local"}
               onClick={() => setActiveTab("local")}
             >
-              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7.5A1.5 1.5 0 014.5 6h4.379a1.5 1.5 0 011.06.44l1.12 1.12a1.5 1.5 0 001.06.44H19.5A1.5 1.5 0 0121 9.5v8A1.5 1.5 0 0119.5 19h-15A1.5 1.5 0 013 17.5v-10z" />
-              </svg>
+              <Folder className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}/>
               Local Project
             </TabButton>
           </div>
@@ -715,9 +711,7 @@ export function RepoPicker({
                   </>
                 ) : (
                   <>
-                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7.5A1.5 1.5 0 014.5 6h4.379a1.5 1.5 0 011.06.44l1.12 1.12a1.5 1.5 0 001.06.44H19.5A1.5 1.5 0 0121 9.5v8A1.5 1.5 0 0119.5 19h-15A1.5 1.5 0 013 17.5v-10z" />
-                    </svg>
+                    <Folder className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}/>
                     Use Local Project
                   </>
                 )}
@@ -878,9 +872,7 @@ function RepoListItem({
         className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
       >
         <div className="w-7 h-7 rounded-md bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
-          <svg className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" viewBox="0 0 16 16" fill="currentColor">
-            <path fillRule="evenodd" d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1h-8a1 1 0 00-1 1v6.708A2.486 2.486 0 014.5 9h8V1.5z" />
-          </svg>
+          <Book className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" viewBox="0 0 16 16" fill="currentColor"/>
         </div>
         <div className="flex-1 text-left min-w-0">
           <div className="flex items-center gap-1.5">

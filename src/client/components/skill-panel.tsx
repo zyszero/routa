@@ -17,7 +17,7 @@ import { useSkills, type UseSkillsState, type UseSkillsActions, type CatalogType
 import type { SkillsShSkill, GithubCatalogSkill } from "../skill-client";
 import { MarkdownViewer } from "./markdown/markdown-viewer";
 import { useTranslation } from "@/i18n";
-import { ChevronRight, Download, PieChart, Search, X } from "lucide-react";
+import { ChevronRight, Download, PieChart, Search, X, CircleCheck } from "lucide-react";
 
 
 interface SkillPanelProps {
@@ -985,9 +985,7 @@ function SkillUploadModal({
 
             {selectedFile ? (
               <div>
-                <svg className="w-8 h-8 mx-auto text-emerald-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                <CircleCheck className="w-8 h-8 mx-auto text-emerald-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}/>
                 <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
                   {selectedFile.name}
                 </div>
