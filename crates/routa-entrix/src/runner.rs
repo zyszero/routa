@@ -462,14 +462,18 @@ mod tests {
     #[test]
     fn test_run_batch_parallel_executes_concurrently() {
         let runner = ShellRunner::new(Path::new("/tmp"));
-        let metrics = vec![Metric::new("a", "sleep 1"), Metric::new("b", "sleep 1")];
+        let metrics = vec![Metric::new("a", "sleep 2"), Metric::new("b", "sleep 2")];
 
         let start = Instant::now();
         let results = runner.run_batch(&metrics, true, false, None);
         let elapsed = start.elapsed();
 
         assert_eq!(results.len(), 2);
-        assert!(elapsed < Duration::from_millis(1800));
+        assert!(
+            elapsed < Duration::from_millis(3500),
+            "parallel batch should finish in about one sleep interval, got {:?}",
+            elapsed
+        );
     }
 
     #[test]
