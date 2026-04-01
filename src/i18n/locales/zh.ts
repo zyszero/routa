@@ -993,13 +993,13 @@ const zh: TranslationDictionary = {
   },
 
   kanbanCreate: {
-    manualIssue: "手动创建工单",
-    issueTitle: "工单标题",
+    manualTask: "手动创建任务",
+    taskTitle: "任务标题",
     description: "描述",
     testCases: "测试用例",
     testCasesPlaceholder: "每行一个测试用例\n示例：用户可以成功提交表单",
     testCasesHint: "用于人类可读的场景描述。可执行命令请单独放在验证部分。",
-    alsoCreateGithub: "同时创建 GitHub Issue",
+    createLinkedGithubIssue: "创建关联的 GitHub Issue",
     noGithubLinked: "当前默认代码仓库未关联 GitHub 仓库。",
     linkRepositories: "关联仓库",
     noSelectionHint: "未选择 → 将关联工作区内所有仓库。",

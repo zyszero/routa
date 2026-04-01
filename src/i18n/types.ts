@@ -1029,13 +1029,13 @@ export interface TranslationDictionary {
 
   // Kanban create modal
   kanbanCreate: {
-    manualIssue: string;
-    issueTitle: string;
+    manualTask: string;
+    taskTitle: string;
     description: string;
     testCases: string;
     testCasesPlaceholder: string;
     testCasesHint: string;
-    alsoCreateGithub: string;
+    createLinkedGithubIssue: string;
     noGithubLinked: string;
     linkRepositories: string;
     noSelectionHint: string;
