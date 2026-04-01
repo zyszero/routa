@@ -811,6 +811,7 @@ async fn get_reposlide(
     let key_files = detect_key_files(&tree);
     let focus_directories = build_focus_directories(&tree);
     let skill_repo_path = resolve_reposlide_skill_repo_path();
+    let skill_available = skill_repo_path.is_some();
     let prompt = build_reposlide_prompt(
         &codebase,
         &summary,
@@ -839,6 +840,12 @@ async fn get_reposlide(
         "launch": {
             "skillName": "slide-skill",
             "skillRepoPath": skill_repo_path,
+            "skillAvailable": skill_available,
+            "unavailableReason": if skill_available {
+                serde_json::Value::Null
+            } else {
+                serde_json::Value::String("slide-skill could not be found relative to the current Routa installation.".to_string())
+            },
             "prompt": prompt,
         },
     })))

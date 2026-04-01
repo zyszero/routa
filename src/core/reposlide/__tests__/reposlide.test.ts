@@ -139,6 +139,7 @@ describe("buildRepoSlideLaunch", () => {
     expect(launch.summary.totalFiles).toBe(7);
     expect(launch.launch.skillName).toBe("slide-skill");
     expect(launch.launch.skillRepoPath).toBe(path.join(projectRoot, "tools", "ppt-template"));
+    expect(launch.launch.skillAvailable).toBe(true);
     expect(launch.context.entryPoints.some((entry) => entry.path === "README.md")).toBe(true);
     expect(launch.launch.prompt).toContain('Create a presentation slide deck for the repository "test-repo".');
     expect(launch.launch.prompt).toContain(`- Repo path: ${fixtureDir}`);
@@ -195,5 +196,21 @@ describe("buildRepoSlideLaunch", () => {
     expect(launch.codebase.sourceType).toBe("github");
     expect(launch.codebase.sourceUrl).toBe("https://github.com/example/repo");
     expect(launch.summary.totalFiles).toBe(7);
+  });
+
+  it("marks the launch as unavailable when slide-skill cannot be resolved", () => {
+    const codebase: Codebase = {
+      id: "cb-5",
+      workspaceId: "ws-1",
+      repoPath: fixtureDir,
+      isDefault: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const launch = buildRepoSlideLaunch(codebase, { projectRoot: fixtureDir });
+    expect(launch.launch.skillAvailable).toBe(false);
+    expect(launch.launch.skillRepoPath).toBeUndefined();
+    expect(launch.launch.unavailableReason).toContain("slide-skill");
   });
 });

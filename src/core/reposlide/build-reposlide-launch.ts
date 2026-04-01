@@ -90,6 +90,8 @@ export interface RepoSlideLaunchResponse {
   launch: {
     skillName: string;
     skillRepoPath?: string;
+    skillAvailable: boolean;
+    unavailableReason?: string;
     prompt: string;
   };
 }
@@ -109,6 +111,7 @@ export function buildRepoSlideLaunch(
   const summary = computeSummary(tree, sourceType, codebase.branch);
   const context = buildLaunchContext(tree);
   const skillRepoPath = resolveRepoSlideSkillRepoPath(options?.projectRoot);
+  const skillAvailable = Boolean(skillRepoPath);
 
   return {
     codebase: {
@@ -124,6 +127,10 @@ export function buildRepoSlideLaunch(
     launch: {
       skillName: SLIDE_SKILL_NAME,
       skillRepoPath,
+      skillAvailable,
+      unavailableReason: skillAvailable
+        ? undefined
+        : "slide-skill could not be found relative to the current Routa installation.",
       prompt: buildRepoSlidePrompt(codebase, summary, context),
     },
   };

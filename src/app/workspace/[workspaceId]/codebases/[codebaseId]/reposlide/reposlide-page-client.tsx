@@ -51,6 +51,8 @@ interface RepoSlideResponse {
   launch: {
     skillName: string;
     skillRepoPath?: string;
+    skillAvailable: boolean;
+    unavailableReason?: string;
     prompt: string;
   };
 }
@@ -133,6 +135,9 @@ export function RepoSlidePageClient() {
       if (!provider) {
         throw new Error("No available ACP provider for RepoSlide launch.");
       }
+      if (!data.launch.skillAvailable) {
+        throw new Error(data.launch.unavailableReason ?? "slide-skill is not available for RepoSlide.");
+      }
       if (provider !== acp.selectedProvider) {
         acp.setProvider(provider);
       }
@@ -163,12 +168,14 @@ export function RepoSlidePageClient() {
         skillRepoPath: data.launch.skillRepoPath,
       });
 
-      router.push(`/workspace/${workspaceId}/sessions/${result.sessionId}?source=reposlide`);
+      router.push(
+        `/workspace/${workspaceId}/sessions/${result.sessionId}?source=reposlide&codebaseId=${codebaseId}`,
+      );
     } catch (launchError) {
       setError(launchError instanceof Error ? launchError.message : String(launchError));
       setLaunching(false);
     }
-  }, [acp, data, router, selectableProvider, workspaceId]);
+  }, [acp, codebaseId, data, router, selectableProvider, workspaceId]);
 
   const content = (
     <div className="flex h-full flex-col bg-desktop-bg-primary" data-testid="reposlide-root">
@@ -199,7 +206,7 @@ export function RepoSlidePageClient() {
           <button
             type="button"
             onClick={handleLaunch}
-            disabled={loading || launching || !data || !selectableProvider}
+            disabled={loading || launching || !data || !selectableProvider || !data.launch.skillAvailable}
             className="rounded-lg bg-[var(--dt-accent)] px-3 py-2 text-sm font-medium text-[var(--dt-accent-text)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {launching ? "Launching…" : "Launch RepoSlide"}
@@ -244,6 +251,12 @@ export function RepoSlidePageClient() {
                   This page no longer renders a hardcoded slide deck. It starts an ACP session in the selected repo,
                   injects `slide-skill`, and asks the agent to build a real deck artifact.
                 </div>
+                {!data.launch.skillAvailable && (
+                  <div className="mt-4 rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700/40 dark:bg-amber-950/20 dark:text-amber-200">
+                    RepoSlide launch is blocked because `slide-skill` is unavailable.
+                    {data.launch.unavailableReason ? ` ${data.launch.unavailableReason}` : ""}
+                  </div>
+                )}
               </div>
 
               <div className="rounded-2xl border border-desktop-border bg-white p-5 shadow-sm dark:bg-[#12141c]">
