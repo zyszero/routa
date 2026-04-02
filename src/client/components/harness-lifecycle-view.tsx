@@ -30,17 +30,17 @@ type HarnessLifecycleViewProps = {
 
 // Define node areas based on the SVG layout (approximate coordinates)
 const LIFECYCLE_NODES: LifecycleNodeData[] = [
-  { nodeId: "thinking", title: "需求定义", x: 28, y: 172, width: 170, height: 216, connected: true },
-  { nodeId: "coding", title: "设计决策", x: 212, y: 172, width: 170, height: 216, connected: true },
-  { nodeId: "build", title: "编码实现", x: 396, y: 172, width: 170, height: 216, connected: true },
-  { nodeId: "test", title: "本地验证", x: 580, y: 172, width: 170, height: 216, connected: true },
-  { nodeId: "commit", title: "主干集成", x: 764, y: 172, width: 170, height: 216, partiallyConnected: true },
-  { nodeId: "review", title: "代码评审", x: 948, y: 172, width: 170, height: 216, connected: true },
-  { nodeId: "precommit", title: "变更门禁", x: 1132, y: 172, width: 170, height: 216, connected: true },
-  { nodeId: "release", title: "制品发布", x: 1316, y: 172, width: 170, height: 216, connected: true },
-  { nodeId: "staging", title: "预生产验证", x: 1500, y: 172, width: 170, height: 216, partiallyConnected: true },
-  { nodeId: "production", title: "生产运行", x: 1684, y: 172, width: 170, height: 216, partiallyConnected: true },
-  { nodeId: "observability", title: "监控演进", x: 1868, y: 172, width: 170, height: 216, connected: false },
+  { nodeId: "thinking", title: "需求定义", x: 28, y: 62, width: 170, height: 216, connected: true },
+  { nodeId: "coding", title: "设计决策", x: 212, y: 62, width: 170, height: 216, connected: true },
+  { nodeId: "build", title: "编码实现", x: 396, y: 62, width: 170, height: 216, connected: true },
+  { nodeId: "test", title: "本地验证", x: 580, y: 62, width: 170, height: 216, connected: true },
+  { nodeId: "commit", title: "主干集成", x: 764, y: 62, width: 170, height: 216, partiallyConnected: true },
+  { nodeId: "review", title: "代码评审", x: 948, y: 62, width: 170, height: 216, connected: true },
+  { nodeId: "precommit", title: "变更门禁", x: 1132, y: 62, width: 170, height: 216, connected: true },
+  { nodeId: "release", title: "制品发布", x: 1316, y: 62, width: 170, height: 216, connected: true },
+  { nodeId: "staging", title: "预生产验证", x: 1500, y: 62, width: 170, height: 216, partiallyConnected: true },
+  { nodeId: "production", title: "生产运行", x: 1684, y: 62, width: 170, height: 216, partiallyConnected: true },
+  { nodeId: "observability", title: "监控演进", x: 1868, y: 62, width: 170, height: 216, connected: false },
 ];
 
 const SELECTABLE_NODE_IDS = new Set([
@@ -79,32 +79,23 @@ export function HarnessLifecycleView({
 
   return (
     <div className="rounded-2xl border border-desktop-border bg-desktop-bg-secondary/55 p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="min-w-0">
-          <h3 className="text-[15px] font-semibold text-desktop-text-primary">Lifecycle View</h3>
-          <p className="mt-1 text-[12px] leading-6 text-desktop-text-secondary">
-            从需求到交付的完整生命周期治理视图
-          </p>
-        </div>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="space-y-4">
         <div className="min-w-0 rounded-xl border border-desktop-border bg-white p-4">
           <div className="relative overflow-x-auto">
             {/* Base SVG */}
-            <div className="relative" style={{ minWidth: "1024px" }}>
+            <div className="relative" style={{ minWidth: "800px", maxWidth: "100%" }}>
               <Image
                 src="/harness-lifecycle-view.svg"
                 alt="Harness Lifecycle View"
                 width={2048}
-                height={667}
+                height={320}
                 className="w-full h-auto"
                 priority
               />
 
               {/* Overlay interactive hotspots */}
               <svg
-                viewBox="0 0 2048 667"
+                viewBox="0 0 2048 320"
                 className="absolute inset-0 w-full h-full pointer-events-none"
               >
                 {selectableNodes.map((node) => (
@@ -136,7 +127,7 @@ export function HarnessLifecycleView({
         </div>
 
         {contextPanel ? (
-          <div className="min-w-0 xl:sticky xl:top-4 xl:self-start">{contextPanel}</div>
+          <div className="min-w-0">{contextPanel}</div>
         ) : null}
       </div>
     </div>
