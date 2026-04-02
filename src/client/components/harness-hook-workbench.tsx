@@ -662,6 +662,7 @@ export function HarnessHookWorkbench({
     [defaultHook, entries, state.selectedHookName],
   );
   const compactMode = variant === "compact";
+  const warnings = data.warnings ?? [];
 
   const contextValue: WorkbenchContextValue = {
     state,
@@ -686,9 +687,9 @@ export function HarnessHookWorkbench({
           <HarnessUnsupportedState className="rounded-sm border border-amber-200 bg-amber-50 px-4 py-4 text-[11px] text-amber-800" />
         ) : null}
 
-        {!unsupportedMessage && data.warnings.length ? (
+        {!unsupportedMessage && warnings.length > 0 ? (
           <div className="grid gap-2">
-            {data.warnings.map((warning) => (
+            {warnings.map((warning) => (
               <div key={warning} className="rounded-sm border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] text-amber-800">
                 {warning}
               </div>
@@ -704,7 +705,7 @@ export function HarnessHookWorkbench({
 
         {!unsupportedMessage && entries.length > 0 ? (
           <div
-            className={`grid gap-4 ${data.warnings.length ? "mt-4" : ""} ${
+            className={`grid gap-4 ${warnings.length > 0 ? "mt-4" : ""} ${
               compactMode
                 ? "grid-cols-1"
                 : "xl:grid-cols-[260px_minmax(0,1fr)_320px] 2xl:grid-cols-[280px_minmax(0,1fr)_360px]"

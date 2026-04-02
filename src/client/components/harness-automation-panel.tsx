@@ -1,6 +1,4 @@
 "use client";
-
-import { useMemo } from "react";
 import { CodeViewer } from "@/client/components/codemirror/code-viewer";
 import { HarnessSectionCard, HarnessSectionStateFrame } from "@/client/components/harness-section-card";
 import { HarnessUnsupportedState } from "@/client/components/harness-support-state";
@@ -289,17 +287,21 @@ export function HarnessAutomationPanel({
   const showData = !loading && !error && !unsupportedMessage && Boolean(data);
   const visibleData = showData ? data : null;
   const showMissingContext = !loading && !error && !unsupportedMessage && !data;
-  const summary = useMemo(() => ({
-    definitions: data?.definitions.length ?? 0,
-    pendingSignals: data?.pendingSignals.length ?? 0,
-    recentRuns: data?.recentRuns.length ?? 0,
-  }), [data]);
-  const configSummary = useMemo(() => ({
+  const definitions = data?.definitions ?? [];
+  const pendingSignals = data?.pendingSignals ?? [];
+  const recentRuns = data?.recentRuns ?? [];
+  const warnings = data?.warnings ?? [];
+  const summary = {
+    definitions: definitions.length,
+    pendingSignals: pendingSignals.length,
+    recentRuns: recentRuns.length,
+  };
+  const configSummary = {
     sourceOfTruth: data?.configFile?.relativePath ?? "No checked-in config file",
-    findingDriven: data?.definitions.filter((definition) => definition.sourceType === "finding").length ?? 0,
-    scheduledRuns: data?.definitions.filter((definition) => definition.sourceType === "schedule").length ?? 0,
-    runtimeBindings: data?.definitions.filter((definition) => Boolean(definition.runtimeBinding)).length ?? 0,
-  }), [data]);
+    findingDriven: definitions.filter((definition) => definition.sourceType === "finding").length,
+    scheduledRuns: definitions.filter((definition) => definition.sourceType === "schedule").length,
+    runtimeBindings: definitions.filter((definition) => Boolean(definition.runtimeBinding)).length,
+  };
   const repoContextLabel = repoLabel.trim() || "This repository";
 
   return (
@@ -371,13 +373,13 @@ export function HarnessAutomationPanel({
             <SummaryStat label="Recent Executions" value={summary.recentRuns} />
           </div>
 
-          <DefinitionTable definitions={visibleData.definitions} />
-          <PendingSignalsTable pendingSignals={visibleData.pendingSignals} />
-          <RecentRunsTable recentRuns={visibleData.recentRuns} />
+          <DefinitionTable definitions={definitions} />
+          <PendingSignalsTable pendingSignals={pendingSignals} />
+          <RecentRunsTable recentRuns={recentRuns} />
 
-          {visibleData.warnings.length > 0 ? (
+          {warnings.length > 0 ? (
             <HarnessSectionStateFrame tone="warning">
-              {visibleData.warnings.join(" ")}
+              {warnings.join(" ")}
             </HarnessSectionStateFrame>
           ) : null}
         </div>

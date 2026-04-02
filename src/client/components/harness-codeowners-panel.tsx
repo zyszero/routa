@@ -69,6 +69,14 @@ export function HarnessCodeownersPanel({
 }: HarnessCodeownersPanelProps) {
   const compactMode = variant === "compact";
   const rulesTableMaxHeight = compactMode ? "14rem" : "min(36rem, calc(100vh - 24rem))";
+  const warnings = data?.warnings ?? [];
+  const triggerCorrelations = data?.correlation?.triggerCorrelations ?? [];
+  const hotspots = data?.correlation?.hotspots ?? [];
+  const owners = data?.owners ?? [];
+  const rules = data?.rules ?? [];
+  const unownedFiles = data?.coverage?.unownedFiles ?? [];
+  const overlappingFiles = data?.coverage?.overlappingFiles ?? [];
+  const sensitiveUnownedFiles = data?.coverage?.sensitiveUnownedFiles ?? [];
 
   return (
     <HarnessSectionCard
@@ -90,24 +98,24 @@ export function HarnessCodeownersPanel({
 
       {!loading && !error && !unsupportedMessage && data ? (
         <div className="space-y-4">
-          {data.warnings.length > 0 ? (
+          {warnings.length > 0 ? (
             <div className="rounded-sm border border-amber-200 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-900">
               <div className="font-semibold">Warnings</div>
               <ul className="mt-1 list-inside list-disc space-y-0.5">
-                {data.warnings.map((w) => (
+                {warnings.map((w) => (
                   <li key={w}>{w}</li>
                 ))}
               </ul>
             </div>
           ) : null}
 
-          {data.correlation?.triggerCorrelations.length ? (
+          {triggerCorrelations.length > 0 ? (
             <div className="space-y-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-desktop-text-secondary">
                 Trigger Correlation
               </div>
               <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-6">
-                {data.correlation.triggerCorrelations.map((correlation) => (
+                {triggerCorrelations.map((correlation) => (
                   <div
                     key={correlation.triggerName}
                     className="rounded-sm border border-desktop-border bg-desktop-bg-primary/80 px-3 py-2"
@@ -157,11 +165,11 @@ export function HarnessCodeownersPanel({
             </div>
           ) : null}
 
-          {data.correlation?.hotspots.length ? (
+          {hotspots.length > 0 ? (
             <div className="rounded-sm border border-rose-200 bg-rose-50/60 px-3 py-2">
               <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-rose-800">Governance hotspots</div>
               <ul className="mt-1.5 space-y-1 text-[11px] text-rose-900">
-                {data.correlation.hotspots.map((hotspot) => (
+                {hotspots.map((hotspot) => (
                   <li key={`${hotspot.triggerName}-${hotspot.reason}`}>
                     <span className="font-medium">{formatTriggerLabel(hotspot.triggerName)}</span>
                     {": "}
@@ -173,11 +181,11 @@ export function HarnessCodeownersPanel({
             </div>
           ) : null}
 
-          {data.owners.length > 0 ? (
+          {owners.length > 0 ? (
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-desktop-text-secondary">Owner groups</div>
               <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                {data.owners.map((o) => (
+                {owners.map((o) => (
                   <div
                     key={o.name}
                     className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-3 py-2"
@@ -193,7 +201,7 @@ export function HarnessCodeownersPanel({
             </div>
           ) : null}
 
-          {data.rules.length > 0 ? (
+          {rules.length > 0 ? (
             <div
               className="overflow-x-auto overflow-y-auto rounded-sm border border-desktop-border desktop-scrollbar-thin"
               style={{ maxHeight: rulesTableMaxHeight }}
@@ -207,7 +215,7 @@ export function HarnessCodeownersPanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {data.rules.map((rule) => (
+                  {rules.map((rule) => (
                     <tr key={`${rule.line}-${rule.pattern}`} className="border-b border-desktop-border/80">
                       <td className="px-3 py-2 font-mono text-desktop-text-primary">{rule.pattern}</td>
                       <td className="px-3 py-2 text-desktop-text-primary">{rule.owners.join(", ")}</td>
@@ -220,17 +228,17 @@ export function HarnessCodeownersPanel({
           ) : null}
 
           <div className="grid gap-3 md:grid-cols-2">
-            <ListBlock title="Unowned files (sample)" items={data.coverage.unownedFiles} tone="amber" rowLimit={compactMode ? 5 : 8} />
+            <ListBlock title="Unowned files (sample)" items={unownedFiles} tone="amber" rowLimit={compactMode ? 5 : 8} />
             <ListBlock
               title="Overlapping matches (sample)"
-              items={data.coverage.overlappingFiles}
+              items={overlappingFiles}
               tone="neutral"
               rowLimit={compactMode ? 5 : 8}
             />
           </div>
           <ListBlock
             title="Sensitive paths without ownership"
-            items={data.coverage.sensitiveUnownedFiles}
+            items={sensitiveUnownedFiles}
             tone="rose"
             rowLimit={compactMode ? 5 : 8}
           />

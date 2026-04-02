@@ -509,6 +509,23 @@ describe("HarnessSettingsPage", () => {
     expect(screen.getByRole("button", { name: /Spec Sources/i })).not.toBeNull();
   });
 
+  it("does not crash when automation data is missing definitions", () => {
+    currentSearchParams = new URLSearchParams("section=automations");
+    mockHarnessSettingsData.automationsState = {
+      loading: false,
+      error: null,
+      data: {
+        generatedAt: "2026-03-30T00:00:00.000Z",
+        repoRoot: "/Users/phodal/ai/routa-js",
+        warnings: [],
+      } as never,
+    };
+
+    render(<HarnessSettingsPage />);
+
+    expect(screen.getByTestId("automation-panel-full")).not.toBeNull();
+  });
+
   it("resizes the explorer pane via the drag handle", () => {
     render(<HarnessSettingsPage />);
 

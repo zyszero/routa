@@ -143,6 +143,7 @@ export function HarnessDesignDecisionPanel({
   hideHeader = false,
 }: HarnessDesignDecisionPanelProps) {
   const sources = data?.sources ?? [];
+  const warnings = data?.warnings ?? [];
 
   if (unsupportedMessage) {
     return <HarnessUnsupportedState />;
@@ -162,7 +163,7 @@ export function HarnessDesignDecisionPanel({
         <HarnessSectionStateFrame>Loading architecture contract and ADRs…</HarnessSectionStateFrame>
       ) : error ? (
         <HarnessSectionStateFrame tone="error">{error}</HarnessSectionStateFrame>
-      ) : !data || data.sources.length === 0 ? (
+      ) : !data || sources.length === 0 ? (
         <HarnessSectionStateFrame tone="warning">
           No architecture contract or ADR decisions are currently available for this repository.
         </HarnessSectionStateFrame>
@@ -185,9 +186,9 @@ export function HarnessDesignDecisionPanel({
             </HarnessSectionStateFrame>
           ) : null}
 
-          {data.warnings.length > 0 ? (
+          {warnings.length > 0 ? (
             <HarnessSectionStateFrame tone="warning">
-              {data.warnings.join(" ")}
+              {warnings.join(" ")}
             </HarnessSectionStateFrame>
           ) : null}
         </div>

@@ -271,6 +271,10 @@ export default function HarnessConsolePage() {
     () => githubActionsState.data?.flows?.length ?? 0,
     [githubActionsState.data?.flows?.length],
   );
+  const automationRuleCount = useMemo(
+    () => automationsState.data?.definitions?.length ?? 0,
+    [automationsState.data?.definitions?.length],
+  );
 
   useEffect(() => {
     if (selectedRepoOverrideState.workspaceId !== workspaceId) {
@@ -369,7 +373,7 @@ export default function HarnessConsolePage() {
     map.set("spec-sources", specSourcesState.data ? { label: `${specSourcesState.data.sources?.length ?? 0} sources` } : null);
     map.set("agent-instructions", instructionsState.data ? { label: instructionsState.data.fileName, tone: instructionsState.data.fallbackUsed ? "warning" : "success" } : null);
     map.set("design-decisions", designDecisionsState.data ? { label: `${designDecisionsState.data.sources?.length ?? 0} docs` } : null);
-    map.set("automations", automationsState.data ? { label: `${automationsState.data.definitions.length} rules` } : null);
+    map.set("automations", automationsState.data ? { label: `${automationRuleCount} rules` } : null);
     map.set("hook-systems", hookCount > 0 ? { label: `${hookCount} hooks` } : null);
     map.set("review-triggers", hooksState.data?.reviewTriggerFile ? { label: `${hooksState.data.reviewTriggerFile.ruleCount} rules` } : null);
     map.set("release-triggers", hooksState.data?.releaseTriggerFile ? { label: `${hooksState.data.releaseTriggerFile.ruleCount} rules` } : null);
@@ -383,8 +387,9 @@ export default function HarnessConsolePage() {
     map.set("ci-cd", workflowCount > 0 ? { label: `${workflowCount} flows` } : null);
     return map;
   }, [
-    designDecisionsState.data,
     automationsState.data,
+    designDecisionsState.data,
+    automationRuleCount,
     dimensionSpecs.length,
     hookCount,
     hooksState.data,
@@ -829,8 +834,6 @@ export default function HarnessConsolePage() {
     </div>
   );
 
-  const automationCount = automationsState.data?.definitions.length ?? 0;
-
   return (
     <DesktopAppShell
       workspaceId={workspaceId}
@@ -1019,7 +1022,7 @@ export default function HarnessConsolePage() {
               <span>{activeWorkspaceTitle ?? "-"}</span>
             </div>
             <div className="flex items-center gap-3">
-              <span>{automationCount} cleanup rules</span>
+              <span>{automationRuleCount} cleanup rules</span>
               <span>{hookCount} hooks</span>
               <span>{workflowCount} workflows</span>
             </div>

@@ -117,11 +117,12 @@ export function HarnessRepoSignalsPanel({
   const tone = categoryTone(mode);
   const focus = state.data?.[mode];
   const scriptGroups = useMemo(() => focus?.entrypointGroups ?? [], [focus]);
+  const warnings = useMemo(() => state.data?.warnings ?? [], [state.data?.warnings]);
   const title = mode === "build" ? "Build Feedback" : "Test Feedback";
   const summaryRows = useMemo(() => {
-    return focus?.overviewRows.map((row) => ({
+    return (focus?.overviewRows ?? []).map((row) => ({
       label: row.label,
-      values: row.items,
+      values: row.items ?? [],
     })) ?? [];
   }, [focus]);
 
@@ -263,9 +264,9 @@ export function HarnessRepoSignalsPanel({
             )}
           </div>
 
-          {state.data.warnings.length > 0 ? (
+          {warnings.length > 0 ? (
             <div className={`space-y-2 ${mode === "test" ? "md:col-span-2" : ""}`}>
-              {state.data.warnings.map((warning) => (
+              {warnings.map((warning) => (
                 <div key={warning} className="rounded-sm border border-amber-200 bg-amber-50 px-3 py-3 text-[11px] text-amber-800">
                   {warning}
                 </div>

@@ -351,6 +351,7 @@ function AgentHookInspector() {
     if (!activeEntry) return "";
     return buildAgentHookConfigSource(activeEntry);
   }, [activeEntry]);
+  const warnings = data.warnings ?? [];
 
   return (
     <aside className="rounded-sm border border-desktop-border bg-desktop-bg-primary p-3">
@@ -381,11 +382,11 @@ function AgentHookInspector() {
           ))}
         </div>
 
-        {data.warnings.length > 0 ? (
+        {warnings.length > 0 ? (
           <div className="rounded-sm border border-amber-200 bg-amber-50 p-3">
             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-800">Warnings</div>
             <ul className="mt-1 space-y-1">
-              {data.warnings.map((warning) => (
+              {warnings.map((warning) => (
                 <li key={warning} className="text-[11px] text-amber-700">• {warning}</li>
               ))}
             </ul>
