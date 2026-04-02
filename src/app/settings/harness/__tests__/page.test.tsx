@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { GitHubActionsFlowsResponse } from "@/client/hooks/use-harness-settings-data";
 import type { SpecDetectionResponse } from "@/core/harness/spec-detector-types";
 import HarnessSettingsPage from "../page";
 
@@ -18,6 +19,19 @@ function createSpecSourcesData(
     generatedAt: "2026-03-30T00:00:00.000Z",
     repoRoot: "/Users/phodal/ai/routa-js",
     sources: [],
+    warnings: [],
+    ...overrides,
+  };
+}
+
+function createGitHubActionsData(
+  overrides: Partial<GitHubActionsFlowsResponse> = {},
+): GitHubActionsFlowsResponse {
+  return {
+    generatedAt: "2026-03-30T00:00:00.000Z",
+    repoRoot: "/Users/phodal/ai/routa-js",
+    workflowsDir: ".github/workflows",
+    flows: [],
     warnings: [],
     ...overrides,
   };
@@ -115,9 +129,7 @@ const mockHarnessSettingsData = {
   githubActionsState: {
     loading: false,
     error: null,
-    data: {
-      flows: [],
-    },
+    data: createGitHubActionsData(),
   },
   automationsState: {
     loading: false,
@@ -543,9 +555,9 @@ describe("HarnessSettingsPage", () => {
     mockHarnessSettingsData.githubActionsState = {
       loading: false,
       error: null,
-      data: {
-        flows: [{ id: "ci", name: "CI" }],
-      },
+      data: createGitHubActionsData({
+        flows: [{ id: "ci", name: "CI", event: "push", yaml: "name: CI", jobs: [] }],
+      }),
     };
 
     render(<HarnessSettingsPage />);
