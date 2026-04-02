@@ -106,6 +106,22 @@ describe("useHarnessSettingsData", () => {
         });
       }
 
+      if (url.startsWith("/api/harness/automations?")) {
+        return okJson({
+          generatedAt: "2026-03-31T00:00:00.000Z",
+          repoRoot: "/repo",
+          configFile: {
+            relativePath: "docs/harness/automations.yml",
+            source: "schema: harness-automation-v1",
+            schema: "harness-automation-v1",
+          },
+          definitions: [],
+          pendingSignals: [],
+          recentRuns: [],
+          warnings: [],
+        });
+      }
+
       throw new Error(`Unhandled fetch url: ${url}`);
     });
 
@@ -142,5 +158,23 @@ describe("useHarnessSettingsData", () => {
     const hookCallsAfterRerun = fetchMock.mock.calls.filter(([url]) => String(url).startsWith("/api/harness/hooks?")).length;
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/harness/instructions?") && String(url).includes("includeAudit=1"))).toBe(true);
     expect(hookCallsAfterRerun).toBe(initialHookCalls);
+  });
+
+  it("fetches automation data when repoPath is the only available context", async () => {
+    const { result } = renderHook(() => useHarnessSettingsData({
+      repoPath: "/repo",
+      selectedTier: "normal",
+    }));
+
+    await waitFor(() => {
+      expect(result.current.automationsState.loading).toBe(false);
+      expect(result.current.automationsState.data?.configFile?.relativePath).toBe("docs/harness/automations.yml");
+    });
+
+    expect(fetchMock.mock.calls.some(([url]) => (
+      String(url).startsWith("/api/harness/automations?")
+      && String(url).includes("repoPath=%2Frepo")
+      && !String(url).includes("workspaceId=")
+    ))).toBe(true);
   });
 });

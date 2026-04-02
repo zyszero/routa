@@ -286,6 +286,8 @@ export function HarnessAutomationPanel({
   hideHeader = false,
 }: HarnessAutomationPanelProps) {
   const dataTestId = variant === "compact" ? "automations-compact" : "automations-full";
+  const showData = !loading && !error && !unsupportedMessage && Boolean(data);
+  const showMissingContext = !loading && !error && !unsupportedMessage && !data;
   const summary = useMemo(() => ({
     definitions: data?.definitions.length ?? 0,
     pendingSignals: data?.pendingSignals.length ?? 0,
@@ -320,7 +322,13 @@ export function HarnessAutomationPanel({
         <HarnessSectionStateFrame tone="error">{error}</HarnessSectionStateFrame>
       ) : null}
 
-      {!loading && !error && !unsupportedMessage && data ? (
+      {showMissingContext ? (
+        <HarnessSectionStateFrame>
+          Select a repo or provide Harness context to load the checked-in cleanup/correction configuration.
+        </HarnessSectionStateFrame>
+      ) : null}
+
+      {showData ? (
         <div className="space-y-4">
           <div className="overflow-hidden rounded-sm border border-desktop-border bg-desktop-bg-primary/80">
             <div className="border-b border-desktop-border/70 px-4 py-3">

@@ -114,4 +114,17 @@ describe("HarnessAutomationPanel", () => {
 
     expect(screen.getByText(/No checked-in cleanup\/correction config file/i)).toBeDefined();
   });
+
+  it("shows a context hint instead of rendering a blank panel when no data has loaded yet", () => {
+    render(
+      <HarnessAutomationPanel
+        repoLabel="phodal/routa"
+        data={null}
+        loading={false}
+        error={null}
+      />,
+    );
+
+    expect(screen.getByText(/Select a repo or provide Harness context/i)).toBeDefined();
+  });
 });

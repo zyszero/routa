@@ -1,11 +1,13 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use crate::models::schedule::Schedule;
 use serde::{Deserialize, Serialize};
 
 const AUTOMATION_CONFIG_RELATIVE_PATH: &str = "docs/harness/automations.yml";
 const FILE_BUDGETS_RELATIVE_PATH: &str = "tools/entrix/file_budgets.json";
+const ISSUE_SCANNER_RELATIVE_PATH: &str = ".github/scripts/issue-scanner.py";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -170,17 +172,39 @@ struct LongFileFinding {
     severity: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct IssueScannerSuspect {
+    file_a: Option<String>,
+    file_b: Option<String>,
+    reason: Option<String>,
+    #[serde(rename = "type")]
+    type_field: Option<String>,
+}
+
 pub fn detect_repo_automations(
     repo_root: &Path,
     schedules: &[Schedule],
 ) -> Result<HarnessAutomationReport, String> {
     let mut warnings = Vec::new();
     let (config_file, definitions) = load_automation_config(repo_root, &mut warnings);
-    let long_file_findings = if definitions
+    let finding_definitions = definitions
         .iter()
-        .any(|definition| definition.source.type_field.as_deref() == Some("finding"))
-    {
+        .filter(|definition| definition.source.type_field.as_deref() == Some("finding"))
+        .collect::<Vec<_>>();
+    let long_file_findings = if finding_definitions.iter().any(|definition| {
+        normalize_string(definition.source.finding_type.as_deref())
+            .map(|value| value == "long-file")
+            .unwrap_or(true)
+    }) {
         detect_long_file_findings(repo_root, &mut warnings)?
+    } else {
+        Vec::new()
+    };
+    let issue_scanner_suspects = if finding_definitions.iter().any(|definition| {
+        normalize_string(definition.source.finding_type.as_deref()).as_deref()
+            == Some("issue-suspect")
+    }) {
+        detect_issue_scanner_suspects(repo_root, &mut warnings)
     } else {
         Vec::new()
     };
@@ -224,7 +248,13 @@ pub fn detect_repo_automations(
             None
         };
         let definition_pending = if source_type == "finding" {
-            build_pending_signals(definition, &id, &name, &long_file_findings)
+            build_pending_signals(
+                definition,
+                &id,
+                &name,
+                &long_file_findings,
+                &issue_scanner_suspects,
+            )
         } else {
             Vec::new()
         };
@@ -269,8 +299,10 @@ pub fn detect_repo_automations(
             runtime_binding: resolve_runtime_binding(definition),
             cron_expr: normalize_string(definition.source.cron.as_deref())
                 .or_else(|| matched_schedule.map(|schedule| schedule.cron_expr.clone())),
-            next_run_at: matched_schedule.and_then(|schedule| schedule.next_run_at.map(|v| v.to_rfc3339())),
-            last_run_at: matched_schedule.and_then(|schedule| schedule.last_run_at.map(|v| v.to_rfc3339())),
+            next_run_at: matched_schedule
+                .and_then(|schedule| schedule.next_run_at.map(|v| v.to_rfc3339())),
+            last_run_at: matched_schedule
+                .and_then(|schedule| schedule.last_run_at.map(|v| v.to_rfc3339())),
         });
     }
 
@@ -302,7 +334,10 @@ pub fn detect_repo_automations(
 fn load_automation_config(
     repo_root: &Path,
     warnings: &mut Vec<String>,
-) -> (Option<HarnessAutomationConfigFile>, Vec<AutomationDefinitionConfig>) {
+) -> (
+    Option<HarnessAutomationConfigFile>,
+    Vec<AutomationDefinitionConfig>,
+) {
     let absolute_path = repo_root.join(AUTOMATION_CONFIG_RELATIVE_PATH);
     if !absolute_path.exists() {
         warnings.push(format!(
@@ -352,7 +387,12 @@ fn normalize_source_type(value: Option<&str>) -> Option<String> {
 
 fn normalize_target_type(value: Option<&str>) -> Option<String> {
     match normalize_string(value) {
-        Some(value) if matches!(value.as_str(), "specialist" | "workflow" | "background-task") => {
+        Some(value)
+            if matches!(
+                value.as_str(),
+                "specialist" | "workflow" | "background-task"
+            ) =>
+        {
             Some(value)
         }
         _ => None,
@@ -368,7 +408,8 @@ fn normalize_string(value: Option<&str>) -> Option<String> {
 
 fn summarize_source(source: &AutomationSourceConfig, source_type: &str) -> String {
     if source_type == "schedule" {
-        let cron = normalize_string(source.cron.as_deref()).unwrap_or_else(|| "No cron".to_string());
+        let cron =
+            normalize_string(source.cron.as_deref()).unwrap_or_else(|| "No cron".to_string());
         return match normalize_string(source.timezone.as_deref()) {
             Some(timezone) => format!("{cron} · {timezone}"),
             None => cron,
@@ -376,8 +417,14 @@ fn summarize_source(source: &AutomationSourceConfig, source_type: &str) -> Strin
     }
 
     if source_type == "finding" {
-        let finding_type =
-            normalize_string(source.finding_type.as_deref()).unwrap_or_else(|| "generic".to_string());
+        let finding_type = normalize_string(source.finding_type.as_deref())
+            .unwrap_or_else(|| "generic".to_string());
+        if finding_type == "issue-suspect" {
+            return match normalize_string(source.defer_until_cron.as_deref()) {
+                Some(window) => format!("issue-suspect · docs/issues scan · defer {window}"),
+                None => "issue-suspect · docs/issues scan".to_string(),
+            };
+        }
         let line_part = source
             .min_lines
             .map(|value| format!(">= {value} lines"))
@@ -442,7 +489,51 @@ fn build_pending_signals(
     automation_id: &str,
     automation_name: &str,
     findings: &[LongFileFinding],
+    issue_scanner_suspects: &[IssueScannerSuspect],
 ) -> Vec<HarnessAutomationPendingSignal> {
+    if matches!(
+        normalize_string(definition.source.finding_type.as_deref()).as_deref(),
+        Some("issue-suspect")
+    ) {
+        let max_items = definition
+            .source
+            .max_items
+            .unwrap_or(issue_scanner_suspects.len());
+        let defer_until_cron = normalize_string(definition.source.defer_until_cron.as_deref());
+        return issue_scanner_suspects
+            .iter()
+            .take(max_items)
+            .enumerate()
+            .map(|(index, suspect)| {
+                let primary_file = normalize_string(suspect.file_a.as_deref())
+                    .unwrap_or_else(|| format!("suspect-{}.md", index + 1));
+                let secondary_file = normalize_string(suspect.file_b.as_deref());
+                let reason = normalize_string(suspect.reason.as_deref()).unwrap_or_else(|| {
+                    "Issue scanner flagged this item for cleanup review.".to_string()
+                });
+                let signal_type = normalize_string(suspect.type_field.as_deref())
+                    .unwrap_or_else(|| "issue-suspect".to_string());
+                HarnessAutomationPendingSignal {
+                    id: format!("{automation_id}:{primary_file}:{index}"),
+                    automation_id: automation_id.to_string(),
+                    automation_name: automation_name.to_string(),
+                    signal_type: signal_type.clone(),
+                    title: primary_file.clone(),
+                    summary: match secondary_file {
+                        Some(file_b) => format!("{reason} Compare with {file_b}."),
+                        None => reason,
+                    },
+                    severity: classify_issue_suspect_severity(signal_type.as_str()).to_string(),
+                    relative_path: Some(format!("docs/issues/{primary_file}")),
+                    line_count: None,
+                    budget_limit: None,
+                    excess_lines: None,
+                    defer_until_cron: defer_until_cron.clone(),
+                }
+            })
+            .collect();
+    }
+
     if matches!(
         normalize_string(definition.source.finding_type.as_deref()).as_deref(),
         Some(value) if value != "long-file"
@@ -481,6 +572,62 @@ fn build_pending_signals(
             defer_until_cron: defer_until_cron.clone(),
         })
         .collect()
+}
+
+fn detect_issue_scanner_suspects(
+    repo_root: &Path,
+    warnings: &mut Vec<String>,
+) -> Vec<IssueScannerSuspect> {
+    let absolute_path = repo_root.join(ISSUE_SCANNER_RELATIVE_PATH);
+    if !absolute_path.exists() {
+        warnings.push(format!(
+            "Missing {ISSUE_SCANNER_RELATIVE_PATH}; issue cleanup suspects are unavailable."
+        ));
+        return Vec::new();
+    }
+
+    let output = match Command::new("python3")
+        .arg(&absolute_path)
+        .arg("--suspects-only")
+        .current_dir(repo_root)
+        .output()
+    {
+        Ok(output) => output,
+        Err(error) => {
+            warnings.push(format!(
+                "Failed to run {ISSUE_SCANNER_RELATIVE_PATH} --suspects-only: {error}"
+            ));
+            return Vec::new();
+        }
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        warnings.push(format!(
+            "Failed to run {ISSUE_SCANNER_RELATIVE_PATH} --suspects-only: {}",
+            if stderr.is_empty() {
+                format!("exit status {}", output.status)
+            } else {
+                stderr
+            }
+        ));
+        return Vec::new();
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if stdout.is_empty() || stdout == "No suspects found." {
+        return Vec::new();
+    }
+
+    match serde_json::from_str::<Vec<IssueScannerSuspect>>(&stdout) {
+        Ok(suspects) => suspects,
+        Err(error) => {
+            warnings.push(format!(
+                "Unexpected output from {ISSUE_SCANNER_RELATIVE_PATH} --suspects-only: {error}"
+            ));
+            Vec::new()
+        }
+    }
 }
 
 fn compute_definition_status(
@@ -600,12 +747,24 @@ fn load_file_budgets(repo_root: &Path, warnings: &mut Vec<String>) -> FileBudget
         ));
         return FileBudgetConfig {
             default_max_lines: Some(1000),
-            include_roots: Some(vec!["src".to_string(), "apps".to_string(), "crates".to_string()]),
-            extensions: Some(vec![".ts".to_string(), ".tsx".to_string(), ".rs".to_string()]),
+            include_roots: Some(vec![
+                "src".to_string(),
+                "apps".to_string(),
+                "crates".to_string(),
+            ]),
+            extensions: Some(vec![
+                ".ts".to_string(),
+                ".tsx".to_string(),
+                ".rs".to_string(),
+            ]),
             extension_max_lines: Some(
-                [(".rs".to_string(), 800), (".ts".to_string(), 1000), (".tsx".to_string(), 1000)]
-                    .into_iter()
-                    .collect(),
+                [
+                    (".rs".to_string(), 800),
+                    (".ts".to_string(), 1000),
+                    (".tsx".to_string(), 1000),
+                ]
+                .into_iter()
+                .collect(),
             ),
             excluded_parts: Some(vec![
                 "/node_modules/".to_string(),
@@ -629,12 +788,24 @@ fn load_file_budgets(repo_root: &Path, warnings: &mut Vec<String>) -> FileBudget
             ));
             FileBudgetConfig {
                 default_max_lines: Some(1000),
-                include_roots: Some(vec!["src".to_string(), "apps".to_string(), "crates".to_string()]),
-                extensions: Some(vec![".ts".to_string(), ".tsx".to_string(), ".rs".to_string()]),
+                include_roots: Some(vec![
+                    "src".to_string(),
+                    "apps".to_string(),
+                    "crates".to_string(),
+                ]),
+                extensions: Some(vec![
+                    ".ts".to_string(),
+                    ".tsx".to_string(),
+                    ".rs".to_string(),
+                ]),
                 extension_max_lines: Some(
-                    [(".rs".to_string(), 800), (".ts".to_string(), 1000), (".tsx".to_string(), 1000)]
-                        .into_iter()
-                        .collect(),
+                    [
+                        (".rs".to_string(), 800),
+                        (".ts".to_string(), 1000),
+                        (".tsx".to_string(), 1000),
+                    ]
+                    .into_iter()
+                    .collect(),
                 ),
                 excluded_parts: Some(vec![
                     "/node_modules/".to_string(),
@@ -700,6 +871,15 @@ fn classify_severity(excess_lines: usize) -> &'static str {
         "medium"
     } else {
         "low"
+    }
+}
+
+fn classify_issue_suspect_severity(signal_type: &str) -> &'static str {
+    match signal_type {
+        "stale" => "high",
+        "duplicate" => "medium",
+        "open_check" => "low",
+        _ => "medium",
     }
 }
 
@@ -794,7 +974,68 @@ mod tests {
         assert_eq!(report.pending_signals.len(), 1);
         assert_eq!(report.pending_signals[0].automation_id, "long-file-window");
         assert_eq!(report.recent_runs.len(), 1);
-        assert_eq!(report.recent_runs[0].automation_id, "weekly-harness-fluency");
+        assert_eq!(
+            report.recent_runs[0].automation_id,
+            "weekly-harness-fluency"
+        );
         assert_eq!(report.recent_runs[0].status, "active");
+    }
+
+    #[test]
+    fn surfaces_issue_gc_suspects_as_pending_signals() {
+        let temp_dir = tempdir().expect("temp dir");
+        let repo_root = temp_dir.path();
+
+        fs::create_dir_all(repo_root.join("docs/harness")).expect("docs/harness");
+        fs::create_dir_all(repo_root.join(".github/scripts")).expect(".github/scripts");
+        fs::write(
+            repo_root.join("docs/harness/automations.yml"),
+            [
+                "schema: harness-automation-v1",
+                "definitions:",
+                "  - id: issue-gc-review",
+                "    name: Issue cleanup review",
+                "    source:",
+                "      type: finding",
+                "      findingType: issue-suspect",
+                "      maxItems: 2",
+                "      deferUntilCron: \"0 9 * * 1\"",
+                "    target:",
+                "      type: workflow",
+                "      ref: issue-garbage-collector",
+            ]
+            .join("\n"),
+        )
+        .expect("automations config");
+        fs::write(
+            repo_root.join(".github/scripts/issue-scanner.py"),
+            [
+                "import json",
+                "print(json.dumps([",
+                "  {'file_a': '2026-04-01-old-bug.md', 'file_b': None, 'reason': 'Open for 35 days (>30), likely stale', 'type': 'stale'},",
+                "  {'file_a': '2026-04-02-dup-a.md', 'file_b': '2026-04-02-dup-b.md', 'reason': \"Same area 'ui', keywords: {'layout', 'panel'}\", 'type': 'duplicate'}",
+                "]))",
+            ]
+            .join("\n"),
+        )
+        .expect("scanner script");
+
+        let report = detect_repo_automations(repo_root, &[]).expect("report");
+        assert_eq!(report.definitions.len(), 1);
+        assert_eq!(report.definitions[0].runtime_status, "pending");
+        assert_eq!(report.definitions[0].pending_count, 2);
+        assert_eq!(
+            report.definitions[0].source_label,
+            "issue-suspect · docs/issues scan · defer 0 9 * * 1"
+        );
+        assert_eq!(report.pending_signals.len(), 2);
+        assert_eq!(report.pending_signals[0].signal_type, "stale");
+        assert_eq!(report.pending_signals[0].severity, "high");
+        assert_eq!(
+            report.pending_signals[0].relative_path.as_deref(),
+            Some("docs/issues/2026-04-01-old-bug.md")
+        );
+        assert_eq!(report.pending_signals[1].signal_type, "duplicate");
+        assert_eq!(report.pending_signals[1].severity, "medium");
     }
 }

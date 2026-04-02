@@ -232,7 +232,7 @@ export type QueryState<T> = {
 };
 
 type HarnessSettingsDataArgs = {
-  workspaceId: string;
+  workspaceId?: string;
   codebaseId?: string;
   repoPath?: string;
   selectedTier: TierValue;
@@ -243,9 +243,11 @@ type InstructionRefreshState = {
   token: number;
 };
 
-function buildHarnessQuery(workspaceId: string, codebaseId?: string, repoPath?: string) {
+function buildHarnessQuery(workspaceId?: string, codebaseId?: string, repoPath?: string) {
   const query = new URLSearchParams();
-  query.set("workspaceId", workspaceId);
+  if (workspaceId) {
+    query.set("workspaceId", workspaceId);
+  }
   if (codebaseId) {
     query.set("codebaseId", codebaseId);
   }
@@ -269,7 +271,7 @@ export function useHarnessSettingsData({
   repoPath,
   selectedTier,
 }: HarnessSettingsDataArgs) {
-  const hasRepoContext = Boolean(workspaceId && repoPath);
+  const hasRepoContext = Boolean(workspaceId || codebaseId || repoPath);
   const baseQuery = useMemo(
     () => (hasRepoContext ? buildHarnessQuery(workspaceId, codebaseId, repoPath) : null),
     [codebaseId, hasRepoContext, repoPath, workspaceId],

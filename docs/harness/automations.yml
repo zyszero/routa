@@ -24,3 +24,15 @@ definitions:
       ref: harness-test
     runtime:
       scheduleName: Weekly harness fluency
+
+  - id: issue-gc-review
+    name: Issue cleanup review
+    description: Surface duplicate, stale, and unresolved docs/issues suspects in Harness before deciding whether to run issue garbage collection.
+    source:
+      type: finding
+      findingType: issue-suspect
+      maxItems: 12
+      deferUntilCron: "0 9 * * 1"
+    target:
+      type: workflow
+      ref: issue-garbage-collector

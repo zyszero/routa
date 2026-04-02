@@ -1,6 +1,8 @@
 import * as fs from "fs";
 import { promises as fsp } from "fs";
 import * as path from "path";
+import { execFile as execFileCallback } from "child_process";
+import { promisify } from "util";
 import yaml from "js-yaml";
 import type { Schedule } from "@/core/models/schedule";
 import type {
@@ -80,6 +82,7 @@ type DetectHarnessAutomationsOptions = {
 
 const AUTOMATION_CONFIG_RELATIVE_PATH = path.join("docs", "harness", "automations.yml");
 const FILE_BUDGETS_RELATIVE_PATH = path.join("tools", "entrix", "file_budgets.json");
+const ISSUE_SCANNER_RELATIVE_PATH = path.join(".github", "scripts", "issue-scanner.py");
 const DEFAULT_FILE_BUDGETS: FileBudgetConfig = {
   default_max_lines: 1000,
   include_roots: ["src", "apps", "crates"],
@@ -91,6 +94,14 @@ const DEFAULT_FILE_BUDGETS: FileBudgetConfig = {
   },
   excluded_parts: ["/node_modules/", "/target/", "/.next/", "/_next/", "/bundled/"],
   overrides: [],
+};
+const execFile = promisify(execFileCallback);
+
+type IssueScannerSuspect = {
+  file_a?: string;
+  file_b?: string | null;
+  reason?: string;
+  type?: string;
 };
 
 function joinRepoPath(repoRoot: string, ...relativeSegments: string[]) {
@@ -151,6 +162,12 @@ function summarizeSource(source: AutomationSourceConfig | undefined, type: Harne
 
   if (type === "finding") {
     const findingType = normalizeString(source?.findingType) ?? "generic";
+    if (findingType === "issue-suspect") {
+      const deferUntilCron = normalizeString(source?.deferUntilCron);
+      return deferUntilCron
+        ? `issue-suspect · docs/issues scan · defer ${deferUntilCron}`
+        : "issue-suspect · docs/issues scan";
+    }
     const minLines = normalizeNumber(source?.minLines);
     const deferUntilCron = normalizeString(source?.deferUntilCron);
     const linePart = minLines ? `>= ${minLines} lines` : "budget overrun";
@@ -299,6 +316,48 @@ async function detectLongFileFindings(repoRoot: string, warnings: string[]) {
   });
 }
 
+function classifyIssueSuspectSeverity(type: string | undefined): HarnessAutomationSeverity {
+  switch (type) {
+    case "stale":
+      return "high";
+    case "duplicate":
+      return "medium";
+    case "open_check":
+      return "low";
+    default:
+      return "medium";
+  }
+}
+
+async function detectIssueScannerSuspects(repoRoot: string, warnings: string[]) {
+  const absolutePath = joinRepoPath(repoRoot, ISSUE_SCANNER_RELATIVE_PATH);
+  if (!fs.existsSync(absolutePath)) {
+    warnings.push(`Missing ${ISSUE_SCANNER_RELATIVE_PATH}; issue cleanup suspects are unavailable.`);
+    return [] as IssueScannerSuspect[];
+  }
+
+  try {
+    const { stdout } = await execFile("python3", [absolutePath, "--suspects-only"], {
+      cwd: repoRoot,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    const trimmed = stdout.trim();
+    if (!trimmed || trimmed === "No suspects found.") {
+      return [] as IssueScannerSuspect[];
+    }
+
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!Array.isArray(parsed)) {
+      warnings.push(`Unexpected output from ${ISSUE_SCANNER_RELATIVE_PATH} --suspects-only; expected a JSON array.`);
+      return [] as IssueScannerSuspect[];
+    }
+    return parsed.filter((candidate): candidate is IssueScannerSuspect => typeof candidate === "object" && candidate !== null);
+  } catch (error) {
+    warnings.push(`Failed to run ${ISSUE_SCANNER_RELATIVE_PATH} --suspects-only: ${toMessage(error)}`);
+    return [] as IssueScannerSuspect[];
+  }
+}
+
 function normalizeSourceType(value: unknown): HarnessAutomationSourceType | null {
   const normalized = normalizeString(value);
   switch (normalized) {
@@ -359,8 +418,38 @@ function buildRecentRun(schedule: Schedule, automationId: string, automationName
   };
 }
 
-function buildPendingSignals(definition: AutomationDefinitionConfig, automationId: string, automationName: string, findings: LongFileFinding[]) {
+function buildPendingSignals(
+  definition: AutomationDefinitionConfig,
+  automationId: string,
+  automationName: string,
+  findings: LongFileFinding[],
+  issueScannerSuspects: IssueScannerSuspect[],
+) {
   const findingType = normalizeString(definition.source?.findingType);
+  if (findingType === "issue-suspect") {
+    const maxItems = normalizeNumber(definition.source?.maxItems) ?? issueScannerSuspects.length;
+    const deferUntilCron = normalizeString(definition.source?.deferUntilCron);
+    return issueScannerSuspects
+      .slice(0, maxItems)
+      .map((suspect, index) => {
+        const primaryFile = normalizeString(suspect.file_a) ?? `suspect-${index + 1}.md`;
+        const secondaryFile = normalizeString(suspect.file_b ?? undefined);
+        const reason = normalizeString(suspect.reason) ?? "Issue scanner flagged this item for cleanup review.";
+        const signalType = normalizeString(suspect.type) ?? "issue-suspect";
+        return {
+          id: `${automationId}:${primaryFile}:${index}`,
+          automationId,
+          automationName,
+          signalType,
+          title: primaryFile,
+          summary: secondaryFile ? `${reason} Compare with ${secondaryFile}.` : reason,
+          severity: classifyIssueSuspectSeverity(signalType),
+          relativePath: path.posix.join("docs/issues", primaryFile),
+          deferUntilCron,
+        } satisfies HarnessAutomationPendingSignal;
+      });
+  }
+
   if (findingType && findingType !== "long-file") {
     return [];
   }
@@ -470,8 +559,15 @@ export async function detectHarnessAutomations(
   const warnings: string[] = [];
   const { configFile, definitions } = await loadAutomationConfig(repoRoot, warnings);
   const schedules = options.schedules ?? [];
-  const longFileFindings = definitions.some((definition) => normalizeString(definition.source?.type) === "finding")
+  const findingDefinitions = definitions.filter((definition) => normalizeString(definition.source?.type) === "finding");
+  const longFileFindings = findingDefinitions.some((definition) => {
+    const findingType = normalizeString(definition.source?.findingType);
+    return !findingType || findingType === "long-file";
+  })
     ? await detectLongFileFindings(repoRoot, warnings)
+    : [];
+  const issueScannerSuspects = findingDefinitions.some((definition) => normalizeString(definition.source?.findingType) === "issue-suspect")
+    ? await detectIssueScannerSuspects(repoRoot, warnings)
     : [];
 
   const summaries: HarnessAutomationDefinitionSummary[] = [];
@@ -488,7 +584,7 @@ export async function detectHarnessAutomations(
       ? matchRuntimeSchedule(definition, schedules)
       : undefined;
     const definitionPendingSignals = normalized.sourceType === "finding"
-      ? buildPendingSignals(definition, normalized.id, normalized.name, longFileFindings)
+      ? buildPendingSignals(definition, normalized.id, normalized.name, longFileFindings, issueScannerSuspects)
       : [];
     const runtimeStatus = computeDefinitionStatus(normalized.sourceType, definitionPendingSignals.length, matchedSchedule);
     const runtimeBinding = normalizeString(resolveRuntimeBinding(definition));

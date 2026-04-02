@@ -105,6 +105,55 @@ describe("detectHarnessAutomations", () => {
     });
   });
 
+  it("surfaces issue garbage-collector suspects as pending cleanup signals", async () => {
+    writeFile(path.join(tmpDir, "docs/harness/automations.yml"), [
+      "schema: harness-automation-v1",
+      "definitions:",
+      "  - id: issue-gc-review",
+      "    name: Issue cleanup review",
+      "    description: Review docs/issues suspects before running issue garbage collection.",
+      "    source:",
+      "      type: finding",
+      "      findingType: issue-suspect",
+      "      maxItems: 2",
+      "      deferUntilCron: \"0 9 * * 1\"",
+      "    target:",
+      "      type: workflow",
+      "      ref: issue-garbage-collector",
+    ].join("\n"));
+    writeFile(path.join(tmpDir, ".github/scripts/issue-scanner.py"), [
+      "import json, sys",
+      "if __name__ == '__main__':",
+      "    print(json.dumps([",
+      "        {'file_a': '2026-04-01-old-bug.md', 'file_b': None, 'reason': 'Open for 35 days (>30), likely stale', 'type': 'stale'},",
+      "        {'file_a': '2026-04-02-dup-a.md', 'file_b': '2026-04-02-dup-b.md', 'reason': \"Same area 'ui', keywords: {'layout', 'panel'}\", 'type': 'duplicate'}",
+      "    ]))",
+    ].join("\n"));
+
+    const report = await detectHarnessAutomations(tmpDir);
+
+    expect(report.definitions).toHaveLength(1);
+    expect(report.definitions[0]).toMatchObject({
+      id: "issue-gc-review",
+      sourceLabel: "issue-suspect · docs/issues scan · defer 0 9 * * 1",
+      targetType: "workflow",
+      runtimeStatus: "pending",
+      pendingCount: 2,
+    });
+    expect(report.pendingSignals).toHaveLength(2);
+    expect(report.pendingSignals[0]).toMatchObject({
+      automationId: "issue-gc-review",
+      signalType: "stale",
+      relativePath: "docs/issues/2026-04-01-old-bug.md",
+      deferUntilCron: "0 9 * * 1",
+      severity: "high",
+    });
+    expect(report.pendingSignals[1]).toMatchObject({
+      signalType: "duplicate",
+      severity: "medium",
+    });
+  });
+
   it("returns a warning when no automation config exists", async () => {
     const report = await detectHarnessAutomations(tmpDir);
     expect(report.configFile).toBeNull();
