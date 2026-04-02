@@ -84,4 +84,14 @@ describe("HarnessAgentHookWorkbench", () => {
     expect(screen.getAllByText("Audit tool results").length).toBeGreaterThan(0);
     expect(within(flow).getByText("Signal")).not.toBeNull();
   });
+
+  it("resets inspector to Basic tab when the selected event changes", () => {
+    render(<HarnessAgentHookWorkbench data={createAgentHooksResponse()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Source/i }));
+    expect(screen.queryByText("Lifecycle:")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /PostToolUse/i }));
+    expect(screen.getByText("Lifecycle:")).not.toBeNull();
+  });
 });

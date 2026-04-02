@@ -397,7 +397,7 @@ function buildGraph(args: {
       coding: { left: "thinking", right: "build" },
     } : {}),
     build: { left: hasCodingNode ? "coding" : "thinking", right: "agent-hook", down: "review" },
-    "agent-hook": { left: "build", right: "test", down: "precommit" },
+    "agent-hook": { left: "test", down: "precommit" },
     test: { left: "agent-hook", down: "precommit" },
     precommit: { up: "test", left: "review" },
     review: { up: "build", right: "precommit", left: "post-commit" },

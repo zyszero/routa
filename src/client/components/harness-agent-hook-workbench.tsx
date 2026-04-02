@@ -538,7 +538,7 @@ export function HarnessAgentHookWorkbench({
         >
           <AgentHookLifecycleRail />
           <AgentHookFlowCanvas />
-          <AgentHookInspector />
+          <AgentHookInspector key={activeEntry?.event ?? "__no_event__"} />
         </div>
       </section>
     </WorkbenchContext.Provider>
