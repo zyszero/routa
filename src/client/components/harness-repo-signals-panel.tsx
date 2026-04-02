@@ -17,6 +17,7 @@ type HarnessRepoSignalsPanelProps = {
   mode: HarnessSignalsMode;
   unsupportedMessage?: string | null;
   variant?: "full" | "compact";
+  hideHeader?: boolean;
 };
 
 type QueryState = {
@@ -56,6 +57,7 @@ export function HarnessRepoSignalsPanel({
   mode,
   unsupportedMessage,
   variant = "full",
+  hideHeader = false,
 }: HarnessRepoSignalsPanelProps) {
   const hasContext = Boolean(workspaceId && repoPath);
   const [state, setState] = useState<QueryState>({
@@ -126,6 +128,7 @@ export function HarnessRepoSignalsPanel({
   return (
     <HarnessSectionCard
       title={title}
+      hideHeader={hideHeader}
       variant={variant}
       dataTestId="repo-signals-panel"
     >

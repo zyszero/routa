@@ -44,6 +44,7 @@ type HarnessAgentInstructionsPanelProps = {
   error?: string | null;
   variant?: "full" | "compact";
   onAuditRerun?: () => void;
+  hideHeader?: boolean;
 };
 
 const AUDIT_PRINCIPLE_META = {
@@ -198,6 +199,7 @@ export function HarnessAgentInstructionsPanel({
   error,
   variant = "full",
   onAuditRerun,
+  hideHeader = false,
 }: HarnessAgentInstructionsPanelProps) {
   const hasExternalState = loading !== undefined || error !== undefined || data !== undefined;
   const [instructionsState, setInstructionsState] = useState<InstructionsState>({
@@ -391,6 +393,7 @@ export function HarnessAgentInstructionsPanel({
   return (
     <HarnessSectionCard
       title="Instruction file - CLAUDE.md"
+      hideHeader={hideHeader}
       variant={variant}
     >
 

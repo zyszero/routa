@@ -27,6 +27,7 @@ type HarnessGitHubActionsFlowPanelProps = {
   error?: string | null;
   variant?: "full" | "compact";
   initialCategory?: WorkflowCategoryKey;
+  hideHeader?: boolean;
 };
 
 export function HarnessGitHubActionsFlowPanel({
@@ -40,6 +41,7 @@ export function HarnessGitHubActionsFlowPanel({
   error,
   variant = "full",
   initialCategory,
+  hideHeader = false,
 }: HarnessGitHubActionsFlowPanelProps) {
   const hasExternalState = loading !== undefined || error !== undefined || data !== undefined;
   const hasContext = Boolean(workspaceId && repoPath);
@@ -126,6 +128,7 @@ export function HarnessGitHubActionsFlowPanel({
     return (
       <HarnessSectionCard
         title="CI/CD"
+        hideHeader={hideHeader}
         variant={variant}
       >
         <HarnessSectionStateFrame>Loading GitHub Actions workflows...</HarnessSectionStateFrame>
@@ -137,6 +140,7 @@ export function HarnessGitHubActionsFlowPanel({
     return (
       <HarnessSectionCard
         title="CI/CD"
+        hideHeader={hideHeader}
         variant={variant}
       >
         <HarnessUnsupportedState className="rounded-sm border border-amber-200 bg-amber-50 px-4 py-4 text-[11px] text-amber-800" />
@@ -148,6 +152,7 @@ export function HarnessGitHubActionsFlowPanel({
     return (
       <HarnessSectionCard
         title="CI/CD"
+        hideHeader={hideHeader}
         variant={variant}
       >
         <HarnessSectionStateFrame tone="error">{resolvedFlowState.error}</HarnessSectionStateFrame>
@@ -159,6 +164,7 @@ export function HarnessGitHubActionsFlowPanel({
     return (
       <HarnessSectionCard
         title="CI/CD"
+        hideHeader={hideHeader}
         variant={variant}
       >
         <HarnessSectionStateFrame>
@@ -171,6 +177,7 @@ export function HarnessGitHubActionsFlowPanel({
   return (
     <HarnessSectionCard
       title="CI/CD"
+      hideHeader={hideHeader}
       variant={variant}
     >
       <HarnessGitHubActionsFlowGallery

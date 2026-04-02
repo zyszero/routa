@@ -11,6 +11,7 @@ type HarnessCodeownersPanelProps = {
   loading?: boolean;
   error?: string | null;
   variant?: "full" | "compact";
+  hideHeader?: boolean;
 };
 
 function ListBlock({
@@ -64,12 +65,14 @@ export function HarnessCodeownersPanel({
   loading = false,
   error = null,
   variant = "full",
+  hideHeader = false,
 }: HarnessCodeownersPanelProps) {
   const compactMode = variant === "compact";
 
   return (
     <HarnessSectionCard
       title="CODEOWNERS"
+      hideHeader={hideHeader}
       variant={variant}
     >
       {loading ? (

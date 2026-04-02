@@ -16,6 +16,7 @@ type ReleaseTriggersPanel = {
   loading?: boolean;
   error?: string | null;
   variant?: "full" | "compact";
+  hideHeader?: boolean;
 };
 
 type ReleaseDimensionTone = "danger" | "warning" | "info" | "success";
@@ -426,6 +427,7 @@ export function HarnessReleaseTriggersPanel({
   loading = false,
   error = null,
   variant = "full",
+  hideHeader = false,
 }: ReleaseTriggersPanel) {
   const releaseTriggerFile = data?.releaseTriggerFile ?? null;
   const showDetails = variant === "full";
@@ -437,6 +439,7 @@ export function HarnessReleaseTriggersPanel({
   return (
     <HarnessSectionCard
       title="Release Surface Governance"
+      hideHeader={hideHeader}
       variant={variant}
     >
       {loading ? (

@@ -669,15 +669,15 @@ export default function HarnessConsolePage() {
       case "overview":
         return renderOverview();
       case "spec-sources":
-        return <HarnessSpecSourcesPanel {...sharedProps} data={specSourcesState.data} loading={specSourcesState.loading} error={specSourcesState.error} />;
+        return <HarnessSpecSourcesPanel {...sharedProps} data={specSourcesState.data} loading={specSourcesState.loading} error={specSourcesState.error} hideHeader />;
       case "agent-instructions":
-        return <HarnessAgentInstructionsPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...sharedProps} data={instructionsState.data} loading={instructionsState.loading} error={instructionsState.error} onAuditRerun={reloadInstructions} />;
+        return <HarnessAgentInstructionsPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...sharedProps} data={instructionsState.data} loading={instructionsState.loading} error={instructionsState.error} onAuditRerun={reloadInstructions} hideHeader />;
       case "design-decisions":
-        return <HarnessDesignDecisionPanel {...sharedProps} data={designDecisionsState.data} loading={designDecisionsState.loading} error={designDecisionsState.error} />;
+        return <HarnessDesignDecisionPanel {...sharedProps} data={designDecisionsState.data} loading={designDecisionsState.loading} error={designDecisionsState.error} hideHeader />;
       case "repo-signals":
-        return <HarnessRepoSignalsPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...sharedProps} mode="test" />;
+        return <HarnessRepoSignalsPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...sharedProps} mode="test" hideHeader />;
       case "automations":
-        return <HarnessAutomationPanel {...sharedProps} data={automationsState.data} loading={automationsState.loading} error={automationsState.error} />;
+        return <HarnessAutomationPanel {...sharedProps} data={automationsState.data} loading={automationsState.loading} error={automationsState.error} hideHeader />;
       case "hook-systems":
         return (
           <div className="space-y-4">
@@ -686,11 +686,11 @@ export default function HarnessConsolePage() {
           </div>
         );
       case "review-triggers":
-        return <HarnessReviewTriggersPanel {...sharedProps} data={hooksState.data} loading={hooksState.loading} error={hooksState.error} />;
+        return <HarnessReviewTriggersPanel {...sharedProps} data={hooksState.data} loading={hooksState.loading} error={hooksState.error} hideHeader />;
       case "release-triggers":
-        return <HarnessReleaseTriggersPanel {...sharedProps} data={hooksState.data} loading={hooksState.loading} error={hooksState.error} />;
+        return <HarnessReleaseTriggersPanel {...sharedProps} data={hooksState.data} loading={hooksState.loading} error={hooksState.error} hideHeader />;
       case "codeowners":
-        return <HarnessCodeownersPanel {...sharedProps} data={resolvedCodeownersState.data} loading={resolvedCodeownersState.loading} error={resolvedCodeownersState.error} />;
+        return <HarnessCodeownersPanel {...sharedProps} data={resolvedCodeownersState.data} loading={resolvedCodeownersState.loading} error={resolvedCodeownersState.error} hideHeader />;
       case "entrix-fitness":
         return (
           <div className="space-y-4">
@@ -716,7 +716,7 @@ export default function HarnessConsolePage() {
           </div>
         );
       case "ci-cd":
-        return <HarnessGitHubActionsFlowPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...sharedProps} data={githubActionsState.data} loading={githubActionsState.loading} error={githubActionsState.error} />;
+        return <HarnessGitHubActionsFlowPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...sharedProps} data={githubActionsState.data} loading={githubActionsState.loading} error={githubActionsState.error} hideHeader />;
       default:
         return null;
     }

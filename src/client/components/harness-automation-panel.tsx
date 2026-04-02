@@ -19,6 +19,7 @@ type HarnessAutomationPanelProps = {
   repoLabel: string;
   unsupportedMessage?: string | null;
   variant?: "full" | "compact";
+  hideHeader?: boolean;
 };
 
 function statusBadgeClass(status: HarnessAutomationRuntimeStatus) {
@@ -258,6 +259,7 @@ export function HarnessAutomationPanel({
   repoLabel: _repoLabel,
   unsupportedMessage,
   variant = "full",
+  hideHeader = false,
 }: HarnessAutomationPanelProps) {
   const dataTestId = variant === "compact" ? "automations-compact" : "automations-full";
   const summary = useMemo(() => ({
@@ -270,6 +272,7 @@ export function HarnessAutomationPanel({
     <HarnessSectionCard
       title="Repo-defined Automations"
       description="Checked-in automation definitions, pending findings, and runtime schedule state."
+      hideHeader={hideHeader}
       variant={variant}
       dataTestId={dataTestId}
     >

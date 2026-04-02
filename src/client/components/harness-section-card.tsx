@@ -21,6 +21,7 @@ type HarnessSectionCardProps = {
   eyebrow?: string;
   description?: string;
   actions?: ReactNode;
+  hideHeader?: boolean;
   variant?: "full" | "compact";
   dataTestId?: string;
   className?: string;
@@ -37,6 +38,7 @@ export function HarnessSectionCard({
   eyebrow,
   description,
   actions,
+  hideHeader = false,
   variant = "full",
   dataTestId,
   className,
@@ -47,23 +49,25 @@ export function HarnessSectionCard({
       className={`${CARD_CLASS[variant]} ${className ?? ""}`}
       {...(dataTestId ? { "data-testid": dataTestId } : null)}
     >
-      <div className="border-b border-desktop-border pb-2">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 space-y-1">
-            {eyebrow ? (
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">
-                {eyebrow}
-              </div>
-            ) : null}
-            <h3 className="text-[13px] font-semibold text-desktop-text-primary">{title}</h3>
-            {description ? (
-              <p className="text-[11px] leading-5 text-desktop-text-secondary">{description}</p>
-            ) : null}
+      {!hideHeader ? (
+        <div className="border-b border-desktop-border pb-2">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 space-y-1">
+              {eyebrow ? (
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">
+                  {eyebrow}
+                </div>
+              ) : null}
+              <h3 className="text-[13px] font-semibold text-desktop-text-primary">{title}</h3>
+              {description ? (
+                <p className="text-[11px] leading-5 text-desktop-text-secondary">{description}</p>
+              ) : null}
+            </div>
+            {actions ? <div className="flex shrink-0 flex-wrap justify-end gap-2">{actions}</div> : null}
           </div>
-          {actions ? <div className="flex shrink-0 flex-wrap justify-end gap-2">{actions}</div> : null}
         </div>
-      </div>
-      {children ? <div className={variant === "compact" ? "pt-2" : "pt-3"}>{children}</div> : null}
+      ) : null}
+      {children ? <div className={hideHeader ? "" : (variant === "compact" ? "pt-2" : "pt-3")}>{children}</div> : null}
     </section>
   );
 }

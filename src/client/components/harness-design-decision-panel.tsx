@@ -16,6 +16,7 @@ type HarnessDesignDecisionPanelProps = {
   loading?: boolean;
   error?: string | null;
   variant?: "full" | "compact";
+  hideHeader?: boolean;
 };
 
 const CONFIDENCE_STYLES: Record<DesignDecisionConfidence, { bg: string; text: string }> = {
@@ -139,6 +140,7 @@ export function HarnessDesignDecisionPanel({
   loading,
   error,
   variant = "full",
+  hideHeader = false,
 }: HarnessDesignDecisionPanelProps) {
   const sources = data?.sources ?? [];
 
@@ -152,6 +154,7 @@ export function HarnessDesignDecisionPanel({
   return (
     <HarnessSectionCard
       title="Design Decisions"
+      hideHeader={hideHeader}
       variant={variant}
       dataTestId="design-decision-panel"
     >

@@ -20,6 +20,7 @@ type SpecSourcesPanelProps = {
   loading?: boolean;
   error?: string | null;
   variant?: "full" | "compact";
+  hideHeader?: boolean;
 };
 
 const KIND_LABELS: Record<SpecSourceKind, string> = {
@@ -282,6 +283,7 @@ export function HarnessSpecSourcesPanel({
   loading,
   error,
   variant = "full",
+  hideHeader = false,
 }: SpecSourcesPanelProps) {
   const sources = useMemo(
     () => data?.sources ?? [],
@@ -313,6 +315,7 @@ export function HarnessSpecSourcesPanel({
     return (
       <HarnessSectionCard
         title="Spec Sources"
+        hideHeader={hideHeader}
         variant="compact"
         dataTestId="spec-sources-compact"
       >
@@ -350,6 +353,7 @@ export function HarnessSpecSourcesPanel({
   return (
     <HarnessSectionCard
       title="Spec Sources"
+      hideHeader={hideHeader}
       variant="full"
     >
       {loading ? (

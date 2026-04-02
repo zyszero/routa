@@ -19,6 +19,7 @@ type ReviewTriggersPanelProps = {
   variant?: "full" | "compact";
   showDetailToggle?: boolean;
   defaultShowDetails?: boolean;
+  hideHeader?: boolean;
 };
 
 type ReviewDimensionTone = "danger" | "warning" | "info" | "success";
@@ -509,6 +510,7 @@ export function HarnessReviewTriggersPanel({
   variant = "full",
   showDetailToggle = false,
   defaultShowDetails = true,
+  hideHeader = false,
 }: ReviewTriggersPanelProps) {
   const reviewTriggerFile = data?.reviewTriggerFile ?? null;
   const profiles = data?.profiles ?? [];
@@ -526,6 +528,7 @@ export function HarnessReviewTriggersPanel({
   return (
     <HarnessSectionCard
       title="Review triggers"
+      hideHeader={hideHeader}
       variant={variant}
       actions={
         canToggleDetails && reviewTriggerFile && reviewTriggerFile.rules.length ? (
