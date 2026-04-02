@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "@/i18n";
 import { DesktopAppShell } from "@/client/components/desktop-app-shell";
 import { CodeViewer } from "@/client/components/codemirror/code-viewer";
@@ -80,9 +81,31 @@ const MAX_EXPLORER_WIDTH = 460;
 const DEFAULT_BOTTOM_PANEL_HEIGHT = 280;
 const MIN_BOTTOM_PANEL_HEIGHT = 180;
 const MAX_BOTTOM_PANEL_HEIGHT = 520;
+const HARNESS_SECTION_QUERY_KEY = "section";
+const DEFAULT_SECTION: SectionId = "overview";
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function resolveSectionId(value: string | null | undefined): SectionId {
+  switch (value) {
+    case "spec-sources":
+    case "agent-instructions":
+    case "design-decisions":
+    case "repo-signals":
+    case "automations":
+    case "hook-systems":
+    case "review-triggers":
+    case "release-triggers":
+    case "codeowners":
+    case "entrix-fitness":
+    case "ci-cd":
+      return value;
+    case "overview":
+    default:
+      return DEFAULT_SECTION;
+  }
 }
 
 function extractMarkdownCodeBlocks(source: string) {
@@ -107,7 +130,10 @@ function sectionStatusClass(tone: SectionStatusTone = "neutral") {
 
 export default function HarnessConsolePage() {
   const { t } = useTranslation();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const workspacesHook = useWorkspaces();
+  const sectionFromUrl = resolveSectionId(searchParams.get(HARNESS_SECTION_QUERY_KEY));
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState("");
   const workspaceId = selectedWorkspaceId || workspacesHook.workspaces[0]?.id || "";
   const { codebases } = useCodebases(workspaceId);
@@ -234,8 +260,9 @@ export default function HarnessConsolePage() {
     saveRepoSelection("harness", workspaceId, activeRepoSelection);
   }, [activeRepoSelection, workspaceId]);
 
-  const [activeSection, setActiveSection] = useState<SectionId>("overview");
-  const [openTabs, setOpenTabs] = useState<SectionId[]>(["overview"]);
+  const [openTabs, setOpenTabs] = useState<SectionId[]>(
+    sectionFromUrl === DEFAULT_SECTION ? [DEFAULT_SECTION] : [DEFAULT_SECTION, sectionFromUrl],
+  );
   const [governanceView, setGovernanceView] = useState<"lifecycle" | "loop">("lifecycle");
   const [selectedGovernanceNodeId, setSelectedGovernanceNodeId] = useState<string | null>(null);
   const [bottomPanelTab, setBottomPanelTab] = useState<"context" | "plan" | "fitness">("context");
@@ -243,17 +270,30 @@ export default function HarnessConsolePage() {
   const [explorerWidth, setExplorerWidth] = useState(DEFAULT_EXPLORER_WIDTH);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(DEFAULT_BOTTOM_PANEL_HEIGHT);
 
+  const activeSection = sectionFromUrl;
+  const visibleTabs = useMemo(() => (
+    openTabs.includes(activeSection) ? openTabs : [...openTabs, activeSection]
+  ), [activeSection, openTabs]);
+
+  const replaceSectionInUrl = useCallback((id: SectionId) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set(HARNESS_SECTION_QUERY_KEY, id);
+    const next = params.toString();
+    router.replace(next ? `/settings/harness?${next}` : "/settings/harness");
+  }, [router, searchParams]);
+
   function openSection(id: SectionId) {
     setOpenTabs((current) => (current.includes(id) ? current : [...current, id]));
-    setActiveSection(id);
+    replaceSectionInUrl(id);
   }
 
   function closeTab(id: SectionId) {
-    const remaining: SectionId[] = openTabs.filter((tabId): tabId is SectionId => tabId !== id);
+    const remaining: SectionId[] = visibleTabs.filter((tabId): tabId is SectionId => tabId !== id);
     const nextTabs: SectionId[] = remaining.length > 0 ? remaining : ["overview"];
     setOpenTabs(nextTabs);
     if (activeSection === id) {
-      setActiveSection(nextTabs[nextTabs.length - 1] ?? "overview");
+      const nextSection = nextTabs[nextTabs.length - 1] ?? DEFAULT_SECTION;
+      replaceSectionInUrl(nextSection);
     }
   }
 
@@ -841,7 +881,7 @@ export default function HarnessConsolePage() {
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex h-9 shrink-0 items-center justify-between border-b border-desktop-border bg-desktop-bg-secondary px-2">
             <div className="flex h-full items-center overflow-x-auto desktop-scrollbar-thin" data-testid="harness-console-tabs">
-              {openTabs.map((tabId) => {
+              {visibleTabs.map((tabId) => {
                 const section = sections.find((item) => item.id === tabId);
                 if (!section) {
                   return null;
@@ -851,7 +891,7 @@ export default function HarnessConsolePage() {
                   <div key={tabId} className={`group flex h-full shrink-0 items-center border-r border-desktop-border ${isActive ? "bg-desktop-bg-primary" : "bg-desktop-bg-secondary"}`}>
                     <button
                       type="button"
-                      onClick={() => setActiveSection(tabId)}
+                      onClick={() => openSection(tabId)}
                       className={`h-full border-b-2 px-3 text-[11px] font-medium ${isActive ? "border-desktop-accent text-desktop-text-primary" : "border-transparent text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"}`}
                     >
                       {section.shortLabel}

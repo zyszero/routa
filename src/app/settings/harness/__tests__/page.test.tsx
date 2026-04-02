@@ -6,6 +6,9 @@ import type { SpecDetectionResponse } from "@/core/harness/spec-detector-types";
 import HarnessSettingsPage from "../page";
 
 const repoPickerMock = vi.fn();
+const routerReplaceMock = vi.fn();
+const routerPushMock = vi.fn();
+let currentSearchParams = new URLSearchParams();
 
 function createSpecSourcesData(
   overrides: Partial<SpecDetectionResponse> = {},
@@ -161,6 +164,17 @@ Object.defineProperty(window, "localStorage", {
   configurable: true,
   value: localStorageMock,
 });
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    replace: routerReplaceMock,
+    push: routerPushMock,
+  }),
+  useSearchParams: () => ({
+    get: (key: string) => currentSearchParams.get(key),
+    toString: () => currentSearchParams.toString(),
+  }),
+}));
 
 vi.mock("@/client/components/codemirror/code-viewer", () => ({
   CodeViewer: ({ code }: { code: string }) => <pre data-testid="code-viewer">{code}</pre>,
@@ -338,6 +352,9 @@ vi.mock("@/client/hooks/use-harness-settings-data", () => ({
 describe("HarnessSettingsPage", () => {
   beforeEach(() => {
     repoPickerMock.mockReset();
+    routerReplaceMock.mockReset();
+    routerPushMock.mockReset();
+    currentSearchParams = new URLSearchParams();
     window.localStorage.clear();
     mockHarnessSettingsData.reloadInstructions.mockClear();
     mockHarnessSettingsData.specSourcesState = {
@@ -370,6 +387,24 @@ describe("HarnessSettingsPage", () => {
     expect(screen.getByText("Signal")).not.toBeNull();
     expect(screen.getByText("Cleanup & Correction")).not.toBeNull();
     expect(screen.getByText("Test Feedback")).not.toBeNull();
+  });
+
+  it("opens the tab from the section query parameter on first render", () => {
+    currentSearchParams = new URLSearchParams("section=hook-systems");
+
+    render(<HarnessSettingsPage />);
+
+    expect(screen.getByTestId("hook-runtime-panel")).not.toBeNull();
+    expect(screen.getByTestId("agent-hook-panel-full")).not.toBeNull();
+    expect(screen.queryByTestId("lifecycle-view")).toBeNull();
+  });
+
+  it("updates the section query parameter when opening another section", () => {
+    render(<HarnessSettingsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Spec Sources/i }));
+
+    expect(routerReplaceMock).toHaveBeenCalledWith("/settings/harness?section=spec-sources");
   });
 
   it("opens the bottom panel with compact context when clicking a lifecycle node", () => {
