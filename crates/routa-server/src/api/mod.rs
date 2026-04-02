@@ -16,6 +16,7 @@ pub mod files;
 pub mod fitness;
 pub mod github;
 pub mod harness;
+pub(crate) mod harness_github_actions;
 pub(crate) mod harness_hook_preview_events;
 pub(crate) mod harness_instructions_audit;
 pub(crate) mod harness_repo_views;
