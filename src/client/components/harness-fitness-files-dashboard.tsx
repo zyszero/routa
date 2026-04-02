@@ -141,11 +141,7 @@ export function HarnessFitnessFilesDashboard({
   return (
     <HarnessSectionCard
       title="Entrix Fitness"
-      description="Entrix fitness manifest and dimension scoring surfaces."
       variant="full"
-      actions={
-        loading ? <span className="text-[10px] text-desktop-text-secondary">Loading...</span> : null
-      }
     >
       {content}
     </HarnessSectionCard>

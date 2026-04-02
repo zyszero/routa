@@ -71,7 +71,6 @@ const GOVERNANCE_NODE_SECTION_MAP: Partial<Record<string, SectionId>> = {
   test: "repo-signals",
   lint: "entrix-fitness",
   precommit: "entrix-fitness",
-  "agent-hook": "hook-systems",
   review: "review-triggers",
   release: "ci-cd",
   commit: "ci-cd",
@@ -360,8 +359,6 @@ export default function HarnessConsolePage() {
         return <HarnessDesignDecisionPanel {...props} data={designDecisionsState.data} loading={designDecisionsState.loading} error={designDecisionsState.error} variant="compact" />;
       case "build":
         return <HarnessAgentInstructionsPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...props} data={instructionsState.data} loading={instructionsState.loading} error={instructionsState.error} onAuditRerun={reloadInstructions} variant="compact" />;
-      case "agent-hook":
-        return <HarnessAgentHookPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...props} data={agentHooksState.data} loading={agentHooksState.loading} error={agentHooksState.error} variant="compact" embedded />;
       case "lint":
       case "precommit":
         return <HarnessExecutionPlanFlow loading={planState.loading} error={planState.error} plan={planState.data} repoLabel={selectedRepoLabel} selectedTier={selectedTier} onTierChange={setSelectedTier} unsupportedMessage={unsupportedRepoMessage} variant="compact" />;
@@ -386,9 +383,6 @@ export default function HarnessConsolePage() {
   }, [
     activeRepoCodebaseId,
     activeRepoPath,
-    agentHooksState.data,
-    agentHooksState.error,
-    agentHooksState.loading,
     designDecisionsState.data,
     designDecisionsState.error,
     designDecisionsState.loading,
@@ -626,8 +620,6 @@ export default function HarnessConsolePage() {
                 unsupportedMessage={unsupportedRepoMessage}
                 hooksData={hooksState.data}
                 hooksError={hooksState.error}
-                agentHooksData={agentHooksState.data}
-                agentHooksError={agentHooksState.error}
                 workflowData={githubActionsState.data}
                 workflowError={githubActionsState.error}
                 instructionsData={instructionsState.data}

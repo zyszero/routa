@@ -52,7 +52,7 @@ function DecisionStatusBadge({ status }: { status: DesignDecisionStatus }) {
 
 function DecisionArtifactListRow({ artifact }: { artifact: DesignDecisionArtifact }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] hover:bg-desktop-bg-secondary/60">
+    <div className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-[11px] hover:bg-desktop-bg-secondary/60">
       <span className="min-w-0 flex-1 truncate text-desktop-text-primary" title={artifact.title}>
         {artifact.title}
       </span>
@@ -68,7 +68,7 @@ function DecisionSourceCard({ source }: { source: DesignDecisionSource }) {
   if (source.kind === "canonical-doc" && source.artifacts.length === 1) {
     const artifact = source.artifacts[0];
     return (
-      <div className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-3 py-3">
+      <div className="rounded-sm border border-desktop-border bg-desktop-bg-primary/80 px-3 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="text-[12px] font-semibold text-desktop-text-primary">{artifact.title}</div>
@@ -81,7 +81,7 @@ function DecisionSourceCard({ source }: { source: DesignDecisionSource }) {
   }
 
   return (
-    <div className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80">
+    <div className="rounded-sm border border-desktop-border bg-desktop-bg-primary/80">
       <div className="px-3 py-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-3">
@@ -152,7 +152,6 @@ export function HarnessDesignDecisionPanel({
   return (
     <HarnessSectionCard
       title="Design Decisions"
-      eyebrow="Governance"
       variant={variant}
       dataTestId="design-decision-panel"
     >

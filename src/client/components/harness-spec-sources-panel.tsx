@@ -192,7 +192,7 @@ function SpecSourceCard({ source, expanded, onToggle }: { source: SpecSource; ex
   const specCount = hasFeatures ? source.features!.length : source.children.length;
 
   return (
-    <div className={`rounded-xl border transition-colors ${
+    <div className={`rounded-sm border transition-colors ${
       expanded ? "border-desktop-accent bg-desktop-bg-primary" : "border-desktop-border bg-desktop-bg-primary/80 hover:bg-desktop-bg-primary"
     }`}>
       <button
@@ -200,7 +200,7 @@ function SpecSourceCard({ source, expanded, onToggle }: { source: SpecSource; ex
         className="flex w-full items-start gap-3 px-3 py-2 text-left"
         onClick={onToggle}
       >
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-desktop-border bg-desktop-bg-secondary text-[10px] font-bold text-desktop-text-primary">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border border-desktop-border bg-desktop-bg-secondary text-[10px] font-bold text-desktop-text-primary">
           {icon}
         </div>
         <div className="min-w-0 flex-1">
@@ -233,7 +233,7 @@ function SpecSourceCard({ source, expanded, onToggle }: { source: SpecSource; ex
           ) : source.children.length > 0 ? (
             <FlatSpecList specs={source.children} />
           ) : source.status === "installed-only" ? (
-            <div className="rounded-lg border border-sky-200 bg-sky-50/50 px-2.5 py-2 text-[10px] text-sky-700">
+            <div className="rounded-sm border border-sky-200 bg-sky-50/50 px-2.5 py-2 text-[10px] text-sky-700">
               {source.system === "qoder"
                 ? "Qoder integration detected. No spec documents found."
                 : `${source.system} integration detected, but no spec documents found.`}
@@ -276,7 +276,7 @@ function SourceGroup({ title, sources, expandedKeys, onToggle }: {
 }
 
 export function HarnessSpecSourcesPanel({
-  repoLabel,
+  repoLabel: _repoLabel,
   unsupportedMessage,
   data,
   loading,
@@ -303,15 +303,6 @@ export function HarnessSpecSourcesPanel({
   };
   const { nativeTools, frameworks, integrations, legacy } = groupSourcesByCategory(sources);
 
-  const totalSpecs = sources.reduce((sum, s) => {
-    if (s.features && s.features.length > 0) {
-      // For Kiro features, count total documents across all features
-      return sum + s.features.reduce((docSum, f) => docSum + f.documents.length, 0);
-    }
-    return sum + s.children.length;
-  }, 0);
-  const highConfidenceCount = sources.filter((s) => s.confidence === "high").length;
-
   const isCompact = variant === "compact";
 
   if (isCompact) {
@@ -319,19 +310,9 @@ export function HarnessSpecSourcesPanel({
     const showLoading = Boolean(loading);
     const showEmptyState = !showLoading && !error && !showUnsupportedMessage && sources.length === 0;
     const showSourceCards = !showLoading && !showUnsupportedMessage;
-    const compactHeaderActions = showLoading ? (
-      <span className="text-[10px] text-desktop-text-secondary">Loading...</span>
-    ) : (
-      <span className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2 py-0.5 text-[10px] text-desktop-text-secondary">
-        {sources.length} source{sources.length !== 1 ? "s" : ""} · {totalSpecs} spec{totalSpecs !== 1 ? "s" : ""}
-      </span>
-    );
-
     return (
       <HarnessSectionCard
         title="Spec Sources"
-        description="Detected AI coding spec sources in this repository."
-        actions={compactHeaderActions}
         variant="compact"
         dataTestId="spec-sources-compact"
       >
@@ -365,25 +346,7 @@ export function HarnessSpecSourcesPanel({
   return (
     <HarnessSectionCard
       title="Spec Sources"
-      description={`Detected AI Coding spec tools, methodology frameworks, and tool integrations for ${repoLabel}`}
       variant="full"
-      actions={
-        !loading ? (
-          <div className="flex shrink-0 items-center gap-2">
-            <span className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
-              {sources.length} source{sources.length !== 1 ? "s" : ""}
-            </span>
-            <span className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
-              {totalSpecs} spec{totalSpecs !== 1 ? "s" : ""}
-            </span>
-            {highConfidenceCount > 0 ? (
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] text-emerald-700">
-                {highConfidenceCount} high confidence
-              </span>
-            ) : null}
-          </div>
-        ) : null
-      }
     >
       {loading ? (
         <HarnessSectionStateFrame>Scanning for spec sources...</HarnessSectionStateFrame>

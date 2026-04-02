@@ -391,9 +391,8 @@ function buildPlanGraph(
     nodes.push(buildNode(dimensionId, dimensionX, dimensionY, {
       kind: "dimension",
       title: dimension.name,
-      subtitle: `${dimension.sourceFile} · ${dimension.thresholdPass}/${dimension.thresholdWarn}`,
+      subtitle: dimension.sourceFile,
       status: hasHardMetric ? "hard" : "pass",
-      badgeText: `${dimension.thresholdPass}/${dimension.thresholdWarn}`,
       expanded,
       onToggle: () => {
         toggleDimension(dimension.name);
@@ -499,7 +498,7 @@ export function HarnessExecutionPlanFlow({
   loading,
   error,
   plan,
-  repoLabel,
+  repoLabel: _repoLabel,
   selectedTier,
   onTierChange,
   unsupportedMessage,
@@ -570,9 +569,6 @@ export function HarnessExecutionPlanFlow({
         {!embedded ? (
           <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Entrix Fitness</div>
         ) : null}
-        <div className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
-          {repoLabel}
-        </div>
         <div className="rounded-full border border-desktop-border bg-desktop-bg-primary p-0.5">
           {(["fast", "normal", "deep"] as const).map((tier) => (
             <button
@@ -610,14 +606,6 @@ export function HarnessExecutionPlanFlow({
           >
             {expandedDimensions.size > 0 ? "Hide metrics" : "Show metrics"}
           </button>
-        ) : null}
-        {plan ? (
-          <>
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] text-emerald-700">pass = scoring path</span>
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] text-amber-700">warn = degraded dimension</span>
-            <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[10px] text-red-700">hard = blocking gate</span>
-            <span className="rounded-full border border-slate-300 bg-slate-100 px-2.5 py-1 text-[10px] text-slate-700">blocked = report can stop</span>
-          </>
         ) : null}
       </div>
 

@@ -35,7 +35,7 @@ function ListBlock({
   }
   const visibleRows = `${Math.min(items.length, rowLimit) * 1.5}rem`;
   return (
-    <div className={`rounded-xl border px-3 py-2 ${border}`}>
+    <div className={`rounded-sm border px-3 py-2 ${border}`}>
       <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-desktop-text-secondary">{title}</div>
       <ul
         className="mt-1.5 list-inside list-disc space-y-0.5 overflow-y-auto font-mono text-[11px] text-desktop-text-primary"
@@ -58,7 +58,7 @@ function formatTriggerLabel(value: string): string {
 }
 
 export function HarnessCodeownersPanel({
-  repoLabel,
+  repoLabel: _repoLabel,
   unsupportedMessage,
   data,
   loading = false,
@@ -70,11 +70,6 @@ export function HarnessCodeownersPanel({
   return (
     <HarnessSectionCard
       title="CODEOWNERS"
-      description={
-        compactMode
-          ? "GitHub ownership rules for review routing."
-          : "Parse `.github/CODEOWNERS`, resolve owner groups, and surface unowned or overlapping paths next to review triggers."
-      }
       variant={variant}
     >
       {loading ? (
@@ -91,24 +86,6 @@ export function HarnessCodeownersPanel({
 
       {!loading && !error && !unsupportedMessage && data ? (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-desktop-text-secondary">
-            <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 font-mono text-[10px]">
-              {repoLabel}
-            </span>
-            {data.codeownersFile ? (
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-800">
-                {data.codeownersFile}
-              </span>
-            ) : (
-              <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-800">
-                Missing file
-              </span>
-            )}
-            <span className="text-desktop-text-secondary/80">
-              {data.rules.length} rule{data.rules.length === 1 ? "" : "s"}
-            </span>
-          </div>
-
           {data.warnings.length > 0 ? (
             <div className="rounded-sm border border-amber-200 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-900">
               <div className="font-semibold">Warnings</div>
@@ -139,7 +116,7 @@ export function HarnessCodeownersPanel({
           ) : null}
 
           {data.rules.length > 0 ? (
-            <div className="max-h-56 overflow-x-auto overflow-y-auto rounded-xl border border-desktop-border">
+            <div className="max-h-56 overflow-x-auto overflow-y-auto rounded-sm border border-desktop-border">
               <table className="w-full min-w-[480px] border-collapse text-left text-[11px]">
                 <thead>
                   <tr className="border-b border-desktop-border bg-desktop-bg-secondary/60">
@@ -186,7 +163,7 @@ export function HarnessCodeownersPanel({
                 {data.correlation.triggerCorrelations.map((correlation) => (
                   <div
                     key={correlation.triggerName}
-                    className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-3 py-2"
+                    className="rounded-sm border border-desktop-border bg-desktop-bg-primary/80 px-3 py-2"
                   >
                     <div className="grid gap-1.5">
                       <span className="font-medium text-desktop-text-primary">
@@ -234,7 +211,7 @@ export function HarnessCodeownersPanel({
           ) : null}
 
           {data.correlation?.hotspots.length ? (
-            <div className="rounded-xl border border-rose-200 bg-rose-50/60 px-3 py-2">
+            <div className="rounded-sm border border-rose-200 bg-rose-50/60 px-3 py-2">
               <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-rose-800">Governance hotspots</div>
               <ul className="mt-1.5 space-y-1 text-[11px] text-rose-900">
                 {data.correlation.hotspots.map((hotspot) => (

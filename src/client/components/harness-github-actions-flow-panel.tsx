@@ -33,7 +33,7 @@ export function HarnessGitHubActionsFlowPanel({
   workspaceId,
   codebaseId,
   repoPath,
-  repoLabel,
+  repoLabel: _repoLabel,
   unsupportedMessage,
   data,
   loading,
@@ -121,23 +121,11 @@ export function HarnessGitHubActionsFlowPanel({
   const isLoading = hasExternalState
     ? Boolean(loading)
     : (hasContext && resolvedFlowState.loadedContextKey !== contextKey && !resolvedFlowState.error);
-  const flowsSummary = isLoading
-    ? "Loading..."
-    : visibleFlows.length === 0
-      ? "No workflows found"
-      : `${visibleFlows.length} workflow${visibleFlows.length !== 1 ? "s" : ""}`;
-  const stateBadge = (
-    <span className="text-[10px] text-desktop-text-secondary">
-      {flowsSummary}
-    </span>
-  );
 
   if (isLoading) {
     return (
       <HarnessSectionCard
         title="CI/CD"
-        description={`Workflow orchestration for ${repoLabel}.`}
-        actions={stateBadge}
         variant={variant}
       >
         <HarnessSectionStateFrame>Loading GitHub Actions workflows...</HarnessSectionStateFrame>
@@ -149,8 +137,6 @@ export function HarnessGitHubActionsFlowPanel({
     return (
       <HarnessSectionCard
         title="CI/CD"
-        description={`Workflow orchestration for ${repoLabel}.`}
-        actions={stateBadge}
         variant={variant}
       >
         <HarnessUnsupportedState className="rounded-sm border border-amber-200 bg-amber-50 px-4 py-4 text-[11px] text-amber-800" />
@@ -162,8 +148,6 @@ export function HarnessGitHubActionsFlowPanel({
     return (
       <HarnessSectionCard
         title="CI/CD"
-        description={`Workflow orchestration for ${repoLabel}.`}
-        actions={stateBadge}
         variant={variant}
       >
         <HarnessSectionStateFrame tone="error">{resolvedFlowState.error}</HarnessSectionStateFrame>
@@ -175,8 +159,6 @@ export function HarnessGitHubActionsFlowPanel({
     return (
       <HarnessSectionCard
         title="CI/CD"
-        description={`Workflow orchestration for ${repoLabel}.`}
-        actions={stateBadge}
         variant={variant}
       >
         <HarnessSectionStateFrame>
@@ -189,8 +171,6 @@ export function HarnessGitHubActionsFlowPanel({
   return (
     <HarnessSectionCard
       title="CI/CD"
-      description={`Workflow orchestration for ${repoLabel}.`}
-      actions={stateBadge}
       variant={variant}
     >
       <HarnessGitHubActionsFlowGallery

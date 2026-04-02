@@ -14,7 +14,6 @@ import {
 import type { TierValue } from "@/client/components/harness-execution-plan-flow";
 import { HarnessUnsupportedState } from "@/client/components/harness-support-state";
 import type {
-  AgentHooksResponse,
   FitnessSpecSummary,
   GitHubActionsFlow,
   GitHubActionsFlowsResponse,
@@ -30,12 +29,6 @@ type HookSummary = {
   mappedMetricCount: number;
   phaseCount: number;
   phaseLabels: string[];
-};
-
-type AgentHookSummary = {
-  hookCount: number;
-  blockingCount: number;
-  eventCount: number;
 };
 
 type WorkflowSummary = {
@@ -67,8 +60,6 @@ type HarnessGovernanceLoopGraphProps = {
   unsupportedMessage?: string | null;
   hooksData?: HooksResponse | null;
   hooksError?: string | null;
-  agentHooksData?: AgentHooksResponse | null;
-  agentHooksError?: string | null;
   workflowData?: GitHubActionsFlowsResponse | null;
   workflowError?: string | null;
   instructionsData?: InstructionsResponse | null;
@@ -249,13 +240,13 @@ function LoopNodeView({ data }: NodeProps<Node<LoopNodeData>>) {
           </div>
         ) : null}
         {data.unavailableReason ? (
-          <div
-            id={unavailableReasonId}
-            className="mt-2 min-h-[16px] max-w-[168px] rounded-xl border border-dashed border-slate-200 bg-white/70 px-2.5 py-2 text-[10px] leading-4 text-slate-500 truncate"
-            title={data.unavailableReason}
-          >
-            {data.unavailableReason}
-          </div>
+        <div
+          id={unavailableReasonId}
+          className="mt-2 min-h-[16px] max-w-[168px] rounded-sm border border-dashed border-slate-200 bg-white/70 px-2.5 py-2 text-[10px] leading-4 text-slate-500 truncate"
+          title={data.unavailableReason}
+        >
+          {data.unavailableReason}
+        </div>
         ) : null}
       </button>
     </div>
@@ -357,7 +348,6 @@ function detectReleaseWorkflows(flows: GitHubActionsFlow[]) {
 
 function buildGraph(args: {
   hookSummary: HookSummary | null;
-  agentHookSummary: AgentHookSummary | null;
   instructionSummary: InstructionSummary | null;
   workflowSummary: WorkflowSummary | null;
   metricCount: number;
@@ -368,7 +358,6 @@ function buildGraph(args: {
 }) {
   const {
     hookSummary,
-    agentHookSummary,
     instructionSummary,
     workflowSummary,
     metricCount,
@@ -383,7 +372,6 @@ function buildGraph(args: {
     "thinking",
     ...(hasCodingNode ? ["coding"] : []),
     "build",
-    "agent-hook",
     "test",
     "precommit",
     "review",
@@ -396,9 +384,8 @@ function buildGraph(args: {
     ...(hasCodingNode ? {
       coding: { left: "thinking", right: "build" },
     } : {}),
-    build: { left: hasCodingNode ? "coding" : "thinking", right: "agent-hook", down: "review" },
-    "agent-hook": { left: "test", down: "precommit" },
-    test: { left: "agent-hook", down: "precommit" },
+    build: { left: hasCodingNode ? "coding" : "thinking", right: "test", down: "review" },
+    test: { left: "build", down: "precommit" },
     precommit: { up: "test", left: "review" },
     review: { up: "build", right: "precommit", left: "post-commit" },
     "post-commit": { right: "review", down: "release" },
@@ -440,7 +427,6 @@ function buildGraph(args: {
   const col2X = 330;
   const col3X = 532;
   const col4X = 734;
-  const col5X = 936;
   const externalRowY = 482;
 
   const nodes: Node<LoopNodeData>[] = [
@@ -484,17 +470,6 @@ function buildGraph(args: {
       note: "测试 / 回归 / smoke",
       active: true,
       ...buildSelectionState("test", true),
-    }),
-    buildNode("agent-hook", col5X, internalRowY, {
-      nodeId: "agent-hook",
-      layer: "internal",
-      title: "Agent 治理",
-      tone: getLayerTone("internal"),
-      note: agentHookSummary
-        ? `${agentHookSummary.hookCount} hooks / ${agentHookSummary.eventCount} events`
-        : "Agent Hook 策略与生命周期治理",
-      active: true,
-      ...buildSelectionState("agent-hook", true),
     }),
     buildNode("precommit", col4X, commitRowY, {
       nodeId: "precommit",
@@ -588,8 +563,7 @@ function buildGraph(args: {
   const edges: Edge[] = [
     buildEdge("thinking-coding", "thinking", "coding", "source-right", "target-left", "澄清", LOOP_EDGE_COLORS.neutral),
     buildEdge("coding-build", "coding", "build", "source-right", "target-left", "实现", LOOP_EDGE_COLORS.internal),
-    buildEdge("build-agent-hook", "build", "agent-hook", "source-right", "target-left", "治理", LOOP_EDGE_COLORS.internal),
-    buildEdge("agent-hook-test", "agent-hook", "test", "source-left", "target-right", "验证", LOOP_EDGE_COLORS.internal),
+    buildEdge("build-test", "build", "test", "source-right", "target-left", "验证", LOOP_EDGE_COLORS.internal),
 
     buildEdge("precommit-review", "precommit", "review", "source-left", "target-right", "送审", LOOP_EDGE_COLORS.internal),
     buildEdge("review-commit", "review", "commit", "source-left", "target-right", "集成", LOOP_EDGE_COLORS.neutral),
@@ -661,7 +635,6 @@ function buildGraph(args: {
 function buildDetailSections(args: {
   selectedNodeId: string | null;
   hooksData: HooksResponse | null;
-  agentHooksData: AgentHooksResponse | null;
   workflowData: GitHubActionsFlowsResponse | null;
   instructionSummary: InstructionSummary | null;
   fitnessFiles: FitnessSpecSummary[];
@@ -673,7 +646,6 @@ function buildDetailSections(args: {
   const {
     selectedNodeId,
     hooksData,
-    agentHooksData,
     workflowData,
     instructionSummary,
     fitnessFiles,
@@ -692,9 +664,6 @@ function buildDetailSections(args: {
   const primaryRuleFiles = fitnessFiles
     .filter((file) => file.kind === "rulebook" || file.kind === "manifest")
     .map((file) => file.name);
-  const agentHookCount = agentHooksData?.hooks?.length ?? 0;
-  const agentEventCount = new Set((agentHooksData?.hooks ?? []).map((hook) => hook.event)).size;
-  const agentBlockingCount = (agentHooksData?.hooks ?? []).filter((hook) => hook.blocking).length;
 
   switch (selectedNodeId) {
     case "precommit":
@@ -728,12 +697,6 @@ function buildDetailSections(args: {
         { title: "Context", items: ["当前节点受 instructions 面板支撑"] },
         { title: "Rulebook", items: primaryRuleFiles.length ? primaryRuleFiles.slice(0, 4) : ["当前页未发现 rulebook / manifest"] },
       ] satisfies LoopDetailSection[];
-    case "agent-hook":
-      return [
-        { title: "Agent hook summary", items: [`${agentHookCount} hooks`, `${agentEventCount} events`, `${agentBlockingCount} blocking`] },
-        { title: "Related surface", items: ["Agent hook system panel", "Event → Hook → Outcome"] },
-        { title: "Source priority", items: ["docs/fitness/runtime/agent-hooks.yaml", ".claude/.qoder/.codex hooks config"] },
-      ] satisfies LoopDetailSection[];
     case "thinking":
       return [
         { title: "Spec Sources", items: ["Detects AI Coding spec tools and methodology frameworks"] },
@@ -766,8 +729,6 @@ export function HarnessGovernanceLoopGraph({
   unsupportedMessage,
   hooksData,
   hooksError,
-  agentHooksData,
-  agentHooksError,
   workflowData,
   workflowError,
   instructionsData,
@@ -808,17 +769,6 @@ export function HarnessGovernanceLoopGraph({
       releaseFlowCount: detectReleaseWorkflows(flows),
     } satisfies WorkflowSummary;
   }, [workflowData]);
-  const agentHookSummary = useMemo(() => {
-    if (!agentHooksData) {
-      return null;
-    }
-    const hooks = agentHooksData.hooks ?? [];
-    return {
-      hookCount: hooks.length,
-      blockingCount: hooks.filter((hook) => hook.blocking).length,
-      eventCount: new Set(hooks.map((hook) => hook.event)).size,
-    } satisfies AgentHookSummary;
-  }, [agentHooksData]);
   const instructionSummary = useMemo(() => {
     if (!instructionsData) {
       return null;
@@ -832,7 +782,6 @@ export function HarnessGovernanceLoopGraph({
   const graph = useMemo(
     () => buildGraph({
       hookSummary,
-      agentHookSummary,
       instructionSummary,
       workflowSummary,
       metricCount,
@@ -847,18 +796,17 @@ export function HarnessGovernanceLoopGraph({
         setInternalSelectedNodeId(nodeId);
       },
     }),
-    [activeSelectedNodeId, agentHookSummary, designDecisionNodeEnabled, hardGateCount, hookSummary, instructionSummary, metricCount, onSelectedNodeChange, workflowSummary],
+    [activeSelectedNodeId, designDecisionNodeEnabled, hardGateCount, hookSummary, instructionSummary, metricCount, onSelectedNodeChange, workflowSummary],
   );
 
   const graphIssues = [...new Set(
-    [specsError, planError, hooksError, agentHooksError, workflowError, instructionsError]
+    [specsError, planError, hooksError, workflowError, instructionsError]
       .filter((issue): issue is string => Boolean(issue)),
   )];
   const detailSections = useMemo(
     () => buildDetailSections({
       selectedNodeId: activeSelectedNodeId,
       hooksData: hooksData ?? null,
-      agentHooksData: agentHooksData ?? null,
       workflowData: workflowData ?? null,
       instructionSummary,
       fitnessFiles,
@@ -867,7 +815,7 @@ export function HarnessGovernanceLoopGraph({
       hardGateCount,
       selectedTier,
     }),
-    [activeSelectedNodeId, agentHooksData, dimensionCount, fitnessFiles, hardGateCount, hooksData, instructionSummary, metricCount, selectedTier, workflowData],
+    [activeSelectedNodeId, dimensionCount, fitnessFiles, hardGateCount, hooksData, instructionSummary, metricCount, selectedTier, workflowData],
   );
 
   return (
@@ -895,14 +843,6 @@ export function HarnessGovernanceLoopGraph({
       {hasContext && !unsupportedMessage ? (
         <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <div className="relative overflow-hidden rounded-sm border border-desktop-border bg-desktop-bg-primary">
-              <div className="pointer-events-none absolute right-3 top-2 z-10 rounded-sm border border-desktop-border bg-desktop-bg-primary px-2.5 py-1.5 text-[10px] text-slate-700">
-                <div className="flex items-center gap-3">
-                  <span className="shrink-0 text-desktop-text-secondary">Legend:</span>
-                  <span className="flex items-center gap-1.5 text-[10px]"><span className="h-2.5 w-2.5 rounded-[3px] border border-sky-300 bg-sky-100" />Internal</span>
-                  <span className="flex items-center gap-1.5 text-[10px]"><span className="h-2.5 w-2.5 rounded-[3px] border border-violet-300 bg-violet-100" />Push</span>
-                  <span className="flex items-center gap-1.5 text-[10px]"><span className="h-2.5 w-2.5 rounded-[3px] border border-amber-300 bg-amber-100" />External</span>
-                </div>
-              </div>
               <div style={{ height: graph.minHeight }}>
                 <ReactFlow
                   nodes={graph.nodes}
@@ -939,7 +879,7 @@ export function HarnessGovernanceLoopGraph({
                     </div>
                   </div>
                   {detailSections.map((section: LoopDetailSection) => (
-                    <div key={section.title} className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80 p-3">
+                    <div key={section.title} className="rounded-sm border border-desktop-border bg-desktop-bg-primary/80 p-3">
                       <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">{section.title}</div>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {section.items.map((item: string) => (
