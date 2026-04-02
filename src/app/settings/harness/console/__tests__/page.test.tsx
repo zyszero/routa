@@ -153,6 +153,21 @@ vi.mock("@/client/components/codemirror/code-viewer", () => ({
   CodeViewer: ({ code }: { code: string }) => <pre data-testid="code-viewer">{code}</pre>,
 }));
 
+vi.mock("@/client/components/desktop-app-shell", () => ({
+  DesktopAppShell: ({ children, workspaceSwitcher, titleBarRight }: { children: ReactNode; workspaceSwitcher?: ReactNode; titleBarRight?: ReactNode }) => (
+    <div data-testid="desktop-shell-root">
+      <aside data-testid="desktop-shell-sidebar" />
+      <div>
+        <div data-testid="desktop-shell-header">
+          {workspaceSwitcher}
+          {titleBarRight}
+        </div>
+        <main data-testid="desktop-shell-main">{children}</main>
+      </div>
+    </div>
+  ),
+}));
+
 vi.mock("@/client/components/workspace-switcher", () => ({
   WorkspaceSwitcher: () => <div data-testid="workspace-switcher" />,
 }));
@@ -316,7 +331,7 @@ describe("HarnessConsolePage", () => {
   it("renders a desktop-themed workbench with a single explorer sidebar", () => {
     render(<HarnessConsolePage />);
 
-    expect(screen.getByTestId("harness-console-root").className).toContain("desktop-theme");
+    expect(screen.getByTestId("desktop-shell-sidebar")).not.toBeNull();
     expect(screen.getAllByTestId("harness-console-explorer")).toHaveLength(1);
     expect(screen.getByTestId("workspace-switcher")).not.toBeNull();
     expect(screen.queryByTestId("harness-console-bottom-panel")).toBeNull();
@@ -349,5 +364,37 @@ describe("HarnessConsolePage", () => {
     expect(bottomPanel).not.toBeNull();
     expect(screen.getByTestId("selected-node-id").textContent).toBe("thinking");
     expect(within(bottomPanel).getByTestId("spec-sources-compact")).not.toBeNull();
+  });
+
+  it("resizes the explorer pane via the drag handle", () => {
+    render(<HarnessConsolePage />);
+
+    const explorer = screen.getByTestId("harness-console-explorer");
+    const resizer = screen.getByTestId("harness-console-explorer-resizer");
+
+    expect(explorer.getAttribute("style")).toContain("296px");
+
+    fireEvent.mouseDown(resizer, { clientX: 296 });
+    fireEvent.mouseMove(document, { clientX: 360 });
+    fireEvent.mouseUp(document);
+
+    expect(explorer.getAttribute("style")).toContain("360px");
+  });
+
+  it("resizes the bottom panel via the drag handle", () => {
+    render(<HarnessConsolePage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "select-thinking" }));
+
+    const bottomPanel = screen.getByTestId("harness-console-bottom-panel");
+    const resizer = screen.getByTestId("harness-console-bottom-resizer");
+
+    expect(bottomPanel.getAttribute("style")).toContain("280px");
+
+    fireEvent.mouseDown(resizer, { clientY: 400 });
+    fireEvent.mouseMove(document, { clientY: 340 });
+    fireEvent.mouseUp(document);
+
+    expect(bottomPanel.getAttribute("style")).toContain("340px");
   });
 });

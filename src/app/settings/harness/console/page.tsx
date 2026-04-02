@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { DesktopAppShell } from "@/client/components/desktop-app-shell";
 import { CodeViewer } from "@/client/components/codemirror/code-viewer";
 import { RepoPicker, type RepoSelection } from "@/client/components/repo-picker";
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
@@ -76,6 +77,17 @@ const GOVERNANCE_NODE_SECTION_MAP: Partial<Record<string, SectionId>> = {
   commit: "ci-cd",
   "post-commit": "ci-cd",
 };
+
+const DEFAULT_EXPLORER_WIDTH = 296;
+const MIN_EXPLORER_WIDTH = 220;
+const MAX_EXPLORER_WIDTH = 460;
+const DEFAULT_BOTTOM_PANEL_HEIGHT = 280;
+const MIN_BOTTOM_PANEL_HEIGHT = 180;
+const MAX_BOTTOM_PANEL_HEIGHT = 520;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
 
 function extractMarkdownCodeBlocks(source: string) {
   const matches = [...source.matchAll(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g)];
@@ -233,6 +245,8 @@ export default function HarnessConsolePage() {
   const [selectedGovernanceNodeId, setSelectedGovernanceNodeId] = useState<string | null>(null);
   const [bottomPanelTab, setBottomPanelTab] = useState<"context" | "plan" | "fitness">("context");
   const [showBottomPanel, setShowBottomPanel] = useState(false);
+  const [explorerWidth, setExplorerWidth] = useState(DEFAULT_EXPLORER_WIDTH);
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(DEFAULT_BOTTOM_PANEL_HEIGHT);
 
   function openSection(id: SectionId) {
     setOpenTabs((current) => (current.includes(id) ? current : [...current, id]));
@@ -256,6 +270,44 @@ export default function HarnessConsolePage() {
   function handleGovernanceNodeClick(nodeId: string) {
     setSelectedGovernanceNodeId(nodeId);
     openBottomPanel("context");
+  }
+
+  function handleExplorerResizeStart(event: React.MouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = explorerWidth;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      setExplorerWidth(clamp(startWidth + deltaX, MIN_EXPLORER_WIDTH, MAX_EXPLORER_WIDTH));
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  }
+
+  function handleBottomPanelResizeStart(event: React.MouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const startY = event.clientY;
+    const startHeight = bottomPanelHeight;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaY = startY - moveEvent.clientY;
+      setBottomPanelHeight(clamp(startHeight + deltaY, MIN_BOTTOM_PANEL_HEIGHT, MAX_BOTTOM_PANEL_HEIGHT));
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
   }
 
   const visibleSections = useMemo(() => {
@@ -695,76 +747,72 @@ export default function HarnessConsolePage() {
     }
   }
 
+  const titleBarRight = (
+    <div className="flex items-center gap-2">
+      <RepoPicker
+        value={activeRepoSelection}
+        onChange={(selection) => {
+          setSelectedRepoOverrideState({ workspaceId, selection });
+          if (!selection) {
+            setSelectedCodebaseId("");
+            return;
+          }
+          const matchedCodebase = codebases.find((codebase) => (
+            codebase.repoPath === selection.path
+            && (selection.branch ? (codebase.branch ?? "") === selection.branch : true)
+          )) ?? codebases.find((codebase) => codebase.repoPath === selection.path)
+            ?? codebases.find((codebase) => (
+              (codebase.label ?? codebase.repoPath.split("/").pop() ?? codebase.repoPath) === selection.name
+            ));
+          setSelectedCodebaseId(matchedCodebase?.id ?? "");
+        }}
+        pathDisplay="hidden"
+        additionalRepos={codebases.map((codebase) => ({
+          name: codebase.label ?? codebase.repoPath.split("/").pop() ?? codebase.repoPath,
+          path: codebase.repoPath,
+          branch: codebase.branch ?? "",
+        }))}
+      />
+      <button type="button" className="desktop-btn desktop-btn-secondary" onClick={() => openBottomPanel("plan")}>Plan</button>
+      <button type="button" className="desktop-btn desktop-btn-secondary" onClick={() => openBottomPanel("fitness")}>Fitness</button>
+    </div>
+  );
+
   return (
-    <div className="desktop-theme flex h-screen flex-col overflow-hidden bg-desktop-bg-primary text-desktop-text-primary" data-testid="harness-console-root">
-      <div className="flex h-10 shrink-0 items-center justify-between border-b border-desktop-border bg-desktop-bg-tertiary px-3">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 pr-1">
-            <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
-            <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
-            <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
-          </div>
-          <div className="min-w-0">
-            <div className="text-[12px] font-semibold text-desktop-text-primary">Harness Console</div>
-            <div className="text-[10px] text-desktop-text-secondary">Embedded agent engineering workbench</div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <WorkspaceSwitcher
-            workspaces={workspacesHook.workspaces}
-            activeWorkspaceId={workspaceId || null}
-            activeWorkspaceTitle={activeWorkspaceTitle}
-            onSelect={(nextWorkspaceId) => {
-              setSelectedWorkspaceId(nextWorkspaceId);
-              setSelectedRepoOverrideState({ workspaceId: nextWorkspaceId, selection: null });
+    <DesktopAppShell
+      workspaceId={workspaceId}
+      workspaceTitle={activeWorkspaceTitle}
+      workspaceSwitcher={(
+        <WorkspaceSwitcher
+          workspaces={workspacesHook.workspaces}
+          activeWorkspaceId={workspaceId || null}
+          activeWorkspaceTitle={activeWorkspaceTitle}
+          onSelect={(nextWorkspaceId) => {
+            setSelectedWorkspaceId(nextWorkspaceId);
+            setSelectedRepoOverrideState({ workspaceId: nextWorkspaceId, selection: null });
+            setSelectedCodebaseId("");
+          }}
+          onCreate={async (title) => {
+            const workspace = await workspacesHook.createWorkspace(title);
+            if (workspace) {
+              setSelectedWorkspaceId(workspace.id);
+              setSelectedRepoOverrideState({ workspaceId: workspace.id, selection: null });
               setSelectedCodebaseId("");
-            }}
-            onCreate={async (title) => {
-              const workspace = await workspacesHook.createWorkspace(title);
-              if (workspace) {
-                setSelectedWorkspaceId(workspace.id);
-                setSelectedRepoOverrideState({ workspaceId: workspace.id, selection: null });
-                setSelectedCodebaseId("");
-              }
-            }}
-            loading={workspacesHook.loading}
-            compact
-            desktop
-          />
-
-          <RepoPicker
-            value={activeRepoSelection}
-            onChange={(selection) => {
-              setSelectedRepoOverrideState({ workspaceId, selection });
-              if (!selection) {
-                setSelectedCodebaseId("");
-                return;
-              }
-              const matchedCodebase = codebases.find((codebase) => (
-                codebase.repoPath === selection.path
-                && (selection.branch ? (codebase.branch ?? "") === selection.branch : true)
-              )) ?? codebases.find((codebase) => codebase.repoPath === selection.path)
-                ?? codebases.find((codebase) => (
-                  (codebase.label ?? codebase.repoPath.split("/").pop() ?? codebase.repoPath) === selection.name
-                ));
-              setSelectedCodebaseId(matchedCodebase?.id ?? "");
-            }}
-            pathDisplay="hidden"
-            additionalRepos={codebases.map((codebase) => ({
-              name: codebase.label ?? codebase.repoPath.split("/").pop() ?? codebase.repoPath,
-              path: codebase.repoPath,
-              branch: codebase.branch ?? "",
-            }))}
-          />
-
-          <button type="button" className="desktop-btn desktop-btn-secondary" onClick={() => openBottomPanel("plan")}>Plan</button>
-          <button type="button" className="desktop-btn desktop-btn-secondary" onClick={() => openBottomPanel("fitness")}>Fitness</button>
-        </div>
-      </div>
-
-      <div className="flex min-h-0 flex-1">
-        <aside className="flex w-72 shrink-0 flex-col border-r border-desktop-border bg-desktop-bg-secondary" data-testid="harness-console-explorer">
+            }
+          }}
+          loading={workspacesHook.loading}
+          compact
+          desktop
+        />
+      )}
+      titleBarRight={titleBarRight}
+    >
+      <div className="flex h-full min-h-0 overflow-hidden bg-desktop-bg-primary text-desktop-text-primary" data-testid="harness-console-root">
+        <aside
+          className="flex shrink-0 flex-col border-r border-desktop-border bg-desktop-bg-secondary"
+          data-testid="harness-console-explorer"
+          style={{ width: `${explorerWidth}px` }}
+        >
           <div className="border-b border-desktop-border px-3 py-3">
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Explorer</div>
             <div className="mt-1 flex items-center gap-2 text-[11px] text-desktop-text-secondary">
@@ -783,7 +831,7 @@ export default function HarnessConsolePage() {
           </div>
 
           <div className="flex-1 overflow-y-auto px-2 py-2 desktop-scrollbar-thin">
-            <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Harness Workbench</div>
+            <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Sections</div>
             <div className="space-y-1">
               {visibleSections.map((section) => {
                 const isActive = activeSection === section.id;
@@ -799,11 +847,6 @@ export default function HarnessConsolePage() {
                         : "border-transparent"
                     }`}
                   >
-                    <span className={`mr-3 inline-flex h-6 w-8 shrink-0 items-center justify-center rounded-sm border text-[10px] font-semibold ${
-                      isActive
-                        ? "border-desktop-accent bg-desktop-bg-active text-desktop-accent"
-                        : "border-desktop-border bg-desktop-bg-primary text-desktop-text-secondary"
-                    }`}>{section.code}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[12px] font-medium text-desktop-text-primary">{section.label}</span>
                       <span className="block truncate text-[10px] text-desktop-text-secondary">{section.shortLabel}</span>
@@ -831,6 +874,14 @@ export default function HarnessConsolePage() {
             </div>
           </div>
         </aside>
+
+        <div
+          role="separator"
+          aria-label="Resize explorer"
+          data-testid="harness-console-explorer-resizer"
+          className="w-1 shrink-0 cursor-col-resize bg-desktop-border/60 transition-colors hover:bg-desktop-accent"
+          onMouseDown={handleExplorerResizeStart}
+        />
 
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex h-9 shrink-0 items-center justify-between border-b border-desktop-border bg-desktop-bg-secondary px-2">
@@ -878,7 +929,19 @@ export default function HarnessConsolePage() {
           </div>
 
           {showBottomPanel ? (
-            <div className="flex h-64 shrink-0 flex-col border-t border-desktop-border bg-desktop-bg-secondary" data-testid="harness-console-bottom-panel">
+            <>
+              <div
+                role="separator"
+                aria-label="Resize bottom panel"
+                data-testid="harness-console-bottom-resizer"
+                className="h-1 shrink-0 cursor-row-resize bg-desktop-border/60 transition-colors hover:bg-desktop-accent"
+                onMouseDown={handleBottomPanelResizeStart}
+              />
+              <div
+                className="flex shrink-0 flex-col border-t border-desktop-border bg-desktop-bg-secondary"
+                data-testid="harness-console-bottom-panel"
+                style={{ height: `${bottomPanelHeight}px` }}
+              >
               <div className="flex h-9 items-center justify-between border-b border-desktop-border px-3">
                 <div className="flex items-center gap-1">
                   {(["context", "plan", "fitness"] as const).map((tab) => (
@@ -943,7 +1006,8 @@ export default function HarnessConsolePage() {
                   />
                 ) : null}
               </div>
-            </div>
+              </div>
+            </>
           ) : null}
 
           <div className="flex h-6 shrink-0 items-center justify-between bg-desktop-accent px-3 text-[10px] text-desktop-accent-text">
@@ -964,6 +1028,6 @@ export default function HarnessConsolePage() {
           </div>
         </div>
       </div>
-    </div>
+    </DesktopAppShell>
   );
 }
