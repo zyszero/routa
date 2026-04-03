@@ -12,8 +12,10 @@ function okJson(data: unknown) {
 
 describe("useHarnessSettingsData", () => {
   const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>();
+  let architectureFetchCount = 0;
 
   beforeEach(() => {
+    architectureFetchCount = 0;
     fetchMock.mockImplementation(async (input) => {
       const url = String(input);
 
@@ -38,18 +40,55 @@ describe("useHarnessSettingsData", () => {
       }
 
       if (url.startsWith("/api/fitness/architecture?")) {
+        architectureFetchCount += 1;
         return okJson({
           generatedAt: "2026-03-31T00:00:00.000Z",
           repoRoot: "/repo",
           summaryStatus: "pass",
           archUnitSource: "/arch/src/files/index.ts",
           tsconfigPath: "/repo/tsconfig.json",
+          snapshotPath: "/repo/docs/fitness/reports/backend-architecture-latest.json",
           suiteCount: 2,
           ruleCount: 4,
           failedRuleCount: 0,
           violationCount: 0,
           reports: [],
           notes: [],
+          comparison: architectureFetchCount > 1
+            ? {
+              previousGeneratedAt: "2026-03-30T00:00:00.000Z",
+              previousSummaryStatus: "fail",
+              currentSummaryStatus: "pass",
+              ruleDelta: 0,
+              failedRuleDelta: -2,
+              violationDelta: -5,
+              changedRules: [
+                {
+                  id: "core-no-client",
+                  title: "src/core must not depend on src/client",
+                  suite: "boundaries",
+                  previousStatus: "fail",
+                  currentStatus: "pass",
+                  previousViolationCount: 2,
+                  currentViolationCount: 0,
+                  violationDelta: -2,
+                },
+              ],
+              newFailingRules: [],
+              resolvedRules: [
+                {
+                  id: "core-no-client",
+                  title: "src/core must not depend on src/client",
+                  suite: "boundaries",
+                  previousStatus: "fail",
+                  currentStatus: "pass",
+                  previousViolationCount: 2,
+                  currentViolationCount: 0,
+                  violationDelta: -2,
+                },
+              ],
+            }
+            : null,
         });
       }
 
@@ -293,5 +332,36 @@ describe("useHarnessSettingsData", () => {
     });
 
     expect(fetchMock.mock.calls.filter(([url]) => String(url).startsWith("/api/fitness/architecture?"))).toHaveLength(1);
+    expect(result.current.architectureState.data?.comparison).toBeNull();
+    expect(result.current.architectureState.data?.snapshotPath).toBe("/repo/docs/fitness/reports/backend-architecture-latest.json");
+  });
+
+  it("exposes architecture comparison data after a subsequent scan", async () => {
+    const { result } = renderHook(() => useHarnessSettingsData({
+      workspaceId: "default",
+      repoPath: "/repo",
+      selectedTier: "normal",
+      enableArchitecture: true,
+    }));
+
+    act(() => {
+      result.current.reloadArchitecture();
+    });
+
+    await waitFor(() => {
+      expect(result.current.architectureState.loading).toBe(false);
+      expect(result.current.architectureState.data?.comparison).toBeNull();
+    });
+
+    act(() => {
+      result.current.reloadArchitecture();
+    });
+
+    await waitFor(() => {
+      expect(result.current.architectureState.loading).toBe(false);
+      expect(result.current.architectureState.data?.comparison?.failedRuleDelta).toBe(-2);
+    });
+
+    expect(result.current.architectureState.data?.comparison?.resolvedRules).toHaveLength(1);
   });
 });

@@ -186,6 +186,8 @@ async fn get_fitness_architecture(
         reports.push(report);
     }
 
+    let snapshot_path = architecture_snapshot_path(&repo_root);
+
     let rule_count = reports
         .iter()
         .map(|report| report["ruleCount"].as_u64().unwrap_or(0))
@@ -230,20 +232,62 @@ async fn get_fitness_architecture(
         .find_map(|report| report["tsconfigPath"].as_str())
         .unwrap_or_default()
         .to_string();
+    let mut notes = notes;
 
-    Ok(Json(json!({
+    let mut response = json!({
         "generatedAt": chrono::Utc::now().to_rfc3339(),
         "repoRoot": repo_root,
         "summaryStatus": summary_status,
         "archUnitSource": arch_unit_source,
         "tsconfigPath": tsconfig_path,
+        "snapshotPath": snapshot_path.to_string_lossy().to_string(),
         "suiteCount": reports.len(),
         "ruleCount": rule_count,
         "failedRuleCount": failed_rule_count,
         "violationCount": violation_count,
         "reports": reports,
         "notes": notes,
-    })))
+        "comparison": Value::Null,
+    });
+
+    let comparison = match load_architecture_snapshot(&snapshot_path) {
+        Ok(Some(previous_snapshot)) => {
+            Some(build_architecture_comparison(&previous_snapshot, &response))
+        }
+        Ok(None) => None,
+        Err(error) => {
+            notes.push(format!(
+                "Unable to read previous architecture snapshot: {error}"
+            ));
+            None
+        }
+    };
+
+    if let Some(object) = response.as_object_mut() {
+        object.insert("notes".to_string(), json!(dedupe_strings(notes)));
+        object.insert("comparison".to_string(), comparison.unwrap_or(Value::Null));
+    }
+
+    let mut snapshot_payload = response.clone();
+    if let Some(object) = snapshot_payload.as_object_mut() {
+        object.insert("comparison".to_string(), Value::Null);
+    }
+
+    if let Err(error) = persist_architecture_snapshot(&snapshot_payload, &snapshot_path) {
+        let mut snapshot_notes = response["notes"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|value| value.as_str().map(ToString::to_string))
+            .collect::<Vec<_>>();
+        snapshot_notes.push(format!("Unable to persist architecture snapshot: {error}"));
+        if let Some(object) = response.as_object_mut() {
+            object.insert("notes".to_string(), json!(dedupe_strings(snapshot_notes)));
+        }
+    }
+
+    Ok(Json(response))
 }
 
 async fn get_fitness_plan(
@@ -642,6 +686,182 @@ fn profile_snapshot_path(repo_root: &Path, profile: &str) -> PathBuf {
         } else {
             "harness-fluency-agent-orchestrator-latest.json"
         })
+}
+
+fn architecture_snapshot_path(repo_root: &Path) -> PathBuf {
+    repo_root
+        .join("docs/fitness/reports")
+        .join("backend-architecture-latest.json")
+}
+
+fn dedupe_strings(values: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    values
+        .into_iter()
+        .filter(|value| seen.insert(value.clone()))
+        .collect()
+}
+
+fn load_architecture_snapshot(snapshot_path: &Path) -> Result<Option<Value>, String> {
+    match std::fs::read_to_string(snapshot_path) {
+        Ok(raw) => serde_json::from_str::<Value>(&raw)
+            .map(Some)
+            .map_err(|error| format!("unable to parse {}: {error}", snapshot_path.display())),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!(
+            "unable to read {}: {error}",
+            snapshot_path.display()
+        )),
+    }
+}
+
+fn persist_architecture_snapshot(report: &Value, snapshot_path: &Path) -> Result<(), String> {
+    if let Some(parent) = snapshot_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("unable to create {}: {error}", parent.display()))?;
+    }
+    let json = serde_json::to_string_pretty(report)
+        .map_err(|error| format!("unable to serialize architecture snapshot: {error}"))?;
+    std::fs::write(snapshot_path, format!("{json}\n"))
+        .map_err(|error| format!("unable to write {}: {error}", snapshot_path.display()))
+}
+
+#[derive(Clone)]
+struct ArchitectureRuleEntry {
+    id: String,
+    title: String,
+    suite: String,
+    status: String,
+    violation_count: i64,
+}
+
+fn architecture_rule_entries(report: &Value) -> Vec<ArchitectureRuleEntry> {
+    report["reports"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|suite_report| {
+            suite_report["results"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(move |result| ArchitectureRuleEntry {
+                    id: result["id"].as_str().unwrap_or_default().to_string(),
+                    title: result["title"].as_str().unwrap_or_default().to_string(),
+                    suite: result["suite"].as_str().unwrap_or("boundaries").to_string(),
+                    status: result["status"].as_str().unwrap_or("pass").to_string(),
+                    violation_count: result["violationCount"].as_i64().unwrap_or(0),
+                })
+        })
+        .collect()
+}
+
+fn build_architecture_comparison(previous: &Value, current: &Value) -> Value {
+    let previous_rules = architecture_rule_entries(previous)
+        .into_iter()
+        .map(|rule| (format!("{}:{}", rule.suite, rule.id), rule))
+        .collect::<BTreeMap<_, _>>();
+    let current_rules = architecture_rule_entries(current)
+        .into_iter()
+        .map(|rule| (format!("{}:{}", rule.suite, rule.id), rule))
+        .collect::<BTreeMap<_, _>>();
+    let keys = previous_rules
+        .keys()
+        .chain(current_rules.keys())
+        .cloned()
+        .collect::<HashSet<_>>();
+
+    let mut changed_rules = keys
+        .into_iter()
+        .filter_map(|key| {
+            let previous_rule = previous_rules.get(&key);
+            let current_rule = current_rules.get(&key);
+            let previous_status = previous_rule
+                .map(|rule| rule.status.as_str())
+                .unwrap_or("missing");
+            let current_status = current_rule
+                .map(|rule| rule.status.as_str())
+                .unwrap_or("missing");
+            let previous_violation_count =
+                previous_rule.map(|rule| rule.violation_count).unwrap_or(0);
+            let current_violation_count =
+                current_rule.map(|rule| rule.violation_count).unwrap_or(0);
+
+            if previous_status == current_status
+                && previous_violation_count == current_violation_count
+            {
+                return None;
+            }
+
+            Some(json!({
+                "id": current_rule
+                    .map(|rule| rule.id.clone())
+                    .or_else(|| previous_rule.map(|rule| rule.id.clone()))
+                    .unwrap_or_default(),
+                "title": current_rule
+                    .map(|rule| rule.title.clone())
+                    .or_else(|| previous_rule.map(|rule| rule.title.clone()))
+                    .unwrap_or_default(),
+                "suite": current_rule
+                    .map(|rule| rule.suite.clone())
+                    .or_else(|| previous_rule.map(|rule| rule.suite.clone()))
+                    .unwrap_or_else(|| "boundaries".to_string()),
+                "previousStatus": previous_status,
+                "currentStatus": current_status,
+                "previousViolationCount": previous_violation_count,
+                "currentViolationCount": current_violation_count,
+                "violationDelta": current_violation_count - previous_violation_count,
+            }))
+        })
+        .collect::<Vec<_>>();
+
+    changed_rules.sort_by(|left, right| {
+        let left_count = left["currentViolationCount"].as_i64().unwrap_or(0);
+        let right_count = right["currentViolationCount"].as_i64().unwrap_or(0);
+        right_count
+            .cmp(&left_count)
+            .then_with(|| {
+                left["suite"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .cmp(right["suite"].as_str().unwrap_or_default())
+            })
+            .then_with(|| {
+                left["title"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .cmp(right["title"].as_str().unwrap_or_default())
+            })
+    });
+
+    let new_failing_rules = changed_rules
+        .iter()
+        .filter(|rule| {
+            rule["currentStatus"].as_str() == Some("fail")
+                && rule["previousStatus"].as_str() != Some("fail")
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let resolved_rules = changed_rules
+        .iter()
+        .filter(|rule| {
+            rule["previousStatus"].as_str() == Some("fail")
+                && rule["currentStatus"].as_str() != Some("fail")
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+
+    json!({
+        "previousGeneratedAt": previous["generatedAt"].as_str().unwrap_or_default(),
+        "previousSummaryStatus": previous["summaryStatus"].as_str().unwrap_or("pass"),
+        "currentSummaryStatus": current["summaryStatus"].as_str().unwrap_or("pass"),
+        "ruleDelta": current["ruleCount"].as_i64().unwrap_or(0) - previous["ruleCount"].as_i64().unwrap_or(0),
+        "failedRuleDelta": current["failedRuleCount"].as_i64().unwrap_or(0) - previous["failedRuleCount"].as_i64().unwrap_or(0),
+        "violationDelta": current["violationCount"].as_i64().unwrap_or(0) - previous["violationCount"].as_i64().unwrap_or(0),
+        "changedRules": changed_rules,
+        "newFailingRules": new_failing_rules,
+        "resolvedRules": resolved_rules,
+    })
 }
 
 fn extract_json_output(raw: &str) -> Result<String, String> {

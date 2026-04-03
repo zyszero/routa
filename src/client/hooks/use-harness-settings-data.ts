@@ -272,18 +272,45 @@ export type ArchitectureSuiteReport = {
   notes: string[];
 };
 
+export type ArchitectureRuleChangeStatus = "pass" | "fail" | "missing";
+
+export type ArchitectureRuleChange = {
+  id: string;
+  title: string;
+  suite: ArchitectureSuiteName;
+  previousStatus: ArchitectureRuleChangeStatus;
+  currentStatus: ArchitectureRuleChangeStatus;
+  previousViolationCount: number;
+  currentViolationCount: number;
+  violationDelta: number;
+};
+
+export type ArchitectureComparison = {
+  previousGeneratedAt: string;
+  previousSummaryStatus: ArchitectureSummaryStatus;
+  currentSummaryStatus: ArchitectureSummaryStatus;
+  ruleDelta: number;
+  failedRuleDelta: number;
+  violationDelta: number;
+  changedRules: ArchitectureRuleChange[];
+  newFailingRules: ArchitectureRuleChange[];
+  resolvedRules: ArchitectureRuleChange[];
+};
+
 export type ArchitectureQualityResponse = {
   generatedAt: string;
   repoRoot: string;
   summaryStatus: ArchitectureSummaryStatus;
   archUnitSource: string | null;
   tsconfigPath: string;
+  snapshotPath: string;
   suiteCount: number;
   ruleCount: number;
   failedRuleCount: number;
   violationCount: number;
   reports: ArchitectureSuiteReport[];
   notes: string[];
+  comparison: ArchitectureComparison | null;
 };
 
 export type QueryState<T> = {
@@ -490,6 +517,7 @@ function normalizeArchitectureResponse(
       : "pass",
     archUnitSource: typeof payload?.archUnitSource === "string" ? payload.archUnitSource : null,
     tsconfigPath: payload?.tsconfigPath ?? "",
+    snapshotPath: payload?.snapshotPath ?? "",
     suiteCount: payload?.suiteCount ?? reports.length,
     ruleCount: payload?.ruleCount ?? reports.reduce((sum, report) => sum + report.ruleCount, 0),
     failedRuleCount: payload?.failedRuleCount ?? reports.reduce((sum, report) => sum + report.failedRuleCount, 0),
@@ -499,6 +527,48 @@ function normalizeArchitectureResponse(
     ),
     reports,
     notes: safeArray(payload?.notes),
+    comparison: payload?.comparison ? {
+      previousGeneratedAt: payload.comparison.previousGeneratedAt ?? "",
+      previousSummaryStatus: payload.comparison.previousSummaryStatus === "fail" || payload.comparison.previousSummaryStatus === "skipped"
+        ? payload.comparison.previousSummaryStatus
+        : "pass",
+      currentSummaryStatus: payload.comparison.currentSummaryStatus === "fail" || payload.comparison.currentSummaryStatus === "skipped"
+        ? payload.comparison.currentSummaryStatus
+        : "pass",
+      ruleDelta: payload.comparison.ruleDelta ?? 0,
+      failedRuleDelta: payload.comparison.failedRuleDelta ?? 0,
+      violationDelta: payload.comparison.violationDelta ?? 0,
+      changedRules: safeArray(payload.comparison.changedRules).map((rule) => ({
+        id: rule?.id ?? "",
+        title: rule?.title ?? "",
+        suite: rule?.suite === "cycles" ? "cycles" : "boundaries",
+        previousStatus: rule?.previousStatus === "fail" || rule?.previousStatus === "missing" ? rule.previousStatus : "pass",
+        currentStatus: rule?.currentStatus === "fail" || rule?.currentStatus === "missing" ? rule.currentStatus : "pass",
+        previousViolationCount: rule?.previousViolationCount ?? 0,
+        currentViolationCount: rule?.currentViolationCount ?? 0,
+        violationDelta: rule?.violationDelta ?? 0,
+      })),
+      newFailingRules: safeArray(payload.comparison.newFailingRules).map((rule) => ({
+        id: rule?.id ?? "",
+        title: rule?.title ?? "",
+        suite: rule?.suite === "cycles" ? "cycles" : "boundaries",
+        previousStatus: rule?.previousStatus === "fail" || rule?.previousStatus === "missing" ? rule.previousStatus : "pass",
+        currentStatus: rule?.currentStatus === "fail" || rule?.currentStatus === "missing" ? rule.currentStatus : "pass",
+        previousViolationCount: rule?.previousViolationCount ?? 0,
+        currentViolationCount: rule?.currentViolationCount ?? 0,
+        violationDelta: rule?.violationDelta ?? 0,
+      })),
+      resolvedRules: safeArray(payload.comparison.resolvedRules).map((rule) => ({
+        id: rule?.id ?? "",
+        title: rule?.title ?? "",
+        suite: rule?.suite === "cycles" ? "cycles" : "boundaries",
+        previousStatus: rule?.previousStatus === "fail" || rule?.previousStatus === "missing" ? rule.previousStatus : "pass",
+        currentStatus: rule?.currentStatus === "fail" || rule?.currentStatus === "missing" ? rule.currentStatus : "pass",
+        previousViolationCount: rule?.previousViolationCount ?? 0,
+        currentViolationCount: rule?.currentViolationCount ?? 0,
+        violationDelta: rule?.violationDelta ?? 0,
+      })),
+    } : null,
   };
 }
 

@@ -238,6 +238,14 @@ export interface TranslationDictionary {
         description: string;
         runScanLabel: string;
         idleDescription: string;
+        compareTitle: string;
+        previousScanLabel: string;
+        snapshotPathLabel: string;
+        failedRuleDeltaLabel: string;
+        violationDeltaLabel: string;
+        noComparison: string;
+        noNewFailures: string;
+        noResolvedRules: string;
         statusLabel: string;
         sourceLabel: string;
         tsconfigLabel: string;
@@ -1722,6 +1730,7 @@ export interface TranslationDictionary {
 
   // Kanban card detail
   kanbanDetail: {
+    cardDetail: string;
     priority: string;
     low: string;
     medium: string;
@@ -1733,10 +1742,14 @@ export interface TranslationDictionary {
     descriptionHint: string;
     structuredStory: string;
     structuredStoryHint: string;
+    enterFullscreen: string;
+    exitFullscreen: string;
     storyReadiness: string;
     storyReadinessHint: string;
     progressNotes: string;
     progressNotesHint: string;
+    appendedComments: string;
+    noProgressNotesYet: string;
     scope: string;
     acceptanceCriteria: string;
     verificationCommands: string;
@@ -1755,11 +1768,18 @@ export interface TranslationDictionary {
     lanePipeline: string;
     currentRun: string;
     nextMove: string;
+    manual: string;
+    automationOn: string;
+    cardSessionOverride: string;
+    keepCardSessionOverride: string;
+    cardHasExplicitOverride: string;
+    noCardOverride: string;
     gateNotConfigured: string;
     requiredForNextMove: string;
     readyForDev: string;
     blockedForDev: string;
     missingFields: string;
+    repo: string;
     allRequiredFields: string;
     present: string;
     missing: string;

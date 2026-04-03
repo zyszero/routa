@@ -1,3 +1,4 @@
+import { promises as fsp } from "node:fs";
 import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { safeSpawn } from "@/core/utils/safe-exec";
@@ -60,16 +61,44 @@ type ArchitectureQualityResponse = {
   summaryStatus: SummaryStatus;
   archUnitSource: string | null;
   tsconfigPath: string;
+  snapshotPath: string;
   suiteCount: number;
   ruleCount: number;
   failedRuleCount: number;
   violationCount: number;
   reports: ArchitectureSuiteReport[];
   notes: string[];
+  comparison: ArchitectureComparison | null;
+};
+
+type ArchitectureRuleChangeStatus = "pass" | "fail" | "missing";
+
+type ArchitectureRuleChange = {
+  id: string;
+  title: string;
+  suite: SuiteName;
+  previousStatus: ArchitectureRuleChangeStatus;
+  currentStatus: ArchitectureRuleChangeStatus;
+  previousViolationCount: number;
+  currentViolationCount: number;
+  violationDelta: number;
+};
+
+type ArchitectureComparison = {
+  previousGeneratedAt: string;
+  previousSummaryStatus: SummaryStatus;
+  currentSummaryStatus: SummaryStatus;
+  ruleDelta: number;
+  failedRuleDelta: number;
+  violationDelta: number;
+  changedRules: ArchitectureRuleChange[];
+  newFailingRules: ArchitectureRuleChange[];
+  resolvedRules: ArchitectureRuleChange[];
 };
 
 const SUITES: SuiteName[] = ["boundaries", "cycles"];
 const EXECUTION_TIMEOUT_MS = 120_000;
+const SNAPSHOT_FILE = "backend-architecture-latest.json";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -202,6 +231,141 @@ function normalizeSuiteReport(value: unknown, suite: SuiteName, repoRoot: string
   };
 }
 
+function architectureSnapshotPath(repoRoot: string) {
+  return path.join(repoRoot, "docs", "fitness", "reports", SNAPSHOT_FILE);
+}
+
+function normalizeArchitectureResponse(
+  value: unknown,
+  repoRoot: string,
+  snapshotPath: string,
+): ArchitectureQualityResponse {
+  const record = asRecord(value);
+  const reports = Array.isArray(record?.reports)
+    ? record.reports.map((report) => normalizeSuiteReport(report, report && typeof report === "object" && (report as Record<string, unknown>).suite === "cycles" ? "cycles" : "boundaries", repoRoot))
+    : [];
+  const notes = Array.isArray(record?.notes) ? record.notes.filter((item): item is string => typeof item === "string") : [];
+
+  return {
+    generatedAt: typeof record?.generatedAt === "string" ? record.generatedAt : new Date().toISOString(),
+    repoRoot: typeof record?.repoRoot === "string" ? record.repoRoot : repoRoot,
+    summaryStatus: normalizeSummaryStatus(record?.summaryStatus),
+    archUnitSource: typeof record?.archUnitSource === "string" ? record.archUnitSource : null,
+    tsconfigPath: typeof record?.tsconfigPath === "string" ? record.tsconfigPath : "",
+    snapshotPath,
+    suiteCount: typeof record?.suiteCount === "number" ? record.suiteCount : reports.length,
+    ruleCount: typeof record?.ruleCount === "number" ? record.ruleCount : reports.reduce((sum, report) => sum + report.ruleCount, 0),
+    failedRuleCount: typeof record?.failedRuleCount === "number" ? record.failedRuleCount : reports.reduce((sum, report) => sum + report.failedRuleCount, 0),
+    violationCount: typeof record?.violationCount === "number"
+      ? record.violationCount
+      : reports.reduce((sum, report) => sum + report.results.reduce((inner, result) => inner + result.violationCount, 0), 0),
+    reports,
+    notes,
+    comparison: null,
+  };
+}
+
+type ArchitectureRuleSnapshot = {
+  id: string;
+  title: string;
+  suite: SuiteName;
+  status: "pass" | "fail";
+  violationCount: number;
+};
+
+function flattenRuleSnapshots(report: ArchitectureQualityResponse): ArchitectureRuleSnapshot[] {
+  return report.reports.flatMap((suiteReport) => suiteReport.results.map((result) => ({
+    id: result.id,
+    title: result.title,
+    suite: result.suite,
+    status: result.status,
+    violationCount: result.violationCount,
+  })));
+}
+
+function buildArchitectureComparison(
+  previous: ArchitectureQualityResponse,
+  current: ArchitectureQualityResponse,
+): ArchitectureComparison {
+  const previousRules = new Map(flattenRuleSnapshots(previous).map((rule) => [`${rule.suite}:${rule.id}`, rule] as const));
+  const currentRules = new Map(flattenRuleSnapshots(current).map((rule) => [`${rule.suite}:${rule.id}`, rule] as const));
+  const keys = new Set([...previousRules.keys(), ...currentRules.keys()]);
+  const changedRules: ArchitectureRuleChange[] = [];
+
+  for (const key of keys) {
+    const previousRule = previousRules.get(key);
+    const currentRule = currentRules.get(key);
+    const previousStatus: ArchitectureRuleChangeStatus = previousRule?.status ?? "missing";
+    const currentStatus: ArchitectureRuleChangeStatus = currentRule?.status ?? "missing";
+    const previousViolationCount = previousRule?.violationCount ?? 0;
+    const currentViolationCount = currentRule?.violationCount ?? 0;
+
+    if (previousStatus === currentStatus && previousViolationCount === currentViolationCount) {
+      continue;
+    }
+
+    changedRules.push({
+      id: currentRule?.id ?? previousRule?.id ?? "",
+      title: currentRule?.title ?? previousRule?.title ?? "",
+      suite: currentRule?.suite ?? previousRule?.suite ?? "boundaries",
+      previousStatus,
+      currentStatus,
+      previousViolationCount,
+      currentViolationCount,
+      violationDelta: currentViolationCount - previousViolationCount,
+    });
+  }
+
+  const sortRuleChanges = (left: ArchitectureRuleChange, right: ArchitectureRuleChange) => (
+    right.currentViolationCount - left.currentViolationCount
+    || left.suite.localeCompare(right.suite)
+    || left.title.localeCompare(right.title)
+  );
+
+  return {
+    previousGeneratedAt: previous.generatedAt,
+    previousSummaryStatus: previous.summaryStatus,
+    currentSummaryStatus: current.summaryStatus,
+    ruleDelta: current.ruleCount - previous.ruleCount,
+    failedRuleDelta: current.failedRuleCount - previous.failedRuleCount,
+    violationDelta: current.violationCount - previous.violationCount,
+    changedRules: [...changedRules].sort(sortRuleChanges),
+    newFailingRules: changedRules
+      .filter((rule) => rule.currentStatus === "fail" && rule.previousStatus !== "fail")
+      .sort(sortRuleChanges),
+    resolvedRules: changedRules
+      .filter((rule) => rule.previousStatus === "fail" && rule.currentStatus !== "fail")
+      .sort(sortRuleChanges),
+  };
+}
+
+async function loadPreviousSnapshot(
+  repoRoot: string,
+  snapshotPath: string,
+): Promise<ArchitectureQualityResponse | null> {
+  try {
+    const raw = await fsp.readFile(snapshotPath, "utf-8");
+    return normalizeArchitectureResponse(JSON.parse(raw), repoRoot, snapshotPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function persistArchitectureSnapshot(
+  report: ArchitectureQualityResponse,
+  snapshotPath: string,
+) {
+  await fsp.mkdir(path.dirname(snapshotPath), { recursive: true });
+  const payload = {
+    ...report,
+    comparison: null,
+  };
+  await fsp.writeFile(snapshotPath, `${JSON.stringify(payload, null, 2)}\n`, "utf-8");
+}
+
 async function executeSuite(repoRoot: string, suite: SuiteName): Promise<ArchitectureSuiteReport> {
   const appRoot = process.cwd();
   const scriptPath = path.join(appRoot, "scripts", "fitness", "check-backend-architecture.ts");
@@ -264,7 +428,7 @@ async function executeSuite(repoRoot: string, suite: SuiteName): Promise<Archite
   }
 }
 
-function summarizeReports(repoRoot: string, reports: ArchitectureSuiteReport[]): ArchitectureQualityResponse {
+function summarizeReports(repoRoot: string, reports: ArchitectureSuiteReport[], snapshotPath: string): ArchitectureQualityResponse {
   const ruleCount = reports.reduce((sum, report) => sum + report.ruleCount, 0);
   const failedRuleCount = reports.reduce((sum, report) => sum + report.failedRuleCount, 0);
   const violationCount = reports.reduce(
@@ -286,12 +450,14 @@ function summarizeReports(repoRoot: string, reports: ArchitectureSuiteReport[]):
     summaryStatus,
     archUnitSource,
     tsconfigPath,
+    snapshotPath,
     suiteCount: reports.length,
     ruleCount,
     failedRuleCount,
     violationCount,
     reports,
     notes,
+    comparison: null,
   };
 }
 
@@ -302,8 +468,31 @@ export async function GET(request: NextRequest) {
       preferCurrentRepoForDefaultWorkspace: true,
     });
     const reports = await Promise.all(SUITES.map((suite) => executeSuite(repoRoot, suite)));
+    const snapshotPath = architectureSnapshotPath(repoRoot);
+    const currentReport = summarizeReports(repoRoot, reports, snapshotPath);
+    const notes = [...currentReport.notes];
+    let comparison: ArchitectureComparison | null = null;
 
-    return NextResponse.json(summarizeReports(repoRoot, reports) satisfies ArchitectureQualityResponse);
+    try {
+      const previousSnapshot = await loadPreviousSnapshot(repoRoot, snapshotPath);
+      if (previousSnapshot) {
+        comparison = buildArchitectureComparison(previousSnapshot, currentReport);
+      }
+    } catch (error) {
+      notes.push(`Unable to read previous architecture snapshot: ${toMessage(error)}`);
+    }
+
+    try {
+      await persistArchitectureSnapshot(currentReport, snapshotPath);
+    } catch (error) {
+      notes.push(`Unable to persist architecture snapshot: ${toMessage(error)}`);
+    }
+
+    return NextResponse.json({
+      ...currentReport,
+      notes: [...new Set(notes)],
+      comparison,
+    } satisfies ArchitectureQualityResponse);
   } catch (error) {
     const message = toMessage(error);
     if (isContextError(message)) {

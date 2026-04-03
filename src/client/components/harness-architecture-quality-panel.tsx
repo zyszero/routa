@@ -36,6 +36,24 @@ type ArchitectureCluster = {
   sample: string;
 };
 
+function formatSignedDelta(value: number): string {
+  if (value > 0) {
+    return `+${value}`;
+  }
+  return `${value}`;
+}
+
+function deltaTone(value: number, mode: "risk" | "recovery" = "risk") {
+  if (value === 0) {
+    return "border-desktop-border bg-desktop-bg-primary text-desktop-text-secondary";
+  }
+  const positiveIsBad = mode === "risk";
+  const isBad = positiveIsBad ? value > 0 : value < 0;
+  return isBad
+    ? "border-rose-200 bg-rose-50 text-rose-700"
+    : "border-emerald-200 bg-emerald-50 text-emerald-700";
+}
+
 function formatSuiteLabel(
   suite: ArchitectureSuiteName,
   labels: { suiteBoundaries: string; suiteCycles: string },
@@ -269,6 +287,93 @@ export function HarnessArchitectureQualityPanel({
 
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
             <div className="rounded-sm border border-desktop-border bg-desktop-bg-primary/80 px-3 py-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-desktop-text-secondary">{copy.compareTitle}</div>
+              {data.comparison ? (
+                <div className="mt-2 space-y-3">
+                  <div className="text-[11px] text-desktop-text-secondary">
+                    {copy.previousScanLabel}: {data.comparison.previousGeneratedAt}
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className={`rounded-sm border px-3 py-2 ${deltaTone(data.comparison.failedRuleDelta)}`}>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.12em]">{copy.failedRuleDeltaLabel}</div>
+                      <div className="mt-2 text-[18px] font-semibold">{formatSignedDelta(data.comparison.failedRuleDelta)}</div>
+                    </div>
+                    <div className={`rounded-sm border px-3 py-2 ${deltaTone(data.comparison.violationDelta)}`}>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.12em]">{copy.violationDeltaLabel}</div>
+                      <div className="mt-2 text-[18px] font-semibold">{formatSignedDelta(data.comparison.violationDelta)}</div>
+                    </div>
+                    <div className={`rounded-sm border px-3 py-2 ${deltaTone(data.comparison.newFailingRules.length)}`}>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.12em]">{copy.newFailuresTitle}</div>
+                      <div className="mt-2 text-[18px] font-semibold">{data.comparison.newFailingRules.length}</div>
+                    </div>
+                    <div className={`rounded-sm border px-3 py-2 ${deltaTone(data.comparison.resolvedRules.length, "recovery")}`}>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.12em]">{copy.resolvedRulesTitle}</div>
+                      <div className="mt-2 text-[18px] font-semibold">{data.comparison.resolvedRules.length}</div>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-desktop-text-secondary">{copy.newFailuresTitle}</div>
+                      {data.comparison.newFailingRules.length > 0 ? (
+                        <div className="mt-2 space-y-2">
+                          {data.comparison.newFailingRules.slice(0, 4).map((rule) => (
+                            <div key={`${rule.suite}:${rule.id}`} className="rounded-sm border border-desktop-border bg-desktop-bg-secondary/40 px-3 py-2">
+                              <div className="text-[11px] font-semibold text-desktop-text-primary">{rule.title}</div>
+                              <div className="mt-1 text-[10px] text-desktop-text-secondary">{formatSuiteLabel(rule.suite, copy)} · {formatSignedDelta(rule.violationDelta)}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-2 rounded-sm border border-dashed border-desktop-border px-3 py-4 text-[11px] text-desktop-text-secondary">
+                          {copy.noNewFailures}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-desktop-text-secondary">{copy.resolvedRulesTitle}</div>
+                      {data.comparison.resolvedRules.length > 0 ? (
+                        <div className="mt-2 space-y-2">
+                          {data.comparison.resolvedRules.slice(0, 4).map((rule) => (
+                            <div key={`${rule.suite}:${rule.id}`} className="rounded-sm border border-desktop-border bg-desktop-bg-secondary/40 px-3 py-2">
+                              <div className="text-[11px] font-semibold text-desktop-text-primary">{rule.title}</div>
+                              <div className="mt-1 text-[10px] text-desktop-text-secondary">{formatSuiteLabel(rule.suite, copy)} · {formatSignedDelta(rule.violationDelta)}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-2 rounded-sm border border-dashed border-desktop-border px-3 py-4 text-[11px] text-desktop-text-secondary">
+                          {copy.noResolvedRules}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-2 rounded-sm border border-dashed border-desktop-border px-3 py-4 text-[11px] text-desktop-text-secondary">
+                  {copy.noComparison}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-sm border border-desktop-border bg-desktop-bg-primary/80 px-3 py-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-desktop-text-secondary">{copy.notesLabel}</div>
+              <div className="mt-2 space-y-2 text-[11px] text-desktop-text-secondary">
+                <div>{copy.sourceLabel}: {data.archUnitSource ?? t.common.unavailable}</div>
+                <div>{copy.tsconfigLabel}: {data.tsconfigPath || t.common.unavailable}</div>
+                <div>{copy.snapshotPathLabel}: {data.snapshotPath || t.common.unavailable}</div>
+                {(data.notes ?? []).length > 0 ? (
+                  <ul className="list-inside list-disc space-y-1">
+                    {data.notes.map((note) => (
+                      <li key={note}>{note}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+            <div className="rounded-sm border border-desktop-border bg-desktop-bg-primary/80 px-3 py-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-desktop-text-secondary">{copy.failedRulesTitle}</div>
                 {data.archUnitSource ? (
@@ -303,20 +408,6 @@ export function HarnessArchitectureQualityPanel({
               )}
             </div>
 
-            <div className="rounded-sm border border-desktop-border bg-desktop-bg-primary/80 px-3 py-3">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-desktop-text-secondary">{copy.notesLabel}</div>
-              <div className="mt-2 space-y-2 text-[11px] text-desktop-text-secondary">
-                <div>{copy.sourceLabel}: {data.archUnitSource ?? t.common.unavailable}</div>
-                <div>{copy.tsconfigLabel}: {data.tsconfigPath || t.common.unavailable}</div>
-                {(data.notes ?? []).length > 0 ? (
-                  <ul className="list-inside list-disc space-y-1">
-                    {data.notes.map((note) => (
-                      <li key={note}>{note}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            </div>
           </div>
 
           <div className="grid gap-3 lg:grid-cols-2">
