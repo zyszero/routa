@@ -766,8 +766,15 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     sourceUrl: string;
     worktrees: string;
     worktreeHint: string;
+    selectWorktreesHint: string;
+    selectedWorktrees: string;
     noWorktrees: string;
     linkedTasks: string;
+    createdAtLabel: string;
+    updatedAtLabel: string;
+    labelLabel: string;
+    clearSelection: string;
+    removeSelected: string;
     removing: string;
     recloneRepo: string;
     recloneHint: string;
