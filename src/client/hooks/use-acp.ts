@@ -18,6 +18,7 @@ import {
   AcpClientError,
   AcpAuthMethod,
   AcpSessionNotification,
+  AcpConnectionIssue,
 } from "../acp-client";
 import {
   getDesktopApiBaseUrl,
@@ -93,6 +94,13 @@ function getInitialProviderFallbacks(): AcpProviderInfo[] {
       (provider) => !disabledProviders.includes(provider.id)
     )
   );
+}
+
+function formatConnectionIssue(issue: AcpConnectionIssue): string {
+  if (issue.status === 409) {
+    return issue.message;
+  }
+  return issue.message || "Session stream disconnected";
 }
 
 /**
@@ -263,6 +271,14 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
         setState((s) => ({
           ...s,
           updates: [...s.updates, update],
+        }));
+      });
+      client.onConnectionIssue((issue) => {
+        if (tearingDownRef.current) return;
+        logRuntime("warn", "useAcp.sse", "Session stream issue", issue);
+        setState((s) => ({
+          ...s,
+          error: formatConnectionIssue(issue),
         }));
       });
 

@@ -45,6 +45,7 @@ describe("BrowserAcpClient", () => {
     vi.useFakeTimers();
     MockEventSource.reset();
     vi.stubGlobal("EventSource", MockEventSource as unknown as typeof EventSource);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
   });
 
   afterEach(() => {
@@ -55,6 +56,9 @@ describe("BrowserAcpClient", () => {
   it("reconnects with the last seen SSE event id", async () => {
     const client = new BrowserAcpClient("");
     client.attachSession("session-1");
+    await vi.waitFor(() => {
+      expect(MockEventSource.instances[0]).toBeDefined();
+    });
 
     const first = MockEventSource.instances[0];
     expect(first.url).toContain("/api/acp?sessionId=session-1");
@@ -76,5 +80,30 @@ describe("BrowserAcpClient", () => {
     expect(second).toBeDefined();
     expect(second.url).toContain("sessionId=session-1");
     expect(second.url).toContain("lastEventId=evt-1");
+  });
+
+  it("stops reconnecting when SSE attach is rejected with 409 ownership conflict", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      error: "Session is currently owned by instance web-2 until 2099-01-01T00:00:00.000Z.",
+      ownerInstanceId: "web-2",
+      leaseExpiresAt: "2099-01-01T00:00:00.000Z",
+    }), {
+      status: 409,
+      headers: { "Content-Type": "application/json" },
+    })));
+
+    const client = new BrowserAcpClient("");
+    const issues: string[] = [];
+    client.onConnectionIssue((issue) => {
+      issues.push(issue.message);
+    });
+
+    client.attachSession("session-1");
+    await vi.runAllTimersAsync();
+
+    expect(MockEventSource.instances).toHaveLength(0);
+    expect(issues).toEqual([
+      "Session is currently owned by instance web-2 until 2099-01-01T00:00:00.000Z.",
+    ]);
   });
 });

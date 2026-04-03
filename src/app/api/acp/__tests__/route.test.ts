@@ -172,6 +172,32 @@ describe("/api/acp GET", () => {
     );
   });
 
+  it("supports probe mode without attaching the live SSE stream", async () => {
+    getSessionRoutingRecord.mockResolvedValue({
+      sessionId: "session-1",
+      executionMode: "embedded",
+      ownerInstanceId: `next-${process.pid}`,
+      leaseExpiresAt: "2000-01-01T00:00:00.000Z",
+      createdAt: "2026-03-28T00:00:00.000Z",
+      cwd: "/tmp/session",
+      workspaceId: "default",
+    });
+
+    const response = await GET(
+      new NextRequest("http://localhost/api/acp?sessionId=session-1&probe=1"),
+    );
+
+    expect(response.status).toBe(204);
+    expect(httpSessionStore.attachSse).not.toHaveBeenCalled();
+    expect(httpSessionStore.pushConnected).not.toHaveBeenCalled();
+    expect(httpSessionStore.upsertSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "session-1",
+        executionMode: "embedded",
+      }),
+    );
+  });
+
   it("rejects SSE attach when an embedded session is owned by another instance", async () => {
     getSessionRoutingRecord.mockResolvedValue({
       executionMode: "embedded",

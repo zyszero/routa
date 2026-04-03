@@ -70,6 +70,17 @@ export interface AcpAuthMethod {
   description: string;
 }
 
+export interface AcpConnectionIssue {
+  sessionId: string;
+  message: string;
+  retryable: boolean;
+  status?: number;
+  ownerInstanceId?: string;
+  leaseExpiresAt?: string;
+}
+
+export type SessionConnectionIssueHandler = (issue: AcpConnectionIssue) => void;
+
 /**
  * Custom error class for ACP errors that may include auth requirements.
  */
@@ -96,9 +107,12 @@ export class BrowserAcpClient {
   private baseUrl: string;
   private eventSource: EventSource | null = null;
   private updateHandlers: SessionUpdateHandler[] = [];
+  private connectionIssueHandlers: SessionConnectionIssueHandler[] = [];
   private requestId = 0;
   private _sessionId: string | null = null;
   private lastEventId: string | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private sseAttempt = 0;
 
   constructor(baseUrl: string = "") {
     this.baseUrl = baseUrl;
@@ -475,10 +489,21 @@ export class BrowserAcpClient {
     };
   }
 
+  onConnectionIssue(handler: SessionConnectionIssueHandler): () => void {
+    this.connectionIssueHandlers.push(handler);
+    return () => {
+      this.connectionIssueHandlers = this.connectionIssueHandlers.filter((h) => h !== handler);
+    };
+  }
+
   /**
    * Disconnect and clean up.
    */
   disconnect(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.eventSource) {
       this.eventSource.close();
       this.eventSource = null;
@@ -486,13 +511,20 @@ export class BrowserAcpClient {
     this._sessionId = null;
     this.lastEventId = null;
     this.updateHandlers = [];
+    this.connectionIssueHandlers = [];
   }
 
   // ─── Private ─────────────────────────────────────────────────────────
 
   private connectSSE(sessionId: string): void {
+    const attempt = ++this.sseAttempt;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.eventSource) {
       this.eventSource.close();
+      this.eventSource = null;
     }
 
     const url = new URL(`${this.baseUrl || window.location.origin}/api/acp`);
@@ -500,44 +532,113 @@ export class BrowserAcpClient {
     if (this.lastEventId) {
       url.searchParams.set("lastEventId", this.lastEventId);
     }
+    url.searchParams.set("probe", "1");
 
-    this.eventSource = new EventSource(url.toString());
+    void this.probeSse(url, sessionId).then((issue) => {
+      if (attempt !== this.sseAttempt || this._sessionId !== sessionId) {
+        return;
+      }
 
-    this.eventSource.onmessage = (event) => {
-      try {
-        if (event.lastEventId) {
-          this.lastEventId = event.lastEventId;
+      if (issue) {
+        this.emitConnectionIssue(issue);
+        if (issue.retryable) {
+          this.scheduleReconnect();
         }
-        const data = JSON.parse(event.data);
-        if (data.method === "session/update" && data.params) {
-          const notification = data.params as AcpSessionNotification;
+        return;
+      }
 
-          for (const handler of this.updateHandlers) {
-            try {
-              handler(notification);
-            } catch (err) {
-              console.error("[AcpClient] Handler error:", err);
+      url.searchParams.delete("probe");
+      this.eventSource = new EventSource(url.toString());
+
+      this.eventSource.onmessage = (event) => {
+        try {
+          if (event.lastEventId) {
+            this.lastEventId = event.lastEventId;
+          }
+          const data = JSON.parse(event.data);
+          if (data.method === "session/update" && data.params) {
+            const notification = data.params as AcpSessionNotification;
+
+            for (const handler of this.updateHandlers) {
+              try {
+                handler(notification);
+              } catch (err) {
+                console.error("[AcpClient] Handler error:", err);
+              }
             }
           }
+        } catch (err) {
+          console.error("[AcpClient] SSE parse error:", err);
         }
-      } catch (err) {
-        console.error("[AcpClient] SSE parse error:", err);
-      }
-    };
+      };
 
-    this.eventSource.onerror = () => {
-      // EventSource auto-reconnects on transient errors, but if the
-      // connection is CLOSED (readyState === 2) — e.g. after a server
-      // restart / page refresh — we must reconnect manually.
-      if (this.eventSource?.readyState === EventSource.CLOSED) {
-        console.warn("[AcpClient] SSE connection closed, reconnecting in 2s...");
-        setTimeout(() => {
-          if (this._sessionId) {
-            this.connectSSE(this._sessionId);
-          }
-        }, 2000);
+      this.eventSource.onerror = () => {
+        // EventSource auto-reconnects on transient errors, but if the
+        // connection is CLOSED (readyState === 2) — e.g. after a server
+        // restart / page refresh — we must reconnect manually.
+        if (this.eventSource?.readyState === EventSource.CLOSED) {
+          console.warn("[AcpClient] SSE connection closed, reconnecting in 2s...");
+          this.scheduleReconnect();
+        }
+      };
+    });
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer) {
+      return;
+    }
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (this._sessionId) {
+        this.connectSSE(this._sessionId);
       }
-    };
+    }, 2000);
+  }
+
+  private emitConnectionIssue(issue: AcpConnectionIssue): void {
+    for (const handler of this.connectionIssueHandlers) {
+      try {
+        handler(issue);
+      } catch (err) {
+        console.error("[AcpClient] Connection issue handler error:", err);
+      }
+    }
+  }
+
+  private async probeSse(url: URL, sessionId: string): Promise<AcpConnectionIssue | null> {
+    try {
+      const response = await fetch(url.toString(), {
+        headers: { Accept: "text/event-stream" },
+      });
+
+      if (response.ok) {
+        return null;
+      }
+
+      let payload: Record<string, unknown> | null = null;
+      try {
+        payload = await response.json() as Record<string, unknown>;
+      } catch {
+        payload = null;
+      }
+
+      const message = typeof payload?.error === "string"
+        ? payload.error
+        : `SSE attach failed with status ${response.status}`;
+
+      return {
+        sessionId,
+        message,
+        retryable: response.status !== 409,
+        status: response.status,
+        ownerInstanceId: typeof payload?.ownerInstanceId === "string" ? payload.ownerInstanceId : undefined,
+        leaseExpiresAt: typeof payload?.leaseExpiresAt === "string" ? payload.leaseExpiresAt : undefined,
+      };
+    } catch (error) {
+      console.warn("[AcpClient] SSE probe failed, falling back to EventSource:", error);
+      return null;
+    }
   }
 
   private async rpc<T = unknown>(

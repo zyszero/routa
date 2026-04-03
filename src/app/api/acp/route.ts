@@ -136,6 +136,7 @@ function refreshEmbeddedSessionLease(
 
 export async function GET(request: NextRequest) {
   const sessionId = request.nextUrl.searchParams.get("sessionId");
+  const isProbe = request.nextUrl.searchParams.get("probe") === "1";
   if (!sessionId) {
     return NextResponse.json(
       { error: "Missing sessionId query param" },
@@ -167,6 +168,10 @@ export async function GET(request: NextRequest) {
 
   const store = getHttpSessionStore();
   refreshEmbeddedSessionLease(store, sessionRoutingRecord);
+
+  if (isProbe) {
+    return new NextResponse(null, { status: 204 });
+  }
 
   // ─── Improved SSE cleanup with multiple safeguards ──────────────────────
   // In Vercel serverless, connections may drop silently. We implement
