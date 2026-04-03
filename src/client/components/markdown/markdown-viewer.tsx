@@ -18,8 +18,10 @@
  */
 
 import { useRef, useEffect, useMemo } from "react";
+import { CanonicalStoryRenderer } from "./canonical-story-renderer";
 import { MermaidRenderer } from "./mermaid-renderer";
 import { HtmlPreviewRenderer } from "./html-preview-renderer";
+import { parseCanonicalStory, type CanonicalStoryParseResult } from "@/core/kanban/canonical-story";
 import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
@@ -47,10 +49,12 @@ function markdownToHtml(md: string): string {
 type ContentSegment =
   | { type: "markdown"; content: string }
   | { type: "mermaid"; code: string }
-  | { type: "html"; code: string };
+  | { type: "html"; code: string }
+  | { type: "canonical-story"; parseResult: CanonicalStoryParseResult };
 
 const MERMAID_BLOCK_RE = /```mermaid\n([\s\S]*?)```/gm;
 const HTML_BLOCK_RE = /```html\n([\s\S]*?)```/gm;
+const CANONICAL_STORY_BLOCK_RE = /```yaml\n([\s\S]*?)```/gm;
 
 function hasMermaidBlocks(content: string): boolean {
   MERMAID_BLOCK_RE.lastIndex = 0;
@@ -62,10 +66,25 @@ function hasHtmlBlocks(content: string): boolean {
   return HTML_BLOCK_RE.test(content);
 }
 
+function isCanonicalStoryBlock(code: string): boolean {
+  return /^\s*story\s*:/.test(code);
+}
+
+function hasCanonicalStoryBlocks(content: string): boolean {
+  CANONICAL_STORY_BLOCK_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = CANONICAL_STORY_BLOCK_RE.exec(content)) !== null) {
+    if (isCanonicalStoryBlock(match[1])) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function splitSpecialBlocks(content: string): ContentSegment[] {
   const segments: ContentSegment[] = [];
   let lastIndex = 0;
-  const re = /```(mermaid|html)\n([\s\S]*?)```/gm;
+  const re = /```(mermaid|html|yaml)\n([\s\S]*?)```/gm;
   let match: RegExpExecArray | null;
 
   while ((match = re.exec(content)) !== null) {
@@ -73,12 +92,16 @@ function splitSpecialBlocks(content: string): ContentSegment[] {
       const before = content.slice(lastIndex, match.index).trim();
       if (before) segments.push({ type: "markdown", content: before });
     }
-    const lang = match[1] as "mermaid" | "html";
+    const lang = match[1] as "mermaid" | "html" | "yaml";
     const code = match[2].trim();
     if (lang === "mermaid") {
       segments.push({ type: "mermaid", code });
-    } else {
+    } else if (lang === "html") {
       segments.push({ type: "html", code });
+    } else if (isCanonicalStoryBlock(match[2])) {
+      segments.push({ type: "canonical-story", parseResult: parseCanonicalStory(match[0]) });
+    } else {
+      segments.push({ type: "markdown", content: match[0].trim() });
     }
     lastIndex = match.index + match[0].length;
   }
@@ -141,7 +164,7 @@ export function MarkdownViewer({
 }: MarkdownViewerProps) {
   // ── Special blocks: Mermaid + HTML previews ─────────────────────────
   const hasSpecial = useMemo(
-    () => !isStreaming && (hasMermaidBlocks(content) || hasHtmlBlocks(content)),
+    () => !isStreaming && (hasMermaidBlocks(content) || hasHtmlBlocks(content) || hasCanonicalStoryBlocks(content)),
     [content, isStreaming]
   );
 
@@ -161,6 +184,9 @@ export function MarkdownViewer({
           }
           if (seg.type === "html") {
             return <HtmlPreviewRenderer key={i} code={seg.code} className="my-2" />;
+          }
+          if (seg.type === "canonical-story") {
+            return <CanonicalStoryRenderer key={i} parseResult={seg.parseResult} className="my-2" />;
           }
           return (
             <MarkdownViewer

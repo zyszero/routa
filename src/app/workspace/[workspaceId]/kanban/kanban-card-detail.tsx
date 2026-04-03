@@ -15,6 +15,7 @@ import type { KanbanColumnInfo, SessionInfo, TaskInfo, WorktreeInfo } from "../t
 import { KanbanCardActivityPanel } from "./kanban-card-activity";
 import { KanbanDescriptionEditor } from "./kanban-description-editor";
 import { MarkdownViewer } from "@/client/components/markdown/markdown-viewer";
+import { CanonicalStoryRenderer } from "@/client/components/markdown/canonical-story-renderer";
 import {
   createKanbanSpecialistResolver,
   getOrderedSessionIds,
@@ -298,7 +299,7 @@ export function KanbanCardDetail({
               description={compactMode ? undefined : t.kanbanDetail.structuredStoryHint}
               compact={compactMode}
             >
-              <CanonicalStoryPanel parseResult={canonicalStory} compact={compactMode} />
+              <CanonicalStoryRenderer parseResult={canonicalStory} compact={compactMode} />
             </DetailSection>
           )}
 
@@ -431,81 +432,6 @@ export function KanbanCardDetail({
           >
             {t.kanbanModals.deleteTaskTitle}
           </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CanonicalStoryPanel({
-  parseResult,
-  compact = false,
-}: {
-  parseResult: ReturnType<typeof parseCanonicalStory>;
-  compact?: boolean;
-}) {
-  if (parseResult.story == null) {
-    return (
-      <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-3 dark:border-rose-900/40 dark:bg-rose-900/10">
-        <div className="mb-2 flex items-center gap-2">
-          <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-rose-700 dark:bg-rose-900/40 dark:text-rose-200">
-            Invalid YAML
-          </span>
-          <span className="text-xs text-rose-700 dark:text-rose-200">Todo should reject this card back to backlog.</span>
-        </div>
-        <ul className="space-y-1 text-sm text-rose-800 dark:text-rose-100">
-          {parseResult.issues.map((issue) => (
-            <li key={issue}>- {issue}</li>
-          ))}
-        </ul>
-      </div>
-    );
-  }
-
-  const { story } = parseResult.story;
-  const investItems = [
-    ["Independent", story.invest.independent.status],
-    ["Negotiable", story.invest.negotiable.status],
-    ["Valuable", story.invest.valuable.status],
-    ["Estimable", story.invest.estimable.status],
-    ["Small", story.invest.small.status],
-    ["Testable", story.invest.testable.status],
-  ] as const;
-
-  return (
-    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3 dark:border-emerald-900/40 dark:bg-emerald-900/10">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200">
-          Valid YAML
-        </span>
-        <span className="text-xs text-slate-600 dark:text-slate-300">v{story.version}</span>
-        <span className="text-xs text-slate-600 dark:text-slate-300">AC {story.acceptance_criteria.length}</span>
-        <span className="text-xs text-slate-600 dark:text-slate-300">
-          Independent {story.dependencies_and_sequencing.independent_story_check.toUpperCase()}
-        </span>
-      </div>
-      <div className={`mt-3 grid gap-2 ${compact ? "grid-cols-2" : "grid-cols-3"}`}>
-        {investItems.map(([label, status]) => (
-          <div
-            key={label}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-[#0f141d]"
-          >
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-              {label}
-            </div>
-            <div className="mt-1 font-medium text-slate-900 dark:text-slate-100">{status.toUpperCase()}</div>
-          </div>
-        ))}
-      </div>
-      <div className="mt-3 space-y-2 text-sm text-slate-700 dark:text-slate-200">
-        <div>
-          <span className="font-medium">User value:</span> {story.user_value}
-        </div>
-        <div>
-          <span className="font-medium">Affected areas:</span> {story.constraints_and_affected_areas.join(", ")}
-        </div>
-        <div>
-          <span className="font-medium">Depends on:</span> {story.dependencies_and_sequencing.depends_on.join(", ")}
         </div>
       </div>
     </div>
