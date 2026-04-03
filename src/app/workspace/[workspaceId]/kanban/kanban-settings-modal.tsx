@@ -5,9 +5,11 @@ import type { AcpProviderInfo } from "@/client/acp-client";
 import { AcpProviderDropdown } from "@/client/components/acp-provider-dropdown";
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
 import {
+  DEFAULT_DEV_REQUIRED_TASK_FIELDS,
   getKanbanAutomationSteps,
   type KanbanAutomationStep,
   type KanbanColumnAutomation,
+  type KanbanRequiredTaskField,
   type KanbanTransport,
 } from "@/core/models/kanban";
 import {
@@ -27,6 +29,7 @@ import {
 import type { KanbanBoardInfo, KanbanDevSessionSupervisionInfo } from "../types";
 import { Select } from "@/client/components/select";
 import { ChevronDown } from "lucide-react";
+import { useTranslation, type TranslationDictionary } from "@/i18n";
 
 
 interface SpecialistOption {
@@ -82,6 +85,52 @@ const ARTIFACT_OPTIONS = [
   label: string;
   hint: string;
 }>;
+const TASK_FIELD_OPTIONS = [
+  "scope",
+  "acceptance_criteria",
+  "verification_plan",
+  "verification_commands",
+  "test_cases",
+  "dependencies_declared",
+] as const satisfies KanbanRequiredTaskField[];
+
+function getTaskFieldLabel(field: KanbanRequiredTaskField, t: TranslationDictionary): string {
+  switch (field) {
+    case "scope":
+      return t.kanbanDetail.scope;
+    case "acceptance_criteria":
+      return t.kanbanDetail.acceptanceCriteria;
+    case "verification_plan":
+      return t.kanbanDetail.verificationPlan;
+    case "verification_commands":
+      return t.kanbanDetail.verificationCommands;
+    case "test_cases":
+      return t.kanbanDetail.testCases;
+    case "dependencies_declared":
+      return t.kanbanDetail.dependenciesDeclared;
+    default:
+      return field;
+  }
+}
+
+function getTaskFieldHint(field: KanbanRequiredTaskField, t: TranslationDictionary): string {
+  switch (field) {
+    case "scope":
+      return t.kanban.storyReadinessScopeHint;
+    case "acceptance_criteria":
+      return t.kanban.storyReadinessAcceptanceCriteriaHint;
+    case "verification_plan":
+      return t.kanban.storyReadinessVerificationPlanHint;
+    case "verification_commands":
+      return t.kanban.storyReadinessVerificationCommandsHint;
+    case "test_cases":
+      return t.kanban.storyReadinessTestCasesHint;
+    case "dependencies_declared":
+      return t.kanban.storyReadinessDependenciesDeclaredHint;
+    default:
+      return field;
+  }
+}
 
 function createEmptyAutomationStep(index: number): KanbanAutomationStep {
   return {
@@ -220,6 +269,7 @@ function getDefaultAutomationForStage(stage: string): ColumnAutomationConfig {
       return syncAutomationPrimaryStep({
         enabled: true,
         transitionType: "entry",
+        requiredTaskFields: [...DEFAULT_DEV_REQUIRED_TASK_FIELDS],
         steps: [{ id: "step-1", role: "DEVELOPER" }],
       });
     case "todo":
@@ -481,6 +531,7 @@ export function KanbanSettingsModal({
           enabled: true,
           steps: existing?.steps?.length ? existing.steps : defaultAutomation.steps,
           requiredArtifacts: existing?.requiredArtifacts ?? defaultAutomation.requiredArtifacts,
+          requiredTaskFields: existing?.requiredTaskFields ?? defaultAutomation.requiredTaskFields,
           autoAdvanceOnSuccess: existing?.autoAdvanceOnSuccess ?? defaultAutomation.autoAdvanceOnSuccess,
           transitionType: existing?.transitionType ?? defaultAutomation.transitionType,
         }),
@@ -1151,6 +1202,7 @@ function ColumnAutomationWorkspace({
   onSpecialistCategoryChange: (category: SpecialistCategory) => void;
   onUpdate: (automation: ColumnAutomationConfig) => void;
 }) {
+  const { t } = useTranslation();
   const manualOnly = isManualOnlyColumn(column);
   const automationSteps = useMemo(
     () => getEditableAutomationSteps(automation),
@@ -1570,6 +1622,51 @@ function ColumnAutomationWorkspace({
                           </label>
                         );
                       })}
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 dark:border-slate-800 dark:bg-[#111722]">
+                      <div className="mb-2">
+                        <div className="text-[13px] font-semibold text-slate-900 dark:text-slate-100">{t.kanban.storyReadinessGate}</div>
+                        <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                          {t.kanban.storyReadinessGateHint}
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                        {TASK_FIELD_OPTIONS.map((field) => {
+                          const checked = automation.requiredTaskFields?.includes(field) ?? false;
+                          return (
+                            <label
+                              key={field}
+                              className={`flex cursor-pointer flex-col gap-1.5 rounded-lg border px-3 py-2.5 transition ${
+                                checked
+                                  ? "border-sky-300 bg-sky-50 dark:border-sky-500/30 dark:bg-sky-500/10"
+                                  : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-[#0b1119] dark:hover:border-slate-700"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-[13px] font-semibold text-slate-900 dark:text-slate-100">{getTaskFieldLabel(field, t)}</span>
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(event) => {
+                                    const current = new Set(automation.requiredTaskFields ?? []);
+                                    if (event.target.checked) {
+                                      current.add(field);
+                                    } else {
+                                      current.delete(field);
+                                    }
+                                    onUpdate({
+                                      ...automation,
+                                      requiredTaskFields: current.size > 0 ? Array.from(current) : undefined,
+                                    });
+                                  }}
+                                  className="h-4 w-4 rounded border-slate-300 text-sky-500 focus:ring-sky-500"
+                                />
+                              </div>
+                              <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">{getTaskFieldHint(field, t)}</p>
+                            </label>
+                          );
+                        })}
+                      </div>
                     </div>
                     <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white px-3 py-3 dark:border-slate-800 dark:bg-[#111722]">
                       <input

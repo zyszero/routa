@@ -21,7 +21,11 @@ import { columnIdToTaskStatus } from "@/core/models/kanban";
 import { getKanbanEventBroadcaster } from "@/core/kanban/kanban-event-broadcaster";
 import { emitColumnTransition } from "@/core/kanban/column-transition";
 import { processKanbanColumnTransition } from "@/core/kanban/workflow-orchestrator-singleton";
-import { buildTaskEvidenceSummary } from "./task-evidence-summary";
+import {
+  buildTaskEvidenceSummary,
+  buildTaskInvestValidation,
+  buildTaskStoryReadiness,
+} from "./task-evidence-summary";
 
 export const dynamic = "force-dynamic";
 
@@ -323,6 +327,8 @@ export async function DELETE(request: NextRequest) {
 
 async function serializeTask(task: Task, system: ReturnType<typeof getRoutaSystem>) {
   const evidenceSummary = await buildTaskEvidenceSummary(task, system);
+  const storyReadiness = await buildTaskStoryReadiness(task, system);
+  const investValidation = buildTaskInvestValidation(task);
 
   return {
     id: task.id,
@@ -366,6 +372,8 @@ async function serializeTask(task: Task, system: ReturnType<typeof getRoutaSyste
     ...(task.verificationReport != null && { verificationReport: task.verificationReport }),
     artifactSummary: evidenceSummary.artifact,
     evidenceSummary,
+    storyReadiness,
+    investValidation,
     createdAt: task.createdAt instanceof Date ? task.createdAt.toISOString() : task.createdAt,
     updatedAt: task.updatedAt instanceof Date ? task.updatedAt.toISOString() : task.updatedAt,
   };

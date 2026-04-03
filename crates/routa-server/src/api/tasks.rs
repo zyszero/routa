@@ -8,7 +8,9 @@ use routa_core::events::{AgentEvent, AgentEventType};
 use routa_core::kanban::set_task_column;
 use routa_core::models::artifact::{Artifact, ArtifactType};
 use routa_core::models::kanban::KanbanBoard;
-use routa_core::models::task::TaskLaneSessionStatus;
+use routa_core::models::task::{
+    build_task_invest_validation, build_task_story_readiness, TaskLaneSessionStatus,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -681,6 +683,15 @@ async fn serialize_task_with_evidence(
     task: &routa_core::models::task::Task,
 ) -> Result<serde_json::Value, ServerError> {
     let evidence_summary = build_task_evidence_summary(state, task).await?;
+    let board = match task.board_id.as_deref() {
+        Some(board_id) => state.kanban_store.get(board_id).await?,
+        None => None,
+    };
+    let story_readiness = build_task_story_readiness(
+        task,
+        &resolve_next_required_task_fields(board.as_ref(), task.column_id.as_deref()),
+    );
+    let invest_validation = build_task_invest_validation(task);
     let mut task_value = serde_json::to_value(task)
         .map_err(|error| ServerError::Internal(format!("Failed to serialize task: {error}")))?;
     let task_object = task_value.as_object_mut().ok_or_else(|| {
@@ -699,6 +710,22 @@ async fn serialize_task_with_evidence(
         serde_json::to_value(&evidence_summary).map_err(|error| {
             ServerError::Internal(format!(
                 "Failed to serialize task evidence summary: {error}"
+            ))
+        })?,
+    );
+    task_object.insert(
+        "storyReadiness".to_string(),
+        serde_json::to_value(&story_readiness).map_err(|error| {
+            ServerError::Internal(format!(
+                "Failed to serialize task story readiness summary: {error}"
+            ))
+        })?,
+    );
+    task_object.insert(
+        "investValidation".to_string(),
+        serde_json::to_value(&invest_validation).map_err(|error| {
+            ServerError::Internal(format!(
+                "Failed to serialize task INVEST validation summary: {error}"
             ))
         })?,
     );
@@ -832,6 +859,32 @@ async fn build_task_evidence_summary(
     })
 }
 
+fn resolve_next_required_task_fields(
+    board: Option<&KanbanBoard>,
+    current_column_id: Option<&str>,
+) -> Vec<String> {
+    let current_column_id = current_column_id.unwrap_or("backlog").to_ascii_lowercase();
+    let next_column_id = KANBAN_HAPPY_PATH_COLUMN_ORDER
+        .iter()
+        .position(|column_id| *column_id == current_column_id)
+        .and_then(|index| KANBAN_HAPPY_PATH_COLUMN_ORDER.get(index + 1))
+        .copied();
+    let Some(next_column_id) = next_column_id else {
+        return Vec::new();
+    };
+
+    board
+        .and_then(|board| {
+            board
+                .columns
+                .iter()
+                .find(|column| column.id == next_column_id)
+        })
+        .and_then(|column| column.automation.as_ref())
+        .and_then(|automation| automation.required_task_fields.clone())
+        .unwrap_or_default()
+}
+
 fn resolve_next_required_artifacts(
     board: Option<&KanbanBoard>,
     current_column_id: Option<&str>,
@@ -898,6 +951,60 @@ async fn ensure_transition_artifacts(
     else {
         return Ok(());
     };
+
+    if let Some(required_task_fields) = target_column
+        .automation
+        .as_ref()
+        .and_then(|automation| automation.required_task_fields.as_ref())
+    {
+        let mut candidate_task = existing.clone();
+        if let Some(title) = body.title.as_ref() {
+            candidate_task.title = title.clone();
+        }
+        if let Some(objective) = body.objective.as_ref() {
+            candidate_task.objective = objective.clone();
+        }
+        if let Some(scope) = body.scope.as_ref() {
+            candidate_task.scope = Some(scope.clone());
+        }
+        if let Some(acceptance_criteria) = body.acceptance_criteria.as_ref() {
+            candidate_task.acceptance_criteria = Some(acceptance_criteria.clone());
+        }
+        if let Some(verification_commands) = body.verification_commands.as_ref() {
+            candidate_task.verification_commands = Some(verification_commands.clone());
+        }
+        if let Some(test_cases) = body.test_cases.as_ref() {
+            candidate_task.test_cases = Some(test_cases.clone());
+        }
+        if let Some(dependencies) = body.dependencies.as_ref() {
+            candidate_task.dependencies = dependencies.clone();
+        }
+        if let Some(parallel_group) = body.parallel_group.as_ref() {
+            candidate_task.parallel_group = Some(parallel_group.clone());
+        }
+
+        let readiness = build_task_story_readiness(&candidate_task, required_task_fields);
+        if !readiness.ready {
+            let missing_task_fields = readiness
+                .missing
+                .iter()
+                .map(|field| match field.as_str() {
+                    "acceptance_criteria" => "acceptance criteria",
+                    "verification_commands" => "verification commands",
+                    "test_cases" => "test cases",
+                    "verification_plan" => "verification plan",
+                    "dependencies_declared" => "dependency declaration",
+                    other => other,
+                })
+                .collect::<Vec<_>>();
+            return Err(ServerError::BadRequest(format!(
+                "Cannot move task to \"{}\": missing required task fields: {}. Please complete this story definition before moving the task.",
+                target_column.name,
+                missing_task_fields.join(", ")
+            )));
+        }
+    }
+
     let Some(required_artifacts) = target_column
         .automation
         .as_ref()

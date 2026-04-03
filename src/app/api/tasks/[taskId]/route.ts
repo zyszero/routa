@@ -16,17 +16,28 @@ import {
   processKanbanColumnTransition,
 } from "@/core/kanban/workflow-orchestrator-singleton";
 import { buildRemainingLaneStepsMessage, resolveCurrentLaneAutomationState } from "@/core/kanban/lane-automation-state";
-import { buildTaskEvidenceSummary } from "../task-evidence-summary";
+import {
+  buildTaskEvidenceSummary,
+  buildTaskInvestValidation,
+  buildTaskStoryReadiness,
+  formatRequiredTaskFieldLabel,
+  resolveTargetRequiredTaskFields,
+  validateTaskReadiness,
+} from "../task-evidence-summary";
 
 export const dynamic = "force-dynamic";
 
 async function serializeTask(task: Task, system: ReturnType<typeof getRoutaSystem>) {
   const evidenceSummary = await buildTaskEvidenceSummary(task, system);
+  const storyReadiness = await buildTaskStoryReadiness(task, system);
+  const investValidation = buildTaskInvestValidation(task);
 
   return {
     ...task,
     artifactSummary: evidenceSummary.artifact,
     evidenceSummary,
+    storyReadiness,
+    investValidation,
     githubSyncedAt: task.githubSyncedAt?.toISOString(),
     createdAt: task.createdAt instanceof Date ? task.createdAt.toISOString() : task.createdAt,
     updatedAt: task.updatedAt instanceof Date ? task.updatedAt.toISOString() : task.updatedAt,
@@ -154,6 +165,22 @@ export async function PATCH(
                 missingArtifacts,
               },
               { status: 400 }
+            );
+          }
+        }
+
+        const requiredTaskFields = resolveTargetRequiredTaskFields(board.columns, targetColumn?.id);
+        if (requiredTaskFields.length > 0) {
+          const readiness = validateTaskReadiness(nextTask, requiredTaskFields);
+          if (!readiness.ready) {
+            const missingTaskFields = readiness.missing.map(formatRequiredTaskFieldLabel);
+            return NextResponse.json(
+              {
+                error: `Cannot move task to "${targetColumn?.name ?? body.columnId}": missing required task fields: ${missingTaskFields.join(", ")}. Please complete this story definition before moving the task.`,
+                missingTaskFields,
+                storyReadiness: readiness,
+              },
+              { status: 400 },
             );
           }
         }

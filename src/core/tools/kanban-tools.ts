@@ -43,6 +43,11 @@ import {
 } from "../kanban/task-lane-history";
 import { buildRemainingLaneStepsMessage, resolveCurrentLaneAutomationState } from "../kanban/lane-automation-state";
 import { getInternalApiOrigin } from "../kanban/agent-trigger";
+import {
+  formatRequiredTaskFieldLabel,
+  resolveTargetRequiredTaskFields,
+  validateTaskReadiness,
+} from "../kanban/task-derived-summary";
 
 const DESCRIPTION_FROZEN_STAGES = new Set<KanbanColumnStage>(["dev", "review", "blocked", "done"]);
 
@@ -246,6 +251,18 @@ export class KanbanTools {
         return errorResult(
           `Cannot move card to "${targetColumn.name}": missing required artifacts: ${missingArtifacts.join(", ")}. ` +
           `Please provide these artifacts before moving the card.`
+        );
+      }
+    }
+
+    const requiredTaskFields = resolveTargetRequiredTaskFields(board.columns, targetColumn.id);
+    if (requiredTaskFields.length > 0) {
+      const readiness = validateTaskReadiness(task, requiredTaskFields);
+      if (!readiness.ready) {
+        const missingTaskFields = readiness.missing.map(formatRequiredTaskFieldLabel);
+        return errorResult(
+          `Cannot move card to "${targetColumn.name}": missing required task fields: ${missingTaskFields.join(", ")}. `
+          + "Please complete this story definition before moving the card.",
         );
       }
     }

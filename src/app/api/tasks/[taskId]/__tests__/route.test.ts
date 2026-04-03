@@ -137,6 +137,15 @@ describe("/api/tasks/[taskId]", () => {
         latestStatus: "idle",
       },
     });
+    expect(data.task.storyReadiness).toMatchObject({
+      ready: true,
+      missing: [],
+      requiredTaskFields: [],
+    });
+    expect(data.task.investValidation).toMatchObject({
+      source: "heuristic",
+      overallStatus: "fail",
+    });
   });
 
   it("reports missing required artifacts and latest run status in evidence summary", async () => {
@@ -214,6 +223,57 @@ describe("/api/tasks/[taskId]", () => {
         total: 1,
         latestStatus: "running",
       },
+    });
+    expect(data.task.storyReadiness).toMatchObject({
+      ready: true,
+      requiredTaskFields: [],
+    });
+  });
+
+  it("blocks moving a card into a lane when required task fields are missing", async () => {
+    const existingTask = createTask({
+      id: "task-1",
+      title: "Prepare dev handoff",
+      objective: "Need scope and verification plan",
+      workspaceId: "workspace-1",
+      boardId: "board-1",
+      columnId: "todo",
+      status: TaskStatus.PENDING,
+    });
+    taskStore.get.mockResolvedValue(existingTask);
+    system.kanbanBoardStore.get = vi.fn().mockResolvedValue({
+      id: "board-1",
+      columns: [
+        { id: "todo", name: "Todo", position: 0, stage: "todo" },
+        {
+          id: "dev",
+          name: "Dev",
+          position: 1,
+          stage: "dev",
+          automation: {
+            requiredTaskFields: ["scope", "acceptance_criteria", "verification_plan"],
+          },
+        },
+      ],
+    });
+
+    const request = new NextRequest("http://localhost/api/tasks/task-1", {
+      method: "PATCH",
+      body: JSON.stringify({ columnId: "dev" }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await PATCH(request, {
+      params: Promise.resolve({ taskId: "task-1" }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.error).toContain('Cannot move task to "Dev": missing required task fields');
+    expect(data.missingTaskFields).toEqual(["scope", "acceptance criteria", "verification plan"]);
+    expect(data.storyReadiness).toMatchObject({
+      ready: false,
+      missing: ["scope", "acceptance_criteria", "verification_plan"],
     });
   });
 

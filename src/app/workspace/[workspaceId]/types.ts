@@ -1,6 +1,8 @@
 // Shared types for workspace dashboard components
 
 import type { McpServerProfile } from "@/core/mcp/mcp-server-profiles";
+import type { KanbanRequiredTaskField } from "@/core/models/kanban";
+import type { TaskAnalysisStatus } from "@/core/models/task";
 
 export interface SessionInfo {
   sessionId: string;
@@ -89,8 +91,8 @@ export interface ArtifactInfo {
 export interface ArtifactSummaryInfo {
   total: number;
   byType: Partial<Record<ArtifactInfo["type"], number>>;
-  requiredSatisfied?: boolean;
-  missingRequired?: ArtifactInfo["type"][];
+  requiredSatisfied: boolean;
+  missingRequired: ArtifactInfo["type"][];
 }
 
 export interface TaskEvidenceSummaryInfo {
@@ -114,6 +116,9 @@ export interface TaskInfo {
   title: string;
   objective?: string;
   comment?: string;
+  scope?: string;
+  acceptanceCriteria?: string[];
+  verificationCommands?: string[];
   testCases?: string[];
   status: string;
   boardId?: string;
@@ -177,12 +182,43 @@ export interface TaskInfo {
   githubSyncedAt?: string;
   lastSyncError?: string;
   sessionId?: string;
+  dependencies?: string[];
+  parallelGroup?: string;
   /** Associated codebase IDs for this task */
   codebaseIds?: string[];
   /** Git worktree ID for this task */
   worktreeId?: string;
+  completionSummary?: string;
+  verificationVerdict?: string;
+  verificationReport?: string;
   artifactSummary?: ArtifactSummaryInfo;
   evidenceSummary?: TaskEvidenceSummaryInfo;
+  storyReadiness?: {
+    ready: boolean;
+    missing: KanbanRequiredTaskField[];
+    requiredTaskFields: KanbanRequiredTaskField[];
+    checks: {
+      scope: boolean;
+      acceptanceCriteria: boolean;
+      verificationCommands: boolean;
+      testCases: boolean;
+      verificationPlan: boolean;
+      dependenciesDeclared: boolean;
+    };
+  };
+  investValidation?: {
+    source: "canonical_story" | "heuristic";
+    overallStatus: TaskAnalysisStatus;
+    checks: {
+      independent: { status: TaskAnalysisStatus; reason: string };
+      negotiable: { status: TaskAnalysisStatus; reason: string };
+      valuable: { status: TaskAnalysisStatus; reason: string };
+      estimable: { status: TaskAnalysisStatus; reason: string };
+      small: { status: TaskAnalysisStatus; reason: string };
+      testable: { status: TaskAnalysisStatus; reason: string };
+    };
+    issues: string[];
+  };
   createdAt: string;
   updatedAt?: string;
 }
@@ -212,6 +248,7 @@ export interface KanbanColumnAutomationInfo {
   authConfigId?: string;
   transitionType?: "entry" | "exit" | "both";
   requiredArtifacts?: ("screenshot" | "test_results" | "code_diff")[];
+  requiredTaskFields?: KanbanRequiredTaskField[];
   autoAdvanceOnSuccess?: boolean;
 }
 

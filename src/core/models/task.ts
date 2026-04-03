@@ -4,6 +4,8 @@
  * Represents a unit of work within the multi-agent system.
  */
 
+import type { KanbanRequiredTaskField } from "./kanban";
+
 export enum TaskStatus {
   PENDING = "PENDING",
   IN_PROGRESS = "IN_PROGRESS",
@@ -25,6 +27,64 @@ export enum VerificationVerdict {
   APPROVED = "APPROVED",
   NOT_APPROVED = "NOT_APPROVED",
   BLOCKED = "BLOCKED",
+}
+
+export type TaskAnalysisStatus = "pass" | "warning" | "fail";
+
+export interface TaskInvestCheckSummary {
+  status: TaskAnalysisStatus;
+  reason: string;
+}
+
+export interface TaskInvestValidation {
+  source: "canonical_story" | "heuristic";
+  overallStatus: TaskAnalysisStatus;
+  checks: {
+    independent: TaskInvestCheckSummary;
+    negotiable: TaskInvestCheckSummary;
+    valuable: TaskInvestCheckSummary;
+    estimable: TaskInvestCheckSummary;
+    small: TaskInvestCheckSummary;
+    testable: TaskInvestCheckSummary;
+  };
+  issues: string[];
+}
+
+export interface TaskStoryReadiness {
+  ready: boolean;
+  missing: KanbanRequiredTaskField[];
+  requiredTaskFields: KanbanRequiredTaskField[];
+  checks: {
+    scope: boolean;
+    acceptanceCriteria: boolean;
+    verificationCommands: boolean;
+    testCases: boolean;
+    verificationPlan: boolean;
+    dependenciesDeclared: boolean;
+  };
+}
+
+export interface TaskArtifactSummary {
+  total: number;
+  byType: Partial<Record<"screenshot" | "test_results" | "code_diff" | "logs", number>>;
+  requiredSatisfied: boolean;
+  missingRequired: Array<"screenshot" | "test_results" | "code_diff" | "logs">;
+}
+
+export interface TaskEvidenceSummary {
+  artifact: TaskArtifactSummary;
+  verification: {
+    hasVerdict: boolean;
+    verdict?: string;
+    hasReport: boolean;
+  };
+  completion: {
+    hasSummary: boolean;
+  };
+  runs: {
+    total: number;
+    latestStatus: string;
+  };
 }
 
 export type TaskLaneSessionStatus =
