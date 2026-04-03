@@ -467,12 +467,15 @@ mod tests {
         let start = Instant::now();
         let results = runner.run_batch(&metrics, true, false, None);
         let elapsed = start.elapsed();
+        let combined_duration_ms: f64 = results.iter().map(|result| result.duration_ms).sum();
+        let elapsed_ms = elapsed.as_secs_f64() * 1000.0;
+        let overlap_ratio = combined_duration_ms / elapsed_ms;
 
         assert_eq!(results.len(), 2);
         assert!(
-            elapsed < Duration::from_millis(3500),
-            "parallel batch should finish in about one sleep interval, got {:?}",
-            elapsed
+            overlap_ratio > 1.5,
+            "parallel batch should overlap substantially, got elapsed={:?}, combined_duration_ms={combined_duration_ms:.1}, overlap_ratio={overlap_ratio:.2}",
+            elapsed,
         );
     }
 
