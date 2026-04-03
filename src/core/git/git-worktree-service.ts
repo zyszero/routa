@@ -111,6 +111,7 @@ export class GitWorktreeService {
     const branch =
       options.branch ??
       `wt/${options.label ? branchToSafeDirName(options.label) : shortId}`;
+    const directoryName = branchToSafeDirName(options.label?.trim() || branch);
 
     return this.withRepoLock(repoPath, async () => {
       // Fail fast if no process bridge (serverless environments)
@@ -133,7 +134,7 @@ export class GitWorktreeService {
         worktreeRoot,
         codebase.workspaceId,
         codebaseId,
-        branchToSafeDirName(branch)
+        directoryName
       );
 
       // Create DB record

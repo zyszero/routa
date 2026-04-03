@@ -7,6 +7,7 @@ import { ensureTaskBoardContext } from "@/core/kanban/task-board-context";
 import { buildTaskGitHubIssueBody, updateGitHubIssue } from "@/core/kanban/github-issues";
 import { GitWorktreeService } from "@/core/git/git-worktree-service";
 import { getDefaultWorkspaceWorktreeRoot, getEffectiveWorkspaceMetadata } from "@/core/models/workspace";
+import { buildKanbanWorktreeNaming } from "@/core/kanban/worktree-naming";
 import type { ArtifactType } from "@/core/models/artifact";
 import { emitColumnTransition } from "@/core/kanban/column-transition";
 import { archiveActiveTaskSession, prepareTaskForColumnChange } from "@/core/kanban/task-session-transition";
@@ -333,13 +334,7 @@ export async function PATCH(
     if (enteringDev && preferredCodebase && !nextTask.worktreeId) {
       try {
         const worktreeService = new GitWorktreeService(system.worktreeStore, system.codebaseStore);
-        const slugifiedTitle = nextTask.title
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-|-$/g, "")
-          .slice(0, 40);
-        const branch = `issue/${nextTask.id.slice(0, 8)}-${slugifiedTitle}`;
-        const label = `${nextTask.id.slice(0, 8)}-${slugifiedTitle}`;
+        const { branch, label } = buildKanbanWorktreeNaming(nextTask.id);
         // Req 5: use worktreeRoot from workspace metadata if configured
         const workspace = await system.workspaceStore.get(nextTask.workspaceId);
         const worktreeRoot = workspace

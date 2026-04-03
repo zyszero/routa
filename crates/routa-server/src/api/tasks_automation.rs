@@ -35,19 +35,9 @@ pub async fn auto_create_worktree(
     task: &crate::models::task::Task,
     codebase: &crate::models::codebase::Codebase,
 ) -> Result<String, String> {
-    let slugified = task
-        .title
-        .to_lowercase()
-        .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '-' })
-        .collect::<String>()
-        .split('-')
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join("-");
     let short_id = &task.id[..task.id.len().min(8)];
-    let slug = format!("{}-{}", short_id, &slugified[..slugified.len().min(40)]);
-    let branch = format!("issue/{}", slug);
+    let label = short_id.to_string();
+    let branch = format!("issue/{}", short_id);
 
     let workspace = state
         .workspace_store
@@ -70,7 +60,7 @@ pub async fn auto_create_worktree(
 
     let worktree_path = worktree_root
         .join(&codebase_label)
-        .join(crate::git::branch_to_safe_dir_name(&slug));
+        .join(crate::git::branch_to_safe_dir_name(&label));
 
     if let Some(parent) = worktree_path.parent() {
         std::fs::create_dir_all(parent)
@@ -90,7 +80,7 @@ pub async fn auto_create_worktree(
         worktree_path_str.clone(),
         branch.clone(),
         base_branch.clone(),
-        Some(slug),
+        Some(label),
     );
     state
         .worktree_store

@@ -26,6 +26,7 @@ import {
   resolveEffectiveTaskAutomation,
   type AutomationSpecialistSummary,
 } from "./effective-task-automation";
+import { buildKanbanWorktreeNaming } from "./worktree-naming";
 import { getInternalApiOrigin, triggerAssignedTaskAgent } from "./agent-trigger";
 import { KanbanSessionQueue } from "./kanban-session-queue";
 import { getKanbanSessionConcurrencyLimit as getBoardSessionConcurrencyLimit } from "./board-session-limits";
@@ -171,13 +172,7 @@ async function startKanbanTaskSession(
         system.worktreeStore,
         system.codebaseStore,
       );
-      const slugifiedTitle = nextTask.title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "")
-        .slice(0, 40);
-      const branch = `issue/${nextTask.id.slice(0, 8)}-${slugifiedTitle}`;
-      const label = `${nextTask.id.slice(0, 8)}-${slugifiedTitle}`;
+      const { branch, label } = buildKanbanWorktreeNaming(nextTask.id);
       const workspace = await system.workspaceStore.get(nextTask.workspaceId);
       const worktreeRoot = workspace
         ? getEffectiveWorkspaceMetadata(workspace).worktreeRoot

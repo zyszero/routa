@@ -11,6 +11,7 @@ const enqueueKanbanTaskSession = vi.fn();
 const processKanbanColumnTransition = vi.fn();
 const archiveActiveTaskSession = vi.fn<(task: Task) => void>();
 const prepareTaskForColumnChange = vi.fn<(fromColumnId?: string, task?: Task) => boolean>(() => false);
+const createWorktree = vi.fn();
 const buildTaskDeliveryReadiness = vi.fn<
   (task: Task, currentSystem: typeof system) => Promise<TaskDeliveryReadiness>
 >();
@@ -52,7 +53,9 @@ vi.mock("@/core/kanban/github-issues", () => ({
 }));
 
 vi.mock("@/core/git/git-worktree-service", () => ({
-  GitWorktreeService: vi.fn(),
+  GitWorktreeService: vi.fn(class {
+    createWorktree = createWorktree;
+  }),
 }));
 
 vi.mock("@/core/models/workspace", () => ({
@@ -133,6 +136,12 @@ describe("/api/tasks/[taskId]", () => {
       };
     });
     processKanbanColumnTransition.mockResolvedValue(undefined);
+    createWorktree.mockReset();
+    createWorktree.mockResolvedValue({
+      id: "wt-1",
+      branch: "issue/task-1",
+      worktreePath: "/tmp/worktrees/task-1",
+    });
   });
 
   it("returns default evidence summary when artifact storage is unavailable", async () => {
@@ -582,6 +591,49 @@ describe("/api/tasks/[taskId]", () => {
       fromColumnId: "backlog",
       toColumnId: "todo",
       toColumnName: "Todo",
+    }));
+  });
+
+  it("uses a short task-id-based worktree branch when entering dev", async () => {
+    const taskId = "cf7f1e28-011d-4d0b-98e3-0f7d9b012570";
+    taskStore.get.mockResolvedValue(createTask({
+      id: taskId,
+      title: "Issue cf7f1e28 feat kanban add story readiness and evidence workflow with very long title",
+      objective: "Ensure worktree naming stays compact.",
+      workspaceId: "workspace-1",
+      boardId: "board-1",
+      columnId: "todo",
+      status: TaskStatus.PENDING,
+    }));
+    system.codebaseStore.getDefault = vi.fn().mockResolvedValue({
+      id: "repo-1",
+      workspaceId: "workspace-1",
+      repoPath: "/tmp/repos/main",
+      branch: "main",
+    });
+    system.kanbanBoardStore.get = vi.fn().mockResolvedValue({
+      id: "board-1",
+      columns: [
+        { id: "todo", name: "Todo", position: 0, stage: "todo" },
+        { id: "dev", name: "Dev", position: 1, stage: "dev" },
+      ],
+    });
+
+    const request = new NextRequest(`http://localhost/api/tasks/${taskId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ columnId: "dev" }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await PATCH(request, {
+      params: Promise.resolve({ taskId }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(createWorktree).toHaveBeenCalledWith("repo-1", expect.objectContaining({
+      branch: "issue/cf7f1e28",
+      label: "cf7f1e28",
+      baseBranch: "main",
     }));
   });
 });
