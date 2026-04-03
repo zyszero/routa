@@ -12,6 +12,7 @@ import {
   type TierValue,
 } from "@/client/components/harness-execution-plan-flow";
 import { HarnessAgentInstructionsPanel } from "@/client/components/harness-agent-instructions-panel";
+import { HarnessArchitectureQualityPanel } from "@/client/components/harness-architecture-quality-panel";
 import { HarnessAutomationPanel } from "@/client/components/harness-automation-panel";
 import { HarnessDesignDecisionPanel } from "@/client/components/harness-design-decision-panel";
 import { HarnessFitnessFilesDashboard } from "@/client/components/harness-fitness-files-dashboard";
@@ -212,6 +213,7 @@ export default function HarnessConsolePage() {
   const {
     specsState,
     planState,
+    architectureState,
     hooksState,
     agentHooksState,
     instructionsState,
@@ -220,6 +222,7 @@ export default function HarnessConsolePage() {
     designDecisionsState,
     codeownersState,
     automationsState,
+    reloadArchitecture,
     reloadInstructions,
   } = useHarnessSettingsData({
     workspaceId,
@@ -850,6 +853,15 @@ export default function HarnessConsolePage() {
       case "entrix-fitness":
         return (
           <div className="space-y-4">
+            <HarnessArchitectureQualityPanel
+              repoLabel={selectedRepoLabel}
+              unsupportedMessage={unsupportedRepoMessage}
+              data={architectureState.data}
+              loading={architectureState.loading}
+              error={architectureState.error}
+              onRefresh={reloadArchitecture}
+              embedded
+            />
             <HarnessFitnessFilesDashboard
               specFiles={specFiles}
               selectedSpec={visibleSpec}

@@ -226,6 +226,66 @@ export type GitHubActionsFlowsResponse = {
 
 export type { CodeownersResponse };
 
+export type ArchitectureSuiteName = "boundaries" | "cycles";
+export type ArchitectureSummaryStatus = "pass" | "fail" | "skipped";
+
+export type ArchitectureViolation =
+  | {
+    kind: "dependency";
+    source: string;
+    target: string;
+    edgeCount: number;
+  }
+  | {
+    kind: "cycle";
+    path: string[];
+    edgeCount: number;
+  }
+  | {
+    kind: "empty-test";
+    message: string;
+  }
+  | {
+    kind: "unknown";
+    summary: string;
+  };
+
+export type ArchitectureRuleResult = {
+  id: string;
+  title: string;
+  suite: ArchitectureSuiteName;
+  status: "pass" | "fail";
+  violationCount: number;
+  violations: ArchitectureViolation[];
+};
+
+export type ArchitectureSuiteReport = {
+  generatedAt: string;
+  repoRoot: string;
+  suite: ArchitectureSuiteName;
+  summaryStatus: ArchitectureSummaryStatus;
+  archUnitSource: string | null;
+  tsconfigPath: string;
+  ruleCount: number;
+  failedRuleCount: number;
+  results: ArchitectureRuleResult[];
+  notes: string[];
+};
+
+export type ArchitectureQualityResponse = {
+  generatedAt: string;
+  repoRoot: string;
+  summaryStatus: ArchitectureSummaryStatus;
+  archUnitSource: string | null;
+  tsconfigPath: string;
+  suiteCount: number;
+  ruleCount: number;
+  failedRuleCount: number;
+  violationCount: number;
+  reports: ArchitectureSuiteReport[];
+  notes: string[];
+};
+
 export type QueryState<T> = {
   loading: boolean;
   error: string | null;
@@ -268,6 +328,10 @@ function emptyQueryState<T>(): QueryState<T> {
 
 function safeArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : [];
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? value as Record<string, unknown> : null;
 }
 
 function normalizeSpecsResponse(payload: Partial<SpecsResponse> | null | undefined): SpecsResponse {
@@ -350,6 +414,85 @@ function normalizeInstructionsResponse(
     source: payload?.source ?? "",
     fallbackUsed: Boolean(payload?.fallbackUsed),
     audit: payload?.audit ?? null,
+  };
+}
+
+function normalizeArchitectureViolation(
+  payload: unknown,
+): ArchitectureViolation {
+  const record = asRecord(payload);
+  if (record?.kind === "dependency") {
+    return {
+      kind: "dependency",
+      source: typeof record.source === "string" ? record.source : "",
+      target: typeof record.target === "string" ? record.target : "",
+      edgeCount: typeof record.edgeCount === "number" ? record.edgeCount : 0,
+    };
+  }
+
+  if (record?.kind === "cycle") {
+    return {
+      kind: "cycle",
+      path: Array.isArray(record.path) ? record.path.filter((value): value is string => typeof value === "string") : [],
+      edgeCount: typeof record.edgeCount === "number" ? record.edgeCount : 0,
+    };
+  }
+
+  if (record?.kind === "empty-test") {
+    return {
+      kind: "empty-test",
+      message: typeof record.message === "string" ? record.message : "",
+    };
+  }
+
+  return {
+    kind: "unknown",
+    summary: typeof record?.summary === "string" ? record.summary : "",
+  };
+}
+
+function normalizeArchitectureResponse(
+  payload: Partial<ArchitectureQualityResponse> | null | undefined,
+): ArchitectureQualityResponse {
+  const reports: ArchitectureSuiteReport[] = safeArray(payload?.reports).map((report) => ({
+    generatedAt: report?.generatedAt ?? "",
+    repoRoot: report?.repoRoot ?? "",
+    suite: report?.suite === "cycles" ? "cycles" : "boundaries",
+    summaryStatus: report?.summaryStatus === "fail" || report?.summaryStatus === "skipped"
+      ? report.summaryStatus
+      : "pass",
+    archUnitSource: typeof report?.archUnitSource === "string" ? report.archUnitSource : null,
+    tsconfigPath: report?.tsconfigPath ?? "",
+    ruleCount: report?.ruleCount ?? 0,
+    failedRuleCount: report?.failedRuleCount ?? 0,
+    results: safeArray(report?.results).map((result) => ({
+      id: result?.id ?? "",
+      title: result?.title ?? "",
+      suite: result?.suite === "cycles" ? "cycles" : "boundaries",
+      status: result?.status === "fail" ? "fail" : "pass",
+      violationCount: result?.violationCount ?? 0,
+      violations: safeArray(result?.violations).map((violation) => normalizeArchitectureViolation(violation)),
+    })),
+    notes: safeArray(report?.notes),
+  }));
+
+  return {
+    generatedAt: payload?.generatedAt ?? "",
+    repoRoot: payload?.repoRoot ?? "",
+    summaryStatus: payload?.summaryStatus === "fail" || payload?.summaryStatus === "skipped"
+      ? payload.summaryStatus
+      : "pass",
+    archUnitSource: typeof payload?.archUnitSource === "string" ? payload.archUnitSource : null,
+    tsconfigPath: payload?.tsconfigPath ?? "",
+    suiteCount: payload?.suiteCount ?? reports.length,
+    ruleCount: payload?.ruleCount ?? reports.reduce((sum, report) => sum + report.ruleCount, 0),
+    failedRuleCount: payload?.failedRuleCount ?? reports.reduce((sum, report) => sum + report.failedRuleCount, 0),
+    violationCount: payload?.violationCount ?? reports.reduce(
+      (sum, report) => sum + report.results.reduce((inner, result) => inner + result.violationCount, 0),
+      0,
+    ),
+    reports,
+    notes: safeArray(payload?.notes),
   };
 }
 
@@ -483,6 +626,7 @@ export function useHarnessSettingsData({
 
   const [specsState, setSpecsState] = useState<QueryState<SpecsResponse>>(emptyQueryState);
   const [planState, setPlanState] = useState<QueryState<PlanResponse>>(emptyQueryState);
+  const [architectureState, setArchitectureState] = useState<QueryState<ArchitectureQualityResponse>>(emptyQueryState);
   const [hooksState, setHooksState] = useState<QueryState<HooksResponse>>(emptyQueryState);
   const [instructionsState, setInstructionsState] = useState<QueryState<InstructionsResponse>>(emptyQueryState);
   const [githubActionsState, setGithubActionsState] = useState<QueryState<GitHubActionsFlowsResponse>>(emptyQueryState);
@@ -495,6 +639,7 @@ export function useHarnessSettingsData({
     contextKey: "",
     token: 0,
   });
+  const [architectureRefreshToken, setArchitectureRefreshToken] = useState(0);
   const instructionsContextKey = baseQuery?.toString() ?? "";
 
   useEffect(() => {
@@ -577,6 +722,45 @@ export function useHarnessSettingsData({
       cancelled = true;
     };
   }, [baseQuery, selectedTier]);
+
+  useEffect(() => {
+    if (!baseQuery) {
+      setArchitectureState(emptyQueryState());
+      return;
+    }
+
+    let cancelled = false;
+    const fetchArchitecture = async () => {
+      setArchitectureState((current) => ({ ...current, loading: true, error: null }));
+      try {
+        const response = await desktopAwareFetch(`/api/fitness/architecture?${baseQuery.toString()}`);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(typeof payload?.details === "string" ? payload.details : "Failed to load architecture quality");
+        }
+        if (!cancelled) {
+          setArchitectureState({
+            loading: false,
+            error: null,
+            data: normalizeArchitectureResponse(payload as Partial<ArchitectureQualityResponse>),
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setArchitectureState({
+            loading: false,
+            error: error instanceof Error ? error.message : String(error),
+            data: null,
+          });
+        }
+      }
+    };
+
+    void fetchArchitecture();
+    return () => {
+      cancelled = true;
+    };
+  }, [architectureRefreshToken, baseQuery]);
 
   useEffect(() => {
     if (!baseQuery) {
@@ -747,6 +931,10 @@ export function useHarnessSettingsData({
     }));
   }, [instructionsContextKey]);
 
+  const reloadArchitecture = useCallback(() => {
+    setArchitectureRefreshToken((current) => current + 1);
+  }, []);
+
   useEffect(() => {
     if (!baseQuery) {
       setSpecSourcesState(emptyQueryState());
@@ -906,6 +1094,7 @@ export function useHarnessSettingsData({
   return {
     specsState,
     planState,
+    architectureState,
     hooksState,
     agentHooksState,
     instructionsState,
@@ -914,6 +1103,7 @@ export function useHarnessSettingsData({
     designDecisionsState,
     codeownersState,
     automationsState,
+    reloadArchitecture,
     reloadInstructions,
   };
 }

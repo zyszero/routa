@@ -20,10 +20,12 @@ use crate::error::ServerError;
 use crate::state::AppState;
 
 const FITNESS_PROFILES: [&str; 2] = ["generic", "agent_orchestrator"];
+const ARCHITECTURE_SUITES: [&str; 2] = ["boundaries", "cycles"];
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/analyze", post(analyze_fitness))
+        .route("/architecture", get(get_fitness_architecture))
         .route("/plan", get(get_fitness_plan))
         .route("/report", get(get_fitness_report))
         .route("/specs", get(get_fitness_specs))
@@ -141,6 +143,96 @@ async fn get_fitness_report(
         "generatedAt": chrono::Utc::now().to_rfc3339(),
         "requestedProfiles": FITNESS_PROFILES,
         "profiles": profiles,
+    })))
+}
+
+async fn get_fitness_architecture(
+    State(state): State<AppState>,
+    Query(query): Query<RepoContextQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let repo_root = resolve_repo_root(
+        &state,
+        query.workspace_id.as_deref(),
+        query.codebase_id.as_deref(),
+        query.repo_path.as_deref(),
+        "缺少 fitness 上下文，请提供 workspaceId / codebaseId / repoPath 之一",
+    )
+    .await
+    .map_err(map_context_error(
+        "Architecture quality 上下文无效",
+        "加载 Architecture quality 失败",
+    ))?;
+
+    let mut reports = Vec::with_capacity(ARCHITECTURE_SUITES.len());
+    for suite in ARCHITECTURE_SUITES {
+        let report = run_architecture_suite(&repo_root, suite)
+            .await
+            .map_err(|error| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json_error("加载 Architecture quality 失败", error)),
+                )
+            })?;
+        reports.push(report);
+    }
+
+    let rule_count = reports
+        .iter()
+        .map(|report| report["ruleCount"].as_u64().unwrap_or(0))
+        .sum::<u64>();
+    let failed_rule_count = reports
+        .iter()
+        .map(|report| report["failedRuleCount"].as_u64().unwrap_or(0))
+        .sum::<u64>();
+    let violation_count = reports
+        .iter()
+        .flat_map(|report| report["results"].as_array().into_iter().flatten())
+        .map(|result| result["violationCount"].as_u64().unwrap_or(0))
+        .sum::<u64>();
+    let summary_status = if reports
+        .iter()
+        .any(|report| report["summaryStatus"].as_str() == Some("fail"))
+    {
+        "fail"
+    } else if reports
+        .iter()
+        .any(|report| report["summaryStatus"].as_str() == Some("skipped"))
+    {
+        "skipped"
+    } else {
+        "pass"
+    };
+
+    let mut note_set = HashSet::new();
+    let notes = reports
+        .iter()
+        .flat_map(|report| report["notes"].as_array().into_iter().flatten())
+        .filter_map(Value::as_str)
+        .filter(|note| note_set.insert((*note).to_string()))
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    let arch_unit_source = reports
+        .iter()
+        .find_map(|report| report["archUnitSource"].as_str())
+        .map(ToString::to_string);
+    let tsconfig_path = reports
+        .iter()
+        .find_map(|report| report["tsconfigPath"].as_str())
+        .unwrap_or_default()
+        .to_string();
+
+    Ok(Json(json!({
+        "generatedAt": chrono::Utc::now().to_rfc3339(),
+        "repoRoot": repo_root,
+        "summaryStatus": summary_status,
+        "archUnitSource": arch_unit_source,
+        "tsconfigPath": tsconfig_path,
+        "suiteCount": reports.len(),
+        "ruleCount": rule_count,
+        "failedRuleCount": failed_rule_count,
+        "violationCount": violation_count,
+        "reports": reports,
+        "notes": notes,
     })))
 }
 
@@ -486,6 +578,44 @@ async fn run_fitness_profile(
             "error": error.to_string(),
         }),
     }
+}
+
+async fn run_architecture_suite(repo_root: &Path, suite: &str) -> Result<Value, String> {
+    let args = vec![
+        "--import",
+        "tsx",
+        "scripts/fitness/check-backend-architecture.ts",
+        "--suite",
+        suite,
+        "--json",
+    ];
+
+    let output = Command::new("node")
+        .args(&args)
+        .current_dir(repo_root)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    extract_json_output(&stdout)
+        .and_then(|text| serde_json::from_str::<Value>(&text).map_err(|error| error.to_string()))
+        .map_err(|error| {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            if stderr.is_empty() {
+                format!(
+                    "Failed to execute architecture suite {suite} (exit {}) : {error}",
+                    output.status.code().unwrap_or(1)
+                )
+            } else {
+                format!(
+                    "Failed to execute architecture suite {suite} (exit {}) : {stderr}",
+                    output.status.code().unwrap_or(1)
+                )
+            }
+        })
 }
 
 fn profile_snapshot_path(repo_root: &Path, profile: &str) -> PathBuf {

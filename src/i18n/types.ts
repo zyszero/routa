@@ -232,6 +232,34 @@ export interface TranslationDictionary {
         reviewHooks: string;
         checkCICD: string;
       };
+      architectureQuality: {
+        title: string;
+        description: string;
+        statusLabel: string;
+        sourceLabel: string;
+        tsconfigLabel: string;
+        rulesLabel: string;
+        failedRulesLabel: string;
+        violationsLabel: string;
+        notesLabel: string;
+        failedRulesTitle: string;
+        topViolationsTitle: string;
+        noFailedRules: string;
+        noViolations: string;
+        ruleColumn: string;
+        suiteColumn: string;
+        countColumn: string;
+        summaryColumn: string;
+        statusPass: string;
+        statusFail: string;
+        statusSkipped: string;
+        suiteBoundaries: string;
+        suiteCycles: string;
+        violationDependency: string;
+        violationCycle: string;
+        violationEmptyTest: string;
+        violationUnknown: string;
+      };
       healthCards: {
         fitnessScore: string;
         hardGates: string;

@@ -175,7 +175,8 @@ async function loadArchUnit(): Promise<{ module: ArchUnitModule; source: string 
   process.env.NODE_PATH = process.env.NODE_PATH
     ? `${nodePath}${path.delimiter}${process.env.NODE_PATH}`
     : nodePath;
-  Module._initPaths();
+  const moduleWithInitPaths = Module as typeof Module & { _initPaths?: () => void };
+  moduleWithInitPaths._initPaths?.();
 
   for (const candidate of resolveArchUnitCandidates()) {
     if (!fs.existsSync(candidate)) {
