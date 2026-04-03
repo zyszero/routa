@@ -167,7 +167,13 @@ describe("KanbanTools", () => {
       triggerSessionId: "session-backlog-1",
     });
     expect(tasks[0].sessionIds).toContain("session-backlog-1");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/acp"),
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
   });
 
   it("requests a handoff from the previous lane session", async () => {
