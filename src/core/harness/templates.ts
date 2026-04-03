@@ -4,8 +4,11 @@ import * as path from "path";
 import * as crypto from "crypto";
 import yaml from "js-yaml";
 import type {
+  AutomationRefStatus,
+  BoundaryStatus,
   DriftFinding,
   DriftLevel,
+  DriftPolicy,
   DoctorReport,
   GateStatus,
   GuideStatus,
@@ -166,6 +169,17 @@ function checkGuides(
   return results;
 }
 
+function collectBoundaries(
+  repoRoot: string,
+  config: HarnessTemplateConfig,
+): BoundaryStatus[] {
+  return (config.topology.boundaries ?? []).map((boundary) => ({
+    path: boundary.path,
+    role: boundary.role,
+    present: fs.existsSync(joinRepoPath(repoRoot, boundary.path)),
+  }));
+}
+
 function checkSensorFiles(
   repoRoot: string,
   config: HarnessTemplateConfig,
@@ -211,6 +225,22 @@ function checkSensorFiles(
   }
 
   return results;
+}
+
+function collectAutomationRef(
+  repoRoot: string,
+  config: HarnessTemplateConfig,
+): AutomationRefStatus | undefined {
+  const relPath = config.automations?.ref;
+  if (!relPath) return undefined;
+
+  const abs = joinRepoPath(repoRoot, relPath);
+  const present = fs.existsSync(abs);
+  return {
+    path: relPath,
+    present,
+    checksum: present ? fileSha256(abs) : undefined,
+  };
 }
 
 function collectGates(config: HarnessTemplateConfig): GateStatus[] {
@@ -263,6 +293,16 @@ function collectLifecycleTiers(
     .sort((a, b) => tierOrder(a.tier) - tierOrder(b.tier));
 }
 
+function collectDriftPolicy(
+  config: HarnessTemplateConfig,
+): DriftPolicy | undefined {
+  if (!config.drift) return undefined;
+  return {
+    strategy: config.drift.strategy,
+    notifyOn: config.drift.notify_on ?? [],
+  };
+}
+
 function resolveOverallDrift(findings: DriftFinding[]): DriftLevel {
   if (findings.some((f) => f.level === "error")) return "error";
   if (findings.some((f) => f.level === "warning")) return "warning";
@@ -276,10 +316,13 @@ function buildValidationReport(
 ): TemplateValidationReport {
   const driftFindings: DriftFinding[] = [];
   const guides = checkGuides(repoRoot, config, driftFindings);
+  const boundaries = collectBoundaries(repoRoot, config);
   const sensorFiles = checkSensorFiles(repoRoot, config, driftFindings);
+  const automationRef = collectAutomationRef(repoRoot, config);
   const gates = collectGates(config);
   const specialists = checkSpecialists(repoRoot, config);
   const lifecycleTiers = collectLifecycleTiers(config, gates);
+  const driftPolicy = collectDriftPolicy(config);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -291,10 +334,13 @@ function buildValidationReport(
     runtimes: config.topology.runtimes ?? [],
     protocols: config.topology.protocols ?? [],
     guides,
+    boundaries,
     sensorFiles,
+    automationRef,
     gates,
     specialists,
     lifecycleTiers,
+    driftPolicy,
     driftFindings,
     overallDrift: resolveOverallDrift(driftFindings),
     warnings: [],

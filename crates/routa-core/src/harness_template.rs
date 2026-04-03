@@ -168,9 +168,25 @@ pub struct GuideStatus {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BoundaryStatus {
+    pub path: String,
+    pub role: String,
+    pub present: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SensorFileStatus {
     pub path: String,
     pub role: String,
+    pub present: bool,
+    pub checksum: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationRefStatus {
+    pub path: String,
     pub present: bool,
     pub checksum: Option<String>,
 }
@@ -220,6 +236,13 @@ pub struct DriftFinding {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DriftPolicy {
+    pub strategy: Option<String>,
+    pub notify_on: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TemplateValidationReport {
     pub generated_at: String,
     pub template_id: String,
@@ -230,10 +253,13 @@ pub struct TemplateValidationReport {
     pub runtimes: Vec<String>,
     pub protocols: Vec<String>,
     pub guides: Vec<GuideStatus>,
+    pub boundaries: Vec<BoundaryStatus>,
     pub sensor_files: Vec<SensorFileStatus>,
+    pub automation_ref: Option<AutomationRefStatus>,
     pub gates: Vec<GateStatus>,
     pub specialists: Vec<SpecialistBinding>,
     pub lifecycle_tiers: Vec<LifecycleTier>,
+    pub drift_policy: Option<DriftPolicy>,
     pub drift_findings: Vec<DriftFinding>,
     pub overall_drift: DriftLevel,
     pub warnings: Vec<String>,
@@ -377,8 +403,8 @@ fn load_all_template_configs(
 }
 
 fn load_template_config(path: &Path) -> Result<HarnessTemplateConfig, String> {
-    let raw = fs::read_to_string(path)
-        .map_err(|err| format!("cannot read {}: {err}", path.display()))?;
+    let raw =
+        fs::read_to_string(path).map_err(|err| format!("cannot read {}: {err}", path.display()))?;
     let config: HarnessTemplateConfig = serde_yaml::from_str(&raw)
         .map_err(|err| format!("invalid YAML in {}: {err}", path.display()))?;
     if config.schema != "harness-template-v1" {
@@ -424,18 +450,24 @@ fn build_validation_report(
     config: &HarnessTemplateConfig,
     config_path: &str,
 ) -> Result<TemplateValidationReport, String> {
-    let mut warnings = Vec::new();
+    let warnings = Vec::new();
     let mut drift_findings = Vec::new();
 
     let guides = check_guides(repo_root, config, &mut drift_findings);
+    let boundaries = collect_boundaries(repo_root, config);
     let sensor_files = check_sensor_files(repo_root, config, &mut drift_findings);
+    let automation_ref = collect_automation_ref(repo_root, config);
     let gates = collect_gates(config);
-    let specialists = check_specialists(repo_root, config, &mut warnings);
+    let specialists = check_specialists(repo_root, config);
     let lifecycle_tiers = collect_lifecycle_tiers(config, &gates);
+    let drift_policy = collect_drift_policy(config);
 
     let overall_drift = if drift_findings.iter().any(|f| f.level == DriftLevel::Error) {
         DriftLevel::Error
-    } else if drift_findings.iter().any(|f| f.level == DriftLevel::Warning) {
+    } else if drift_findings
+        .iter()
+        .any(|f| f.level == DriftLevel::Warning)
+    {
         DriftLevel::Warning
     } else {
         DriftLevel::Healthy
@@ -451,10 +483,13 @@ fn build_validation_report(
         runtimes: config.topology.runtimes.clone(),
         protocols: config.topology.protocols.clone(),
         guides,
+        boundaries,
         sensor_files,
+        automation_ref,
         gates,
         specialists,
         lifecycle_tiers,
+        drift_policy,
         drift_findings,
         overall_drift,
         warnings,
@@ -509,6 +544,19 @@ fn check_guides(
     }
 
     results
+}
+
+fn collect_boundaries(repo_root: &Path, config: &HarnessTemplateConfig) -> Vec<BoundaryStatus> {
+    config
+        .topology
+        .boundaries
+        .iter()
+        .map(|boundary| BoundaryStatus {
+            path: boundary.path.clone(),
+            role: boundary.role.clone(),
+            present: path_exists(repo_root, &boundary.path),
+        })
+        .collect()
 }
 
 fn check_sensor_files(
@@ -582,6 +630,26 @@ fn check_sensor_files(
     results
 }
 
+fn collect_automation_ref(
+    repo_root: &Path,
+    config: &HarnessTemplateConfig,
+) -> Option<AutomationRefStatus> {
+    let rel_path = config.automations.as_ref()?.reference.as_ref()?;
+    let abs = repo_root.join(rel_path);
+    let present = abs.exists();
+    let checksum = if present {
+        file_sha256(&abs).ok()
+    } else {
+        None
+    };
+
+    Some(AutomationRefStatus {
+        path: rel_path.clone(),
+        present,
+        checksum,
+    })
+}
+
 fn collect_gates(config: &HarnessTemplateConfig) -> Vec<GateStatus> {
     let mut gates = Vec::new();
     let hard_gates = match config.sensors.as_ref().and_then(|s| s.hard_gates.as_ref()) {
@@ -617,11 +685,7 @@ fn collect_gates(config: &HarnessTemplateConfig) -> Vec<GateStatus> {
     gates
 }
 
-fn check_specialists(
-    repo_root: &Path,
-    config: &HarnessTemplateConfig,
-    _warnings: &mut Vec<String>,
-) -> Vec<SpecialistBinding> {
+fn check_specialists(repo_root: &Path, config: &HarnessTemplateConfig) -> Vec<SpecialistBinding> {
     config
         .specialists
         .iter()
@@ -640,6 +704,13 @@ fn check_specialists(
             }
         })
         .collect()
+}
+
+fn collect_drift_policy(config: &HarnessTemplateConfig) -> Option<DriftPolicy> {
+    config.drift.as_ref().map(|drift| DriftPolicy {
+        strategy: drift.strategy.clone(),
+        notify_on: drift.notify_on.clone(),
+    })
 }
 
 fn collect_lifecycle_tiers(
@@ -663,9 +734,7 @@ fn collect_lifecycle_tiers(
             }
         })
         .collect();
-    result.sort_by(|a, b| {
-        tier_order(&a.tier).cmp(&tier_order(&b.tier))
-    });
+    result.sort_by(|a, b| tier_order(&a.tier).cmp(&tier_order(&b.tier)));
     result
 }
 
@@ -709,6 +778,9 @@ topology:
   app_type: web
   runtimes:
     - nextjs
+  boundaries:
+    - path: src/app
+      role: presentation
 guides:
   required:
     - path: AGENTS.md
@@ -717,6 +789,8 @@ sensors:
   fitness_manifest: docs/fitness/manifest.yaml
   surfaces:
     - docs/harness/build.yml
+automations:
+  ref: docs/harness/automations.yml
 specialists:
   - id: harness-build
     role: Build validation
@@ -776,6 +850,7 @@ drift:
         setup_minimal_template(tmp.path());
 
         fs::write(tmp.path().join("AGENTS.md"), "# Agents").unwrap();
+        fs::create_dir_all(tmp.path().join("src/app")).unwrap();
         fs::create_dir_all(tmp.path().join("docs/fitness")).unwrap();
         fs::write(
             tmp.path().join("docs/fitness/manifest.yaml"),
@@ -788,10 +863,34 @@ drift:
             "schema: harness-surface-v1",
         )
         .unwrap();
+        fs::write(
+            tmp.path().join("docs/harness/automations.yml"),
+            "schema: harness-automation-v1",
+        )
+        .unwrap();
 
         let report = validate_template(tmp.path(), "test-web").unwrap();
         assert_eq!(report.overall_drift, DriftLevel::Healthy);
         assert!(report.drift_findings.is_empty());
+        assert_eq!(report.boundaries.len(), 1);
+        assert!(report.boundaries[0].present);
+        assert_eq!(
+            report
+                .automation_ref
+                .as_ref()
+                .expect("automation ref should exist")
+                .path,
+            "docs/harness/automations.yml"
+        );
+        assert_eq!(
+            report
+                .drift_policy
+                .as_ref()
+                .expect("drift policy should exist")
+                .strategy
+                .as_deref(),
+            Some("checksum-on-evidence-files")
+        );
     }
 
     #[test]

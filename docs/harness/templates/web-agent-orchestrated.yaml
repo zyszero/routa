@@ -23,7 +23,7 @@ topology:
       role: presentation
     - path: src/core
       role: domain-services
-    - path: src/server
+    - path: src/core/db
       role: persistence
 
 guides:

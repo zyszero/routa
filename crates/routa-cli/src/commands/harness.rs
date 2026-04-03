@@ -231,8 +231,20 @@ fn print_validation_report(report: &harness_template::TemplateValidationReport) 
         println!("  guides:");
         for g in &report.guides {
             let status = if g.present { "OK" } else { "MISSING" };
-            let req = if g.required { "required" } else { "recommended" };
+            let req = if g.required {
+                "required"
+            } else {
+                "recommended"
+            };
             println!("    [{status}] {} ({req})", g.path);
+        }
+    }
+
+    if !report.boundaries.is_empty() {
+        println!("  boundaries:");
+        for boundary in &report.boundaries {
+            let status = if boundary.present { "OK" } else { "MISSING" };
+            println!("    [{status}] {} ({})", boundary.path, boundary.role);
         }
     }
 
@@ -242,6 +254,16 @@ fn print_validation_report(report: &harness_template::TemplateValidationReport) 
             let status = if s.present { "OK" } else { "MISSING" };
             println!("    [{status}] {} ({})", s.path, s.role);
         }
+    }
+
+    if let Some(automation_ref) = &report.automation_ref {
+        let status = if automation_ref.present {
+            "OK"
+        } else {
+            "MISSING"
+        };
+        println!("  automations:");
+        println!("    [{status}] {}", automation_ref.path);
     }
 
     if !report.lifecycle_tiers.is_empty() {
@@ -259,10 +281,29 @@ fn print_validation_report(report: &harness_template::TemplateValidationReport) 
         }
     }
 
+    if let Some(drift_policy) = &report.drift_policy {
+        let strategy = drift_policy.strategy.as_deref().unwrap_or("unspecified");
+        let notify_on = if drift_policy.notify_on.is_empty() {
+            "none".to_string()
+        } else {
+            drift_policy.notify_on.join(", ")
+        };
+        println!("  drift policy:");
+        println!("    strategy: {strategy}");
+        println!("    notify_on: {notify_on}");
+    }
+
     if !report.drift_findings.is_empty() {
         println!("  drift findings:");
         for f in &report.drift_findings {
             println!("    [{:?}] {}: {}", f.level, f.kind, f.message);
+        }
+    }
+
+    if !report.warnings.is_empty() {
+        println!("  warnings:");
+        for warning in &report.warnings {
+            println!("    - {warning}");
         }
     }
 }

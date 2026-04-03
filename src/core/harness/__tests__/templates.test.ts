@@ -26,6 +26,9 @@ const MINIMAL_TEMPLATE = [
   "  app_type: web",
   "  runtimes:",
   "    - nextjs",
+  "  boundaries:",
+  "    - path: src/app",
+  "      role: presentation",
   "guides:",
   "  required:",
   "    - path: AGENTS.md",
@@ -37,6 +40,8 @@ const MINIMAL_TEMPLATE = [
   "  fitness_manifest: docs/fitness/manifest.yaml",
   "  surfaces:",
   "    - docs/harness/build.yml",
+  "automations:",
+  "  ref: docs/harness/automations.yml",
   "specialists:",
   "  - id: harness-build",
   "    role: Build validation",
@@ -115,6 +120,7 @@ describe("validateHarnessTemplate", () => {
       MINIMAL_TEMPLATE,
     );
     writeFile(path.join(tmpDir, "AGENTS.md"), "# Agents");
+    mkdirp(path.join(tmpDir, "src/app"));
     writeFile(path.join(tmpDir, "docs/adr/README.md"), "# ADRs");
     writeFile(
       path.join(tmpDir, "docs/fitness/manifest.yaml"),
@@ -124,10 +130,19 @@ describe("validateHarnessTemplate", () => {
       path.join(tmpDir, "docs/harness/build.yml"),
       "schema: harness-surface-v1",
     );
+    writeFile(
+      path.join(tmpDir, "docs/harness/automations.yml"),
+      "schema: harness-automation-v1",
+    );
 
     const report = await validateHarnessTemplate(tmpDir, "test-web");
     expect(report.overallDrift).toBe("healthy");
     expect(report.driftFindings).toHaveLength(0);
+    expect(report.boundaries).toEqual([
+      { path: "src/app", role: "presentation", present: true },
+    ]);
+    expect(report.automationRef?.path).toBe("docs/harness/automations.yml");
+    expect(report.driftPolicy?.strategy).toBe("checksum-on-evidence-files");
   });
 
   it("includes sensor checksums when files are present", async () => {

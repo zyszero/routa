@@ -5,9 +5,21 @@ export type GuideStatus = {
   present: boolean;
 };
 
+export type BoundaryStatus = {
+  path: string;
+  role: string;
+  present: boolean;
+};
+
 export type SensorFileStatus = {
   path: string;
   role: string;
+  present: boolean;
+  checksum?: string;
+};
+
+export type AutomationRefStatus = {
+  path: string;
   present: boolean;
   checksum?: string;
 };
@@ -41,6 +53,11 @@ export type DriftFinding = {
   level: DriftLevel;
 };
 
+export type DriftPolicy = {
+  strategy?: string;
+  notifyOn: string[];
+};
+
 export type HarnessTemplateSummary = {
   id: string;
   name: string;
@@ -61,10 +78,13 @@ export type TemplateValidationReport = {
   runtimes: string[];
   protocols: string[];
   guides: GuideStatus[];
+  boundaries: BoundaryStatus[];
   sensorFiles: SensorFileStatus[];
+  automationRef?: AutomationRefStatus;
   gates: GateStatus[];
   specialists: SpecialistBinding[];
   lifecycleTiers: LifecycleTier[];
+  driftPolicy?: DriftPolicy;
   driftFindings: DriftFinding[];
   overallDrift: DriftLevel;
   warnings: string[];
