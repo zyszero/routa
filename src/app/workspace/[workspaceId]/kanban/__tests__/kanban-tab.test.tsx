@@ -220,6 +220,135 @@ describe("KanbanTab stale worktree recovery", () => {
   });
 });
 
+describe("KanbanTab GitHub import", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("preserves the selected ACP provider when importing backlog issues", async () => {
+    desktopAwareFetch.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/github/issues?workspaceId=workspace-1&codebaseId=codebase-1") {
+        return {
+          ok: true,
+          json: async () => ({
+            repo: "phodal/routa-js",
+            codebase: { id: "codebase-1", label: "routa-js" },
+            issues: [{
+              id: "issue-1",
+              number: 161,
+              title: "Imported issue",
+              body: "Imported from GitHub",
+              url: "https://github.com/phodal/routa-js/issues/161",
+              state: "open",
+              labels: ["bug"],
+              assignees: [],
+              updatedAt: "2025-01-01T00:00:00.000Z",
+            }],
+          }),
+        } as Response;
+      }
+      throw new Error(`Unexpected desktopAwareFetch: ${url}`);
+    });
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/tasks" && init?.method === "POST") {
+        return {
+          ok: true,
+          json: async () => ({
+            task: createTask("task-imported", "Imported issue", {
+              assignedProvider: "codex",
+              codebaseIds: ["codebase-1"],
+            }),
+          }),
+        } as Response;
+      }
+      throw new Error(`Unexpected fetch: ${init?.method ?? "GET"} ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <KanbanTab
+        workspaceId="workspace-1"
+        boards={[board]}
+        tasks={[]}
+        sessions={[]}
+        providers={[{
+          id: "codex",
+          name: "Codex",
+          description: "Codex provider",
+          command: "codex-acp",
+          status: "available",
+        }]}
+        specialists={[]}
+        codebases={[{
+          id: "codebase-1",
+          repoPath: "/Users/phodal/repos/routa-js",
+          sourceUrl: "https://github.com/phodal/routa-js",
+          isDefault: true,
+          label: "routa-js",
+          branch: "main",
+        }]}
+        acp={{
+          connected: true,
+          sessionId: null,
+          updates: [],
+          providers: [],
+          selectedProvider: "codex",
+          loading: false,
+          error: null,
+          authError: null,
+          dockerConfigError: null,
+          setProvider: vi.fn(),
+          connect: vi.fn(),
+          disconnect: vi.fn(),
+          createSession: vi.fn(),
+          createSessionWithOptions: vi.fn(),
+          createSessionWithWorkspace: vi.fn(),
+          prompt: vi.fn(),
+          cancel: vi.fn(),
+          listSessions: vi.fn(),
+          selectSession: vi.fn(),
+          deleteSession: vi.fn(),
+          listProviderModels: vi.fn(),
+          clearAuthError: vi.fn(),
+        } as UseAcpState & UseAcpActions}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /import issues/i }));
+
+    expect(await screen.findByRole("link", { name: /imported issue/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: /import selected/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: "workspace-1",
+          boardId: "board-1",
+          columnId: "backlog",
+          title: "Imported issue",
+          objective: "Imported from GitHub",
+          labels: ["bug"],
+          codebaseIds: ["codebase-1"],
+          githubId: "issue-1",
+          githubNumber: 161,
+          githubUrl: "https://github.com/phodal/routa-js/issues/161",
+          githubRepo: "phodal/routa-js",
+          githubState: "open",
+          assignedProvider: "codex",
+        }),
+      });
+    });
+  });
+});
+
 describe("KanbanCardDetail changes tab", () => {
   it("loads task-scoped worktree changes when the changes tab opens", async () => {
     desktopAwareFetch.mockResolvedValue({
@@ -1113,4 +1242,3 @@ describe("KanbanTab quick ACP assignment", () => {
     expect(screen.queryByText("Claude Code · GATE · Review Guard")).toBeNull();
   });
 });
-

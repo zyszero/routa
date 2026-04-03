@@ -1016,6 +1016,7 @@ export function KanbanTab({
     repo: string,
   ) {
     const importedTasks: TaskInfo[] = [];
+    const selectedProvider = acp?.selectedProvider;
 
     for (const issue of issues) {
       const response = await fetch("/api/tasks", {
@@ -1034,6 +1035,7 @@ export function KanbanTab({
           githubUrl: issue.url,
           githubRepo: repo,
           githubState: issue.state,
+          assignedProvider: selectedProvider,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -1068,6 +1070,7 @@ export function KanbanTab({
     repo: string,
   ) {
     const importedTasks: TaskInfo[] = [];
+    const selectedProvider = acp?.selectedProvider;
 
     for (const pull of pulls) {
       const response = await fetch("/api/tasks", {
@@ -1087,6 +1090,7 @@ export function KanbanTab({
           githubRepo: repo,
           githubState: pull.state,
           isPullRequest: true,
+          assignedProvider: selectedProvider,
         }),
       });
       const data = await response.json().catch(() => ({}));
