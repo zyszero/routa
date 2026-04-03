@@ -34,11 +34,11 @@ function SummaryBlock({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white/90 p-3 dark:border-slate-700 dark:bg-[#0f141d]">
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white/90 p-3 dark:border-slate-700 dark:bg-[#0f141d]">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
         {label}
       </div>
-      <div className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700 dark:text-slate-200">
+      <div className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700 dark:text-slate-200">
         {value}
       </div>
     </div>
@@ -55,7 +55,7 @@ function ListBlock({
   emptyLabel: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white/90 p-3 dark:border-slate-700 dark:bg-[#0f141d]">
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white/90 p-3 dark:border-slate-700 dark:bg-[#0f141d]">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
         {label}
       </div>
@@ -142,19 +142,17 @@ export function CanonicalStoryRenderer({
       data-testid="canonical-story-renderer"
     >
       <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200">
-                {t.kanbanDetail.validYaml}
-              </span>
-              <span className="text-xs text-slate-600 dark:text-slate-300">
-                {t.kanbanDetail.structuredStory}
-              </span>
-            </div>
-            <div className="mt-2 text-base font-semibold text-slate-950 dark:text-slate-50">
-              {story.title}
-            </div>
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200">
+              {t.kanbanDetail.validYaml}
+            </span>
+            <span className="text-xs text-slate-600 dark:text-slate-300">
+              {t.kanbanDetail.structuredStory}
+            </span>
+          </div>
+          <div className="text-lg font-semibold leading-8 text-slate-950 dark:text-slate-50">
+            {story.title}
           </div>
           <div className="flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
             <span className="rounded-full border border-slate-200 bg-white/90 px-2.5 py-1 dark:border-slate-700 dark:bg-[#0f141d]">
@@ -172,7 +170,7 @@ export function CanonicalStoryRenderer({
           </div>
         </div>
 
-        <div className={joinClasses("grid gap-3", compact ? "grid-cols-1" : "grid-cols-2")}>
+        <div className={joinClasses("grid gap-3", compact ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2")}>
           <SummaryBlock label={t.kanbanDetail.problemStatement} value={story.problem_statement} />
           <SummaryBlock label={t.kanbanDetail.userValue} value={story.user_value} />
         </div>
@@ -208,11 +206,11 @@ export function CanonicalStoryRenderer({
           </div>
         </div>
 
-        <div className={joinClasses("grid gap-2", compact ? "grid-cols-1" : "grid-cols-2 xl:grid-cols-3")}>
+        <div className={joinClasses("grid gap-2", compact ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2 xl:grid-cols-3")}>
           {investItems.map(({ label, check }) => (
             <div
               key={label}
-              className="rounded-2xl border border-slate-200 bg-white/90 p-3 dark:border-slate-700 dark:bg-[#0f141d]"
+              className="min-w-0 rounded-2xl border border-slate-200 bg-white/90 p-3 dark:border-slate-700 dark:bg-[#0f141d]"
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
@@ -227,14 +225,14 @@ export function CanonicalStoryRenderer({
                   {formatStatus(check.status, t)}
                 </span>
               </div>
-              <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700 dark:text-slate-200">
+              <div className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700 dark:text-slate-200">
                 {check.reason}
               </div>
             </div>
           ))}
         </div>
 
-        <div className={joinClasses("grid gap-3", compact ? "grid-cols-1" : "grid-cols-2")}>
+        <div className={joinClasses("grid gap-3", compact ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2")}>
           <ListBlock
             label={t.kanbanDetail.affectedAreas}
             items={story.constraints_and_affected_areas}
