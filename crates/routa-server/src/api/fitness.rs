@@ -15,6 +15,7 @@ use tokio::process::Command;
 
 use crate::api::repo_context::{
     extract_frontmatter, json_error, read_to_string, resolve_repo_root, RepoContextQuery,
+    ResolveRepoRootOptions,
 };
 use crate::error::ServerError;
 use crate::state::AppState;
@@ -64,6 +65,9 @@ async fn analyze_fitness(
         body.codebase_id.as_deref(),
         body.repo_path.as_deref(),
         "缺少 fitness 分析上下文，请提供 workspaceId / codebaseId / repoPath 之一",
+        ResolveRepoRootOptions {
+            prefer_current_repo_for_default_workspace: true,
+        },
     )
     .await
     .map_err(map_context_error(
@@ -97,6 +101,9 @@ async fn get_fitness_report(
         query.codebase_id.as_deref(),
         query.repo_path.as_deref(),
         "缺少 fitness 上下文，请提供 workspaceId / codebaseId / repoPath 之一",
+        ResolveRepoRootOptions {
+            prefer_current_repo_for_default_workspace: true,
+        },
     )
     .await
     .map_err(map_context_error(
@@ -156,6 +163,9 @@ async fn get_fitness_architecture(
         query.codebase_id.as_deref(),
         query.repo_path.as_deref(),
         "缺少 fitness 上下文，请提供 workspaceId / codebaseId / repoPath 之一",
+        ResolveRepoRootOptions {
+            prefer_current_repo_for_default_workspace: true,
+        },
     )
     .await
     .map_err(map_context_error(
@@ -246,6 +256,7 @@ async fn get_fitness_plan(
         query.codebase_id.as_deref(),
         query.repo_path.as_deref(),
         "缺少 fitness 上下文，请提供 workspaceId / codebaseId / repoPath 之一",
+        ResolveRepoRootOptions::default(),
     )
     .await
     .map_err(map_context_error(
@@ -383,6 +394,7 @@ async fn get_fitness_specs(
         query.codebase_id.as_deref(),
         query.repo_path.as_deref(),
         "缺少 fitness 上下文，请提供 workspaceId / codebaseId / repoPath 之一",
+        ResolveRepoRootOptions::default(),
     )
     .await
     .map_err(map_context_error(

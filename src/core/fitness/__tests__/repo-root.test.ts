@@ -18,15 +18,18 @@ import { isFitnessContextError, resolveFitnessRepoRoot } from "../repo-root";
 
 describe("fitness repo root resolution", () => {
   let tempDir: string;
+  let previousCwd: string;
 
   beforeEach(() => {
     vi.clearAllMocks();
     system.codebaseStore.get.mockResolvedValue(undefined);
     system.codebaseStore.listByWorkspace.mockResolvedValue([]);
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "routa-fitness-repo-root-"));
+    previousCwd = process.cwd();
   });
 
   afterEach(() => {
+    process.chdir(previousCwd);
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -45,5 +48,20 @@ describe("fitness repo root resolution", () => {
     });
 
     await expect(resolveFitnessRepoRoot({ codebaseId: "cb-local" })).resolves.toBe(tempDir);
+  });
+
+  it("prefers the current routa repo for the default workspace when requested", async () => {
+    fs.mkdirSync(path.join(tempDir, "docs", "fitness"), { recursive: true });
+    fs.mkdirSync(path.join(tempDir, "crates", "routa-cli"), { recursive: true });
+    fs.writeFileSync(path.join(tempDir, "docs", "fitness", "harness-fluency.model.yaml"), "version: 1\n");
+    process.chdir(tempDir);
+
+    await expect(
+      resolveFitnessRepoRoot(
+        { workspaceId: "default" },
+        { preferCurrentRepoForDefaultWorkspace: true },
+      ),
+    ).resolves.toBe(fs.realpathSync(tempDir));
+    expect(system.codebaseStore.listByWorkspace).not.toHaveBeenCalled();
   });
 });

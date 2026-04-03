@@ -7,7 +7,9 @@ use axum::{
 };
 use serde_json::{json, Value};
 
-use crate::api::repo_context::{json_error, resolve_repo_root, RepoContextQuery};
+use crate::api::repo_context::{
+    json_error, resolve_repo_root, RepoContextQuery, ResolveRepoRootOptions,
+};
 use crate::error::ServerError;
 use crate::state::AppState;
 
@@ -21,6 +23,7 @@ pub async fn get_github_actions(
         query.codebase_id.as_deref(),
         query.repo_path.as_deref(),
         "缺少 harness 上下文，请提供 workspaceId / codebaseId / repoPath 之一",
+        ResolveRepoRootOptions::default(),
     )
     .await
     .map_err(map_context_error(

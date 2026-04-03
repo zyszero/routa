@@ -76,12 +76,39 @@ pub fn validate_local_git_repo_path(candidate: &Path) -> Result<(), ServerError>
 
     Ok(())
 }
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ResolveRepoRootOptions {
+    pub prefer_current_repo_for_default_workspace: bool,
+}
+
+pub fn is_routa_repo_root(candidate: &Path) -> bool {
+    candidate
+        .join("docs/fitness/harness-fluency.model.yaml")
+        .exists()
+        && candidate.join("crates/routa-cli").is_dir()
+}
+
+fn current_routa_repo_root_from(candidate: &Path) -> Option<PathBuf> {
+    if is_routa_repo_root(candidate) {
+        Some(candidate.to_path_buf())
+    } else {
+        None
+    }
+}
+
+pub fn get_current_routa_repo_root() -> Option<PathBuf> {
+    let candidate = std::env::current_dir().ok()?;
+    current_routa_repo_root_from(&candidate)
+}
+
 pub async fn resolve_repo_root(
     state: &AppState,
     workspace_id: Option<&str>,
     codebase_id: Option<&str>,
     repo_path: Option<&str>,
     missing_context_message: &str,
+    options: ResolveRepoRootOptions,
 ) -> Result<PathBuf, ServerError> {
     let workspace_id = normalize_context_value(workspace_id);
     let codebase_id = normalize_context_value(codebase_id);
@@ -108,6 +135,12 @@ pub async fn resolve_repo_root(
     let Some(workspace_id) = workspace_id else {
         return Err(ServerError::BadRequest(missing_context_message.to_string()));
     };
+
+    if options.prefer_current_repo_for_default_workspace && workspace_id == "default" {
+        if let Some(current_repo_root) = get_current_routa_repo_root() {
+            return Ok(current_repo_root);
+        }
+    }
 
     let codebases = state
         .codebase_store
@@ -169,4 +202,37 @@ pub fn read_to_string(path: &Path) -> Result<String, ServerError> {
     fs::read_to_string(path).map_err(|error| {
         ServerError::Internal(format!("Failed to read {}: {}", path.display(), error))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{current_routa_repo_root_from, is_routa_repo_root};
+
+    #[test]
+    fn detects_routa_repo_root_from_markers() {
+        let temp = tempfile::tempdir().expect("tempdir should exist");
+        std::fs::create_dir_all(temp.path().join("docs/fitness"))
+            .expect("fitness dir should exist");
+        std::fs::create_dir_all(temp.path().join("crates/routa-cli"))
+            .expect("routa-cli dir should exist");
+        std::fs::write(
+            temp.path().join("docs/fitness/harness-fluency.model.yaml"),
+            "version: 1\n",
+        )
+        .expect("marker file should exist");
+
+        assert!(is_routa_repo_root(temp.path()));
+        assert_eq!(
+            current_routa_repo_root_from(temp.path()),
+            Some(temp.path().to_path_buf())
+        );
+    }
+
+    #[test]
+    fn ignores_non_routa_repo_roots() {
+        let temp = tempfile::tempdir().expect("tempdir should exist");
+
+        assert!(!is_routa_repo_root(temp.path()));
+        assert_eq!(current_routa_repo_root_from(temp.path()), None);
+    }
 }

@@ -23,6 +23,7 @@ use crate::api::harness_instructions_audit::run_instruction_audit;
 use crate::api::harness_repo_views::{get_harness_automations, get_harness_repo_signals};
 use crate::api::repo_context::{
     extract_frontmatter, json_error, read_to_string, resolve_repo_root, RepoContextQuery,
+    ResolveRepoRootOptions,
 };
 use crate::error::ServerError;
 use crate::state::AppState;
@@ -51,6 +52,7 @@ async fn get_agent_hooks(
         query.codebase_id.as_deref(),
         query.repo_path.as_deref(),
         "Missing agent hooks context. Provide workspaceId, codebaseId, or repoPath.",
+        ResolveRepoRootOptions::default(),
     )
     .await
     .map_err(map_context_error(
@@ -116,6 +118,7 @@ async fn get_codeowners(
         query.codebase_id.as_deref(),
         query.repo_path.as_deref(),
         "Missing CODEOWNERS context. Provide workspaceId, codebaseId, or repoPath.",
+        ResolveRepoRootOptions::default(),
     )
     .await?;
 
@@ -135,6 +138,7 @@ async fn get_spec_sources(
         query.codebase_id.as_deref(),
         query.repo_path.as_deref(),
         "Missing spec sources context. Provide workspaceId, codebaseId, or repoPath.",
+        ResolveRepoRootOptions::default(),
     )
     .await?;
 
@@ -154,6 +158,7 @@ async fn get_design_decisions(
         query.codebase_id.as_deref(),
         query.repo_path.as_deref(),
         "Missing design decisions context. Provide workspaceId, codebaseId, or repoPath.",
+        ResolveRepoRootOptions::default(),
     )
     .await?;
 
@@ -193,6 +198,7 @@ async fn get_harness_hooks(
         query.codebase_id.as_deref(),
         query.repo_path.as_deref(),
         "缺少 harness 上下文，请提供 workspaceId / codebaseId / repoPath 之一",
+        ResolveRepoRootOptions::default(),
     )
     .await
     .map_err(map_context_error(
@@ -314,6 +320,7 @@ async fn get_hook_preview(
         query.codebase_id.as_deref(),
         query.repo_path.as_deref(),
         "缺少 harness 上下文，请提供 workspaceId / codebaseId / repoPath 之一",
+        ResolveRepoRootOptions::default(),
     )
     .await
     .map_err(map_context_error(
@@ -403,6 +410,7 @@ async fn get_harness_instructions(
         query.codebase_id.as_deref(),
         query.repo_path.as_deref(),
         "缺少 harness 上下文，请提供 workspaceId / codebaseId / repoPath 之一",
+        ResolveRepoRootOptions::default(),
     )
     .await
     .map_err(map_context_error(

@@ -7,7 +7,9 @@ use routa_core::harness::detect_repo_signals;
 use routa_core::harness_automation::detect_repo_automations;
 use serde_json::Value;
 
-use crate::api::repo_context::{json_error, resolve_repo_root, RepoContextQuery};
+use crate::api::repo_context::{
+    json_error, resolve_repo_root, RepoContextQuery, ResolveRepoRootOptions,
+};
 use crate::error::ServerError;
 use crate::state::AppState;
 
@@ -21,6 +23,7 @@ pub async fn get_harness_repo_signals(
         query.codebase_id.as_deref(),
         query.repo_path.as_deref(),
         "Missing harness repo context. Provide workspaceId, codebaseId, or repoPath.",
+        ResolveRepoRootOptions::default(),
     )
     .await?;
 
@@ -40,6 +43,7 @@ pub async fn get_harness_automations(
         query.codebase_id.as_deref(),
         query.repo_path.as_deref(),
         "缺少 harness 上下文，请提供 workspaceId / codebaseId / repoPath 之一",
+        ResolveRepoRootOptions::default(),
     )
     .await
     .map_err(map_context_error(
