@@ -12,11 +12,11 @@ import type { DependencyGraph } from "@/types/graph";
 const TIMEOUT_MS = 30000; // 30 seconds
 
 function findRoutaCli(): string | null {
-  // Try to find routa-cli binary
+  // Try to find routa binary (contains CLI subcommands)
   const candidates = [
-    join(process.cwd(), "target", "release", "routa-cli"),
-    join(process.cwd(), "target", "debug", "routa-cli"),
-    "routa-cli", // In PATH
+    join(process.cwd(), "target", "release", "routa"),
+    join(process.cwd(), "target", "debug", "routa"),
+    "routa", // In PATH
   ];
 
   for (const candidate of candidates) {
@@ -26,7 +26,7 @@ function findRoutaCli(): string | null {
   }
 
   // If not found locally, assume it's in PATH
-  return "routa-cli";
+  return "routa";
 }
 
 function executeRoutaCli(args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number | null }> {
