@@ -90,12 +90,43 @@ class WebProcess implements IPlatformProcess {
     }).toString();
   }
 
+  private getCandidateDirectory(candidate: string): string {
+    const normalized = candidate.trim().replace(/[\\/]+$/, "");
+    const lastSeparator = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
+    if (lastSeparator < 0) return "";
+    return normalized.slice(0, lastSeparator).toLowerCase();
+  }
+
   async which(command: string): Promise<string | null> {
     if (this._isServerless) return null;
     try {
       const whichCmd = process.platform === "win32" ? "where" : "which";
       const result = this.execSync(`${whichCmd} ${command}`);
-      return result.trim().split("\n")[0] || null;
+      const candidates = result
+        .split(/\r?\n/)
+        .map((line: string) => line.trim())
+        .filter(Boolean);
+
+      if (process.platform !== "win32") {
+        return candidates[0] ?? null;
+      }
+
+      const firstCandidate = candidates[0];
+      if (!firstCandidate) return null;
+
+      const firstDirectory = this.getCandidateDirectory(firstCandidate);
+      const sameDirectoryCandidates = candidates.filter(
+        (candidate: string) => this.getCandidateDirectory(candidate) === firstDirectory
+      );
+      const preferred = [".cmd", ".bat", ".exe", ".com"];
+      for (const ext of preferred) {
+        const match = sameDirectoryCandidates.find((candidate: string) =>
+          candidate.toLowerCase().endsWith(ext)
+        );
+        if (match) return match;
+      }
+
+      return firstCandidate;
     } catch {
       return null;
     }

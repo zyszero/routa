@@ -23,6 +23,7 @@
 import { spawn } from "child_process";
 import { getRegistryAgent } from "./acp-registry";
 import { AcpRuntimeManager } from "./runtime-manager";
+import { needsShell, quoteShellCommandPath } from "./utils";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -188,8 +189,9 @@ export class AcpWarmupService {
     );
 
     return new Promise((resolve) => {
-      const proc = spawn(runtimePath, args, {
+      const proc = spawn(quoteShellCommandPath(runtimePath), args, {
         stdio: ["ignore", "pipe", "pipe"],
+        shell: needsShell(runtimePath),
         env: {
           ...process.env,
           // Ensure the correct runtime directory is first on PATH

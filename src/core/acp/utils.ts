@@ -6,6 +6,15 @@
 
 import { getServerBridge } from "@/core/platform";
 
+const WINDOWS_SPAWNABLE_EXTENSIONS = [".cmd", ".bat", ".exe", ".com"];
+
+function getCandidateDirectory(candidate: string): string {
+  const normalized = candidate.trim().replace(/[\\/]+$/, "");
+  const lastSeparator = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
+  if (lastSeparator < 0) return "";
+  return normalized.slice(0, lastSeparator).toLowerCase();
+}
+
 /**
  * Whether a command path requires the shell to be invoked (Windows only).
  *
@@ -16,6 +25,42 @@ import { getServerBridge } from "@/core/platform";
 export function needsShell(command: string): boolean {
   const lower = command.toLowerCase();
   return lower.endsWith(".cmd") || lower.endsWith(".bat");
+}
+
+/**
+ * Quote Windows wrapper paths before handing them to `spawn(..., { shell: true })`.
+ *
+ * Without the extra quotes, cmd.exe splits paths like
+ * `C:\Program Files\nodejs\npx.cmd` at the first space.
+ */
+export function quoteShellCommandPath(command: string): string {
+  if (!needsShell(command) || !/\s/.test(command)) {
+    return command;
+  }
+
+  return `"${command}"`;
+}
+
+function preferSpawnableWindowsPath(candidates: string[]): string | null {
+  const normalized = candidates
+    .map((candidate) => candidate.trim())
+    .filter((candidate) => candidate.length > 0);
+  const firstCandidate = normalized[0];
+  if (!firstCandidate) return null;
+
+  const firstDirectory = getCandidateDirectory(firstCandidate);
+  const sameDirectoryCandidates = normalized.filter(
+    (candidate) => getCandidateDirectory(candidate) === firstDirectory
+  );
+
+  for (const ext of WINDOWS_SPAWNABLE_EXTENSIONS) {
+    const match = sameDirectoryCandidates.find((candidate) =>
+      candidate.toLowerCase().endsWith(ext)
+    );
+    if (match) return match;
+  }
+
+  return firstCandidate;
 }
 
 /**
@@ -68,5 +113,12 @@ export async function which(command: string): Promise<string | null> {
   }
 
   // 3. Check system PATH using bridge.process.which
-  return bridge.process.which(command);
+  const resolved = await bridge.process.which(command);
+  if (!resolved) return null;
+
+  if (!isWindows) {
+    return resolved;
+  }
+
+  return preferSpawnableWindowsPath(resolved.split(/\r?\n/));
 }
