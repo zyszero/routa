@@ -936,7 +936,11 @@ fn execute_graph_rules(
                 })?;
                 let graph = graph_cache
                     .entry(language)
-                    .or_insert_with(|| analyze_directory(graph_root, language.into_analysis_lang()));
+                    .or_insert_with(|| analyze_directory(
+                        graph_root,
+                        language.into_analysis_lang(),
+                        crate::commands::graph::AnalysisDepth::Fast, // Use Fast mode for fitness checks
+                    ));
                 rule_plan.execution = Some(execute_graph_rule(document_rule, document, graph)?);
             }
             Some(EngineHint::Archunitts) => {

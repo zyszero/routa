@@ -2,7 +2,7 @@
 
 pub mod analyze;
 
-pub use analyze::{analyze_directory, AnalysisLang, DependencyGraph};
+pub use analyze::{analyze_directory, AnalysisDepth, AnalysisLang, DependencyGraph};
 use clap::{Args, Subcommand, ValueEnum};
 
 #[derive(Subcommand, Debug, Clone)]
@@ -21,6 +21,10 @@ pub struct AnalyzeArgs {
     #[arg(long, short = 'l', value_enum, default_value_t = GraphLanguageArg::Auto)]
     pub lang: GraphLanguageArg,
 
+    /// Analysis depth: 'fast' (imports only) or 'normal' (full AST with classes/methods).
+    #[arg(long, value_enum, default_value_t = GraphDepthArg::Fast)]
+    pub depth: GraphDepthArg,
+
     /// Output format.
     #[arg(long, short = 'f', value_enum, default_value_t = GraphOutputFormat::Json)]
     pub format: GraphOutputFormat,
@@ -36,6 +40,8 @@ pub enum GraphLanguageArg {
     Rust,
     #[value(alias = "ts")]
     Typescript,
+    Java,
+    // Kotlin,  // Temporarily disabled due to tree-sitter version conflict
 }
 
 impl GraphLanguageArg {
@@ -44,6 +50,25 @@ impl GraphLanguageArg {
             Self::Auto => AnalysisLang::Auto,
             Self::Rust => AnalysisLang::Rust,
             Self::Typescript => AnalysisLang::TypeScript,
+            Self::Java => AnalysisLang::Java,
+            // Self::Kotlin => AnalysisLang::Kotlin,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
+pub enum GraphDepthArg {
+    /// Fast mode: extract file-level imports/uses only
+    Fast,
+    /// Normal mode: full AST analysis with classes, methods, and detailed relationships
+    Normal,
+}
+
+impl GraphDepthArg {
+    pub(crate) fn into_analysis_depth(self) -> AnalysisDepth {
+        match self {
+            Self::Fast => AnalysisDepth::Fast,
+            Self::Normal => AnalysisDepth::Normal,
         }
     }
 }

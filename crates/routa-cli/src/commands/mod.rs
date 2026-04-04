@@ -75,10 +75,6 @@ pub fn truncate_text(value: &str, max_len: usize) -> String {
     format!("{}…", truncated)
 }
 
-pub fn set_full_path_env() {
-    std::env::set_var("PATH", routa_core::shell_env::full_path());
-}
-
 pub fn format_rfc3339_timestamp(value: Option<&str>) -> String {
     value
         .and_then(|raw| chrono::DateTime::parse_from_rfc3339(raw).ok())

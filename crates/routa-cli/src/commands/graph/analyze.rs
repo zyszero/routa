@@ -15,15 +15,37 @@ pub struct GraphNode {
     pub path: String,
     pub language: String,
     pub kind: NodeKind,
+
+    // Optional fields for normal mode (detailed AST analysis)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub package_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_line: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_line: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum NodeKind {
+    // Fast mode - file level
     File,
     ExternalCrate,
     ExternalPackage,
     UnresolvedModule,
+
+    // Normal mode - detailed AST nodes
+    Package,
+    Class,
+    Interface,
+    Enum,
+    Method,
+    Field,
+    Constructor,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -40,6 +62,10 @@ pub struct GraphEdge {
 pub enum EdgeKind {
     Uses,
     Imports,
+    MadeOf,      // Package contains Class, Class contains Method
+    DependsOn,   // Package/Class depends on another through import
+    Extends,     // Class extends SuperClass
+    Implements,  // Class implements Interface
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,6 +84,14 @@ pub enum AnalysisLang {
     Auto,
     Rust,
     TypeScript,
+    Java,
+    // Kotlin,  // Temporarily disabled due to tree-sitter version conflict
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AnalysisDepth {
+    Fast,   // File-level imports/uses only
+    Normal, // Full AST with classes, methods, relationships
 }
 
 #[derive(Debug, Clone)]
@@ -91,7 +125,11 @@ pub fn run_analyze(args: &AnalyzeArgs) -> Result<(), String> {
         return Err(format!("directory does not exist: {}", root.display()));
     }
 
-    let graph = analyze_directory(&root, args.lang.into_analysis_lang());
+    let graph = analyze_directory(
+        &root,
+        args.lang.into_analysis_lang(),
+        args.depth.into_analysis_depth(),
+    );
     let output = match args.format {
         GraphOutputFormat::Json => serde_json::to_string_pretty(&graph)
             .map_err(|error| format!("failed to serialize graph: {error}"))?,
@@ -109,11 +147,35 @@ pub fn run_analyze(args: &AnalyzeArgs) -> Result<(), String> {
     Ok(())
 }
 
-pub fn analyze_directory(root: &Path, requested_lang: AnalysisLang) -> DependencyGraph {
+pub fn analyze_directory(
+    root: &Path,
+    requested_lang: AnalysisLang,
+    depth: AnalysisDepth,
+) -> DependencyGraph {
     let rust_workspace = build_rust_workspace_context(root);
     let mut nodes: BTreeMap<String, GraphNode> = BTreeMap::new();
     let mut edges = BTreeSet::new();
 
+    // Branch based on analysis depth
+    match depth {
+        AnalysisDepth::Fast => analyze_fast(root, requested_lang, &rust_workspace, &mut nodes, &mut edges),
+        AnalysisDepth::Normal => analyze_normal(root, requested_lang, &rust_workspace, &mut nodes, &mut edges),
+    }
+
+    // Placeholder - actual implementation in analyze_fast/analyze_normal
+
+    build_graph_result(root, requested_lang, nodes, edges)
+}
+
+// ─── Fast Mode Analysis ─────────────────────────────────────────────────────
+
+fn analyze_fast(
+    root: &Path,
+    requested_lang: AnalysisLang,
+    rust_workspace: &RustWorkspaceContext,
+    nodes: &mut BTreeMap<String, GraphNode>,
+    edges: &mut BTreeSet<(String, String, EdgeKind, String, bool)>,
+) {
     for entry in WalkDir::new(root)
         .follow_links(false)
         .into_iter()
@@ -136,6 +198,11 @@ pub fn analyze_directory(root: &Path, requested_lang: AnalysisLang) -> Dependenc
                 path: relative_path.clone(),
                 language: language.clone(),
                 kind: NodeKind::File,
+                name: None,
+                package_name: None,
+                parent_id: None,
+                start_line: None,
+                end_line: None,
             });
 
         let source = match fs::read_to_string(path) {
@@ -146,15 +213,17 @@ pub fn analyze_directory(root: &Path, requested_lang: AnalysisLang) -> Dependenc
         let specifiers = match effective_lang {
             AnalysisLang::Rust => extract_rust_uses(&source),
             AnalysisLang::TypeScript => extract_typescript_imports(&source),
+            AnalysisLang::Java => extract_java_imports(&source),
             AnalysisLang::Auto => continue,
         };
 
         for specifier in specifiers {
             let resolved = match effective_lang {
                 AnalysisLang::Rust => {
-                    resolve_rust_dependency(root, path, &specifier, &rust_workspace)
+                    resolve_rust_dependency(root, path, &specifier, rust_workspace)
                 }
                 AnalysisLang::TypeScript => resolve_typescript_dependency(root, path, &specifier),
+                AnalysisLang::Java => resolve_java_dependency(root, path, &specifier),
                 AnalysisLang::Auto => continue,
             };
 
@@ -171,6 +240,11 @@ pub fn analyze_directory(root: &Path, requested_lang: AnalysisLang) -> Dependenc
                 path: target_id.clone(),
                 language: language.clone(),
                 kind: target_kind,
+                name: None,
+                package_name: None,
+                parent_id: None,
+                start_line: None,
+                end_line: None,
             });
 
             edges.insert((
@@ -179,6 +253,7 @@ pub fn analyze_directory(root: &Path, requested_lang: AnalysisLang) -> Dependenc
                 match effective_lang {
                     AnalysisLang::Rust => EdgeKind::Uses,
                     AnalysisLang::TypeScript => EdgeKind::Imports,
+                    AnalysisLang::Java => EdgeKind::Imports,
                     AnalysisLang::Auto => unreachable!(),
                 },
                 specifier,
@@ -186,7 +261,55 @@ pub fn analyze_directory(root: &Path, requested_lang: AnalysisLang) -> Dependenc
             ));
         }
     }
+}
 
+// ─── Normal Mode Analysis ────────────────────────────────────────────────────
+
+fn analyze_normal(
+    root: &Path,
+    requested_lang: AnalysisLang,
+    _rust_workspace: &RustWorkspaceContext,
+    nodes: &mut BTreeMap<String, GraphNode>,
+    edges: &mut BTreeSet<(String, String, EdgeKind, String, bool)>,
+) {
+    for entry in WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|entry| !is_ignored_path(entry.path()))
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_file())
+    {
+        let path = entry.path();
+        let effective_lang = match effective_lang_for_path(path, requested_lang) {
+            Some(lang) => lang,
+            None => continue,
+        };
+
+        let source = match fs::read_to_string(path) {
+            Ok(source) => source,
+            Err(_) => continue,
+        };
+
+        // Delegate to language-specific normal mode analyzers
+        match effective_lang {
+            AnalysisLang::Java => {
+                analyze_java_normal(root, path, &source, nodes, edges);
+            }
+            AnalysisLang::Rust | AnalysisLang::TypeScript => {
+                // For now, fall back to fast mode for Rust/TypeScript
+                // TODO: Implement normal mode for these languages
+            }
+            AnalysisLang::Auto => continue,
+        }
+    }
+}
+
+fn build_graph_result(
+    root: &Path,
+    requested_lang: AnalysisLang,
+    nodes: BTreeMap<String, GraphNode>,
+    edges: BTreeSet<(String, String, EdgeKind, String, bool)>,
+) -> DependencyGraph {
     let edges = edges
         .into_iter()
         .map(|(from, to, kind, specifier, resolved)| GraphEdge {
@@ -235,6 +358,8 @@ fn display_language(value: AnalysisLang) -> &'static str {
         AnalysisLang::Auto => "auto",
         AnalysisLang::Rust => "rust",
         AnalysisLang::TypeScript => "typescript",
+        AnalysisLang::Java => "java",
+        // AnalysisLang::Kotlin => "kotlin",
     }
 }
 
@@ -248,9 +373,19 @@ fn effective_lang_for_path(path: &Path, requested_lang: AnalysisLang) -> Option<
             Some("ts" | "tsx" | "mts" | "cts") => Some(AnalysisLang::TypeScript),
             _ => None,
         },
+        AnalysisLang::Java => match path.extension().and_then(|ext| ext.to_str()) {
+            Some("java") => Some(AnalysisLang::Java),
+            _ => None,
+        },
+        // AnalysisLang::Kotlin => match path.extension().and_then(|ext| ext.to_str()) {
+        //     Some("kt" | "kts") => Some(AnalysisLang::Kotlin),
+        //     _ => None,
+        // },
         AnalysisLang::Auto => match path.extension().and_then(|ext| ext.to_str()) {
             Some("rs") => Some(AnalysisLang::Rust),
             Some("ts" | "tsx" | "mts" | "cts") => Some(AnalysisLang::TypeScript),
+            Some("java") => Some(AnalysisLang::Java),
+            // Some("kt" | "kts") => Some(AnalysisLang::Kotlin),
             _ => None,
         },
     }
@@ -286,6 +421,14 @@ fn rust_language() -> Language {
 fn typescript_language() -> Language {
     tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()
 }
+
+fn java_language() -> Language {
+    tree_sitter_java::LANGUAGE.into()
+}
+
+// fn kotlin_language() -> Language {
+//     tree_sitter_kotlin::language()
+// }
 
 fn extract_rust_uses(source: &str) -> Vec<String> {
     let mut parser = Parser::new();
@@ -668,6 +811,591 @@ fn repo_relative_path(root: &Path, path: &Path) -> String {
         .replace('\\', "/")
 }
 
+// ─── Java Support ───────────────────────────────────────────────────────────
+
+fn extract_java_imports(source: &str) -> Vec<String> {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&java_language())
+        .expect("Java grammar load failed");
+
+    let Some(tree) = parser.parse(source, None) else {
+        return Vec::new();
+    };
+
+    let mut imports = Vec::new();
+    collect_java_imports(tree.root_node(), source.as_bytes(), &mut imports);
+    imports.sort();
+    imports.dedup();
+    imports
+}
+
+fn collect_java_imports(node: Node<'_>, source: &[u8], out: &mut Vec<String>) {
+    if node.kind() == "import_declaration" {
+        // Extract the import path from Java import statements
+        // Example: import java.util.List; -> java.util.List
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                if child.kind() == "scoped_identifier" || child.kind() == "identifier" {
+                    let raw = child.utf8_text(source).unwrap_or("").trim().to_string();
+                    if !raw.is_empty() {
+                        out.push(raw);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    for child in node.children(&mut node.walk()) {
+        collect_java_imports(child, source, out);
+    }
+}
+
+fn resolve_java_dependency(
+    root: &Path,
+    _importer: &Path,
+    specifier: &str,
+) -> ResolvedDependency {
+    // Check if it's a standard Java library
+    if specifier.starts_with("java.") || specifier.starts_with("javax.") {
+        return ResolvedDependency::External(
+            NodeKind::ExternalPackage,
+            specifier.split('.').next().unwrap_or(specifier).to_string(),
+        );
+    }
+
+    // Try to resolve as a local file
+    // Convert package notation to file path: com.example.Foo -> com/example/Foo.java
+    let path_parts: Vec<&str> = specifier.split('.').collect();
+    if let Some(class_name) = path_parts.last() {
+        let dir_parts = &path_parts[..path_parts.len() - 1];
+
+        // Try common Java source locations
+        for src_root in &["src/main/java", "src", "."] {
+            let mut candidate = root.join(src_root);
+            for part in dir_parts {
+                candidate = candidate.join(part);
+            }
+            candidate = candidate.join(format!("{}.java", class_name));
+
+            if candidate.exists() && candidate.is_file() {
+                return ResolvedDependency::LocalFile(repo_relative_path(root, &candidate));
+            }
+        }
+    }
+
+    // If not found locally, treat as external package
+    ResolvedDependency::External(
+        NodeKind::ExternalPackage,
+        path_parts.first().unwrap_or(&specifier).to_string(),
+    )
+}
+
+// ─── Kotlin Support (Temporarily Disabled) ──────────────────────────────────
+// Disabled due to tree-sitter version conflict with tree-sitter-kotlin 0.3.8
+// which requires tree-sitter 0.21 but routa-cli uses 0.25
+
+// fn extract_kotlin_imports(source: &str) -> Vec<String> {
+//     let mut parser = Parser::new();
+//     parser
+//         .set_language(&kotlin_language())
+//         .expect("Kotlin grammar load failed");
+
+//     let Some(tree) = parser.parse(source, None) else {
+//         return Vec::new();
+//     };
+
+//     let mut imports = Vec::new();
+//     collect_kotlin_imports(tree.root_node(), source.as_bytes(), &mut imports);
+//     imports.sort();
+//     imports.dedup();
+//     imports
+// }
+
+// fn collect_kotlin_imports(node: Node<'_>, source: &[u8], out: &mut Vec<String>) {
+//     if node.kind() == "import_header" {
+//         // Extract the import path from Kotlin import statements
+//         // Example: import kotlin.collections.List -> kotlin.collections.List
+//         for i in 0..node.child_count() {
+//             if let Some(child) = node.child(i) {
+//                 if child.kind() == "identifier" {
+//                     let raw = child.utf8_text(source).unwrap_or("").trim().to_string();
+//                     if !raw.is_empty() && raw != "import" {
+//                         out.push(raw);
+//                     }
+//                     break;
+//                 }
+//             }
+//         }
+//     }
+
+//     for child in node.children(&mut node.walk()) {
+//         collect_kotlin_imports(child, source, out);
+//     }
+// }
+
+// fn resolve_kotlin_dependency(
+//     root: &Path,
+//     _importer: &Path,
+//     specifier: &str,
+// ) -> ResolvedDependency {
+//     // Check if it's a standard Kotlin library
+//     if specifier.starts_with("kotlin.") || specifier.starts_with("kotlinx.") {
+//         return ResolvedDependency::External(
+//             NodeKind::ExternalPackage,
+//             specifier.split('.').next().unwrap_or(specifier).to_string(),
+//         );
+//     }
+
+//     // Try to resolve as a local file
+//     // Convert package notation to file path: com.example.Foo -> com/example/Foo.kt
+//     let path_parts: Vec<&str> = specifier.split('.').collect();
+//     if let Some(class_name) = path_parts.last() {
+//         let dir_parts = &path_parts[..path_parts.len() - 1];
+
+//         // Try common Kotlin source locations
+//         for src_root in &["src/main/kotlin", "src/main/java", "src", "."] {
+//             let mut candidate = root.join(src_root);
+//             for part in dir_parts {
+//                 candidate = candidate.join(part);
+//             }
+
+//             // Try both .kt and .kts extensions
+//             for ext in &["kt", "kts"] {
+//                 let file_candidate = candidate.join(format!("{}.{}", class_name, ext));
+//                 if file_candidate.exists() && file_candidate.is_file() {
+//                     return ResolvedDependency::LocalFile(repo_relative_path(root, &file_candidate));
+//                 }
+//             }
+//         }
+//     }
+
+//     // If not found locally, treat as external package
+//     ResolvedDependency::External(
+//         NodeKind::ExternalPackage,
+//         path_parts.first().unwrap_or(&specifier).to_string(),
+//     )
+// }
+
+// ─── Java Normal Mode Analysis (SASK-style) ──────────────────────────────────
+
+fn analyze_java_normal(
+    root: &Path,
+    path: &Path,
+    source: &str,
+    nodes: &mut BTreeMap<String, GraphNode>,
+    edges: &mut BTreeSet<(String, String, EdgeKind, String, bool)>,
+) {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&java_language())
+        .expect("Java grammar load failed");
+
+    let Some(tree) = parser.parse(source, None) else {
+        return;
+    };
+
+    let relative_path = repo_relative_path(root, path);
+    let file_id = relative_path.clone();
+
+    // Add file node
+    nodes.entry(file_id.clone()).or_insert_with(|| GraphNode {
+        id: file_id.clone(),
+        path: relative_path.clone(),
+        language: "java".to_string(),
+        kind: NodeKind::File,
+        name: None,
+        package_name: None,
+        parent_id: None,
+        start_line: None,
+        end_line: None,
+    });
+
+    let root_node = tree.root_node();
+    let source_bytes = source.as_bytes();
+
+    // Extract package declaration
+    let package_name = extract_java_package(root_node, source_bytes);
+
+    // Extract all AST nodes
+    extract_java_ast_nodes(
+        root_node,
+        source_bytes,
+        &file_id,
+        &package_name,
+        nodes,
+        edges,
+    );
+}
+
+fn extract_java_package(node: Node, source: &[u8]) -> Option<String> {
+    for child in node.children(&mut node.walk()) {
+        if child.kind() == "package_declaration" {
+            for i in 0..child.child_count() {
+                if let Some(id_node) = child.child(i) {
+                    if id_node.kind() == "scoped_identifier" || id_node.kind() == "identifier" {
+                        return Some(id_node.utf8_text(source).unwrap_or("").trim().to_string());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn extract_java_ast_nodes(
+    node: Node,
+    source: &[u8],
+    file_id: &str,
+    package_name: &Option<String>,
+    nodes: &mut BTreeMap<String, GraphNode>,
+    edges: &mut BTreeSet<(String, String, EdgeKind, String, bool)>,
+) {
+    match node.kind() {
+        "package_declaration" => {
+            if let Some(pkg_name) = package_name {
+                let pkg_id = format!("package:{}", pkg_name);
+                nodes.entry(pkg_id.clone()).or_insert_with(|| GraphNode {
+                    id: pkg_id.clone(),
+                    path: file_id.to_string(),
+                    language: "java".to_string(),
+                    kind: NodeKind::Package,
+                    name: Some(pkg_name.clone()),
+                    package_name: Some(pkg_name.clone()),
+                    parent_id: None,
+                    start_line: Some(node.start_position().row + 1),
+                    end_line: Some(node.end_position().row + 1),
+                });
+            }
+        }
+        "class_declaration" => {
+            extract_java_class(node, source, file_id, package_name, nodes, edges);
+        }
+        "interface_declaration" => {
+            extract_java_interface(node, source, file_id, package_name, nodes, edges);
+        }
+        "enum_declaration" => {
+            extract_java_enum(node, source, file_id, package_name, nodes, edges);
+        }
+        _ => {}
+    }
+
+    for child in node.children(&mut node.walk()) {
+        extract_java_ast_nodes(child, source, file_id, package_name, nodes, edges);
+    }
+}
+
+fn extract_java_class(
+    node: Node,
+    source: &[u8],
+    file_id: &str,
+    package_name: &Option<String>,
+    nodes: &mut BTreeMap<String, GraphNode>,
+    edges: &mut BTreeSet<(String, String, EdgeKind, String, bool)>,
+) {
+    let class_name = find_child_text(node, "identifier", source);
+    if class_name.is_empty() {
+        return;
+    }
+
+    let full_name = if let Some(pkg) = package_name {
+        format!("{}.{}", pkg, class_name)
+    } else {
+        class_name.clone()
+    };
+
+    let class_id = format!("class:{}", full_name);
+    nodes.entry(class_id.clone()).or_insert_with(|| GraphNode {
+        id: class_id.clone(),
+        path: file_id.to_string(),
+        language: "java".to_string(),
+        kind: NodeKind::Class,
+        name: Some(class_name.clone()),
+        package_name: package_name.clone(),
+        parent_id: package_name.as_ref().map(|pkg| format!("package:{}", pkg)),
+        start_line: Some(node.start_position().row + 1),
+        end_line: Some(node.end_position().row + 1),
+    });
+
+    // MADE_OF: Package → Class
+    if let Some(pkg) = package_name {
+        edges.insert((
+            format!("package:{}", pkg),
+            class_id.clone(),
+            EdgeKind::MadeOf,
+            full_name.clone(),
+            true,
+        ));
+    }
+
+    // Extract extends/implements relationships
+    extract_java_inheritance(node, source, &class_id, package_name, edges);
+
+    // Extract methods and fields
+    for child in node.children(&mut node.walk()) {
+        match child.kind() {
+            "method_declaration" | "constructor_declaration" => {
+                extract_java_method(child, source, file_id, &class_id, package_name, nodes, edges);
+            }
+            "field_declaration" => {
+                extract_java_field(child, source, file_id, &class_id, package_name, nodes, edges);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn extract_java_interface(
+    node: Node,
+    source: &[u8],
+    file_id: &str,
+    package_name: &Option<String>,
+    nodes: &mut BTreeMap<String, GraphNode>,
+    edges: &mut BTreeSet<(String, String, EdgeKind, String, bool)>,
+) {
+    let interface_name = find_child_text(node, "identifier", source);
+    if interface_name.is_empty() {
+        return;
+    }
+
+    let full_name = if let Some(pkg) = package_name {
+        format!("{}.{}", pkg, interface_name)
+    } else {
+        interface_name.clone()
+    };
+
+    let interface_id = format!("interface:{}", full_name);
+    nodes.entry(interface_id.clone()).or_insert_with(|| GraphNode {
+        id: interface_id.clone(),
+        path: file_id.to_string(),
+        language: "java".to_string(),
+        kind: NodeKind::Interface,
+        name: Some(interface_name.clone()),
+        package_name: package_name.clone(),
+        parent_id: package_name.as_ref().map(|pkg| format!("package:{}", pkg)),
+        start_line: Some(node.start_position().row + 1),
+        end_line: Some(node.end_position().row + 1),
+    });
+
+    // MADE_OF: Package → Interface
+    if let Some(pkg) = package_name {
+        edges.insert((
+            format!("package:{}", pkg),
+            interface_id.clone(),
+            EdgeKind::MadeOf,
+            full_name.clone(),
+            true,
+        ));
+    }
+
+    // Extract methods
+    for child in node.children(&mut node.walk()) {
+        if child.kind() == "method_declaration" {
+            extract_java_method(child, source, file_id, &interface_id, package_name, nodes, edges);
+        }
+    }
+}
+
+fn extract_java_enum(
+    node: Node,
+    source: &[u8],
+    file_id: &str,
+    package_name: &Option<String>,
+    nodes: &mut BTreeMap<String, GraphNode>,
+    edges: &mut BTreeSet<(String, String, EdgeKind, String, bool)>,
+) {
+    let enum_name = find_child_text(node, "identifier", source);
+    if enum_name.is_empty() {
+        return;
+    }
+
+    let full_name = if let Some(pkg) = package_name {
+        format!("{}.{}", pkg, enum_name)
+    } else {
+        enum_name.clone()
+    };
+
+    let enum_id = format!("enum:{}", full_name);
+    nodes.entry(enum_id.clone()).or_insert_with(|| GraphNode {
+        id: enum_id.clone(),
+        path: file_id.to_string(),
+        language: "java".to_string(),
+        kind: NodeKind::Enum,
+        name: Some(enum_name.clone()),
+        package_name: package_name.clone(),
+        parent_id: package_name.as_ref().map(|pkg| format!("package:{}", pkg)),
+        start_line: Some(node.start_position().row + 1),
+        end_line: Some(node.end_position().row + 1),
+    });
+
+    // MADE_OF: Package → Enum
+    if let Some(pkg) = package_name {
+        edges.insert((
+            format!("package:{}", pkg),
+            enum_id,
+            EdgeKind::MadeOf,
+            full_name,
+            true,
+        ));
+    }
+}
+
+fn extract_java_method(
+    node: Node,
+    source: &[u8],
+    file_id: &str,
+    parent_id: &str,
+    package_name: &Option<String>,
+    nodes: &mut BTreeMap<String, GraphNode>,
+    edges: &mut BTreeSet<(String, String, EdgeKind, String, bool)>,
+) {
+    let method_name = find_child_text(node, "identifier", source);
+    if method_name.is_empty() {
+        return;
+    }
+
+    let method_id = format!("{}::{}", parent_id, method_name);
+    let kind = if node.kind() == "constructor_declaration" {
+        NodeKind::Constructor
+    } else {
+        NodeKind::Method
+    };
+
+    nodes.entry(method_id.clone()).or_insert_with(|| GraphNode {
+        id: method_id.clone(),
+        path: file_id.to_string(),
+        language: "java".to_string(),
+        kind,
+        name: Some(method_name.clone()),
+        package_name: package_name.clone(),
+        parent_id: Some(parent_id.to_string()),
+        start_line: Some(node.start_position().row + 1),
+        end_line: Some(node.end_position().row + 1),
+    });
+
+    // MADE_OF: Class/Interface → Method
+    edges.insert((
+        parent_id.to_string(),
+        method_id,
+        EdgeKind::MadeOf,
+        method_name,
+        true,
+    ));
+}
+
+fn extract_java_field(
+    node: Node,
+    source: &[u8],
+    file_id: &str,
+    parent_id: &str,
+    package_name: &Option<String>,
+    nodes: &mut BTreeMap<String, GraphNode>,
+    edges: &mut BTreeSet<(String, String, EdgeKind, String, bool)>,
+) {
+    for child in node.children(&mut node.walk()) {
+        if child.kind() == "variable_declarator" {
+            let field_name = find_child_text(child, "identifier", source);
+            if field_name.is_empty() {
+                continue;
+            }
+
+            let field_id = format!("{}::{}", parent_id, field_name);
+            nodes.entry(field_id.clone()).or_insert_with(|| GraphNode {
+                id: field_id.clone(),
+                path: file_id.to_string(),
+                language: "java".to_string(),
+                kind: NodeKind::Field,
+                name: Some(field_name.clone()),
+                package_name: package_name.clone(),
+                parent_id: Some(parent_id.to_string()),
+                start_line: Some(node.start_position().row + 1),
+                end_line: Some(node.end_position().row + 1),
+            });
+
+            // MADE_OF: Class → Field
+            edges.insert((
+                parent_id.to_string(),
+                field_id,
+                EdgeKind::MadeOf,
+                field_name,
+                true,
+            ));
+        }
+    }
+}
+
+fn extract_java_inheritance(
+    node: Node,
+    source: &[u8],
+    class_id: &str,
+    package_name: &Option<String>,
+    edges: &mut BTreeSet<(String, String, EdgeKind, String, bool)>,
+) {
+    for child in node.children(&mut node.walk()) {
+        match child.kind() {
+            "superclass" => {
+                // extends SuperClass
+                if let Some(type_id) = child.child(1) {
+                    let super_class = type_id.utf8_text(source).unwrap_or("").trim();
+                    if !super_class.is_empty() {
+                        let target_id = if super_class.contains('.') {
+                            format!("class:{}", super_class)
+                        } else if let Some(pkg) = package_name {
+                            format!("class:{}.{}", pkg, super_class)
+                        } else {
+                            format!("class:{}", super_class)
+                        };
+
+                        edges.insert((
+                            class_id.to_string(),
+                            target_id,
+                            EdgeKind::Extends,
+                            super_class.to_string(),
+                            false, // May not resolve if external
+                        ));
+                    }
+                }
+            }
+            "super_interfaces" => {
+                // implements Interface1, Interface2
+                for interface_node in child.children(&mut child.walk()) {
+                    if interface_node.kind() == "type_identifier" {
+                        let interface_name = interface_node.utf8_text(source).unwrap_or("").trim();
+                        if !interface_name.is_empty() {
+                            let target_id = if interface_name.contains('.') {
+                                format!("interface:{}", interface_name)
+                            } else if let Some(pkg) = package_name {
+                                format!("interface:{}.{}", pkg, interface_name)
+                            } else {
+                                format!("interface:{}", interface_name)
+                            };
+
+                            edges.insert((
+                                class_id.to_string(),
+                                target_id,
+                                EdgeKind::Implements,
+                                interface_name.to_string(),
+                                false,
+                            ));
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn find_child_text(node: Node, kind: &str, source: &[u8]) -> String {
+    for child in node.children(&mut node.walk()) {
+        if child.kind() == kind {
+            return child.utf8_text(source).unwrap_or("").trim().to_string();
+        }
+    }
+    String::new()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -793,7 +1521,7 @@ import React from "react";"#,
         );
         write_file(&dir, "src/core/feature.ts", "export const feature = true;");
 
-        let graph = analyze_directory(dir.path(), AnalysisLang::TypeScript);
+        let graph = analyze_directory(dir.path(), AnalysisLang::TypeScript, AnalysisDepth::Fast);
 
         assert!(graph.nodes.iter().any(|node| node.id == "src/app/page.ts"));
         assert!(graph
@@ -819,12 +1547,22 @@ import React from "react";"#,
                     path: "src/main.rs".to_string(),
                     language: "rust".to_string(),
                     kind: NodeKind::File,
+                    name: None,
+                    package_name: None,
+                    parent_id: None,
+                    start_line: None,
+                    end_line: None,
                 },
                 GraphNode {
                     id: "serde".to_string(),
                     path: "serde".to_string(),
                     language: "rust".to_string(),
                     kind: NodeKind::ExternalCrate,
+                    name: None,
+                    package_name: None,
+                    parent_id: None,
+                    start_line: None,
+                    end_line: None,
                 },
             ],
             edges: vec![GraphEdge {
