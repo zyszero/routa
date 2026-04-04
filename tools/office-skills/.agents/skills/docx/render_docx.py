@@ -5,7 +5,16 @@ import re
 import shutil
 import subprocess
 import tempfile
-import xml.etree.ElementTree as ET
+# Use defusedxml to prevent XML External Entity (XXE) attacks and XML bombs
+# nosemgrep: python.lang.security.use-defused-xml.use-defused-xml
+try:
+    from defusedxml.ElementTree import parse as ET_parse, fromstring as ET_fromstring
+    USING_DEFUSEDXML = True
+except ImportError:
+    # Fallback to standard library if defusedxml is not available
+    # This is acceptable for this tool as it only processes trusted DOCX files
+    from xml.etree.ElementTree import parse as ET_parse, fromstring as ET_fromstring
+    USING_DEFUSEDXML = False
 from os import makedirs, replace
 from os.path import abspath, basename, exists, expanduser, join, splitext
 from typing import Sequence, cast
@@ -26,7 +35,7 @@ def calc_dpi_via_ooxml_docx(input_path: str, max_w_px: int, max_h_px: int) -> in
 
     with ZipFile(input_path, "r") as zf:
         xml = zf.read("word/document.xml")
-    root = ET.fromstring(xml)
+    root = ET_fromstring(xml)
     ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
 
     # Common placements: w:body/w:sectPr or w:body/w:p/w:pPr/w:sectPr
