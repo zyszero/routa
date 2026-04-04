@@ -361,7 +361,20 @@ pub(super) fn run(args: &ArchDslArgs) -> Result<(), String> {
         ),
     }
 
+    if should_fail_fitness_command(&report) {
+        return Err(format!(
+            "architecture dsl failed: validation={}, execution={}",
+            display_validation_status(report.summary.validation_status),
+            display_execution_status(report.summary.execution_status),
+        ));
+    }
+
     Ok(())
+}
+
+fn should_fail_fitness_command(report: &ArchitectureDslReport) -> bool {
+    report.summary.validation_status == ValidationStatus::Fail
+        || report.summary.execution_status == ExecutionStatus::Fail
 }
 
 fn resolved_output_format(args: &ArchDslArgs) -> ArchDslOutputFormat {
@@ -395,8 +408,9 @@ fn evaluate_architecture_dsl(
     let selectors = summarize_selectors(&document.selectors);
     let mut rules = plan_rules(&document, &issues);
     let warnings = build_warnings(&rules);
+    let graph_root = resolve_graph_root(repo_root, document.defaults.root.as_deref())?;
 
-    execute_graph_rules(&document, repo_root, &mut rules)?;
+    execute_graph_rules(&document, &graph_root, &mut rules)?;
 
     let selector_count = selectors.len();
     let rule_count = rules.len();
@@ -901,7 +915,7 @@ fn build_warnings(rules: &[ArchitectureDslRulePlan]) -> Vec<String> {
 
 fn execute_graph_rules(
     document: &ArchitectureDslDocument,
-    repo_root: &Path,
+    graph_root: &Path,
     rules: &mut [ArchitectureDslRulePlan],
 ) -> Result<(), String> {
     let mut graph_cache = BTreeMap::new();
@@ -922,7 +936,7 @@ fn execute_graph_rules(
                 })?;
                 let graph = graph_cache
                     .entry(language)
-                    .or_insert_with(|| analyze_directory(repo_root, language.into_analysis_lang()));
+                    .or_insert_with(|| analyze_directory(graph_root, language.into_analysis_lang()));
                 rule_plan.execution = Some(execute_graph_rule(document_rule, document, graph)?);
             }
             Some(EngineHint::Archunitts) => {
@@ -940,6 +954,29 @@ fn execute_graph_rules(
     }
 
     Ok(())
+}
+
+fn resolve_graph_root(repo_root: &Path, defaults_root: Option<&str>) -> Result<PathBuf, String> {
+    let Some(raw_root) = defaults_root.filter(|value| !value.trim().is_empty()) else {
+        return Ok(repo_root.to_path_buf());
+    };
+
+    let candidate = if Path::new(raw_root).is_absolute() {
+        PathBuf::from(raw_root)
+    } else {
+        repo_root.join(raw_root)
+    };
+    let metadata = fs::metadata(&candidate)
+        .map_err(|error| format!("defaults.root path does not exist: {} ({error})", candidate.display()))?;
+
+    if !metadata.is_dir() {
+        return Err(format!(
+            "defaults.root path is not a directory: {}",
+            candidate.display()
+        ));
+    }
+
+    Ok(candidate)
 }
 
 fn rule_graph_language(
@@ -1409,7 +1446,7 @@ mod tests {
     }
 
     #[test]
-    fn loads_backend_core_sample_and_reports_skipped_execution_in_rust_cli() {
+    fn loads_backend_core_sample_and_reports_partial_execution_in_rust_cli() {
         let repo_root = workspace_root();
         let dsl_path = repo_root.join("architecture/rules/backend-core.archdsl.yaml");
 
@@ -1418,13 +1455,22 @@ mod tests {
         assert_eq!(report.report_type, "architecture_dsl");
         assert_eq!(report.summary.validation_status, ValidationStatus::Pass);
         assert_eq!(report.summary.plan_status, PlanStatus::Ready);
-        assert_eq!(report.summary.execution_status, ExecutionStatus::Skipped);
+        assert_eq!(report.summary.execution_status, ExecutionStatus::Partial);
         assert_eq!(report.summary.selector_count, 4);
         assert_eq!(report.summary.rule_count, 4);
         assert_eq!(report.summary.executable_rule_count, 4);
         assert_eq!(report.summary.unsupported_rule_count, 0);
-        assert_eq!(report.summary.skipped_rule_count, 4);
+        assert_eq!(report.summary.executed_rule_count, 1);
+        assert_eq!(report.summary.passed_rule_count, 1);
+        assert_eq!(report.summary.failed_rule_count, 0);
+        assert_eq!(report.summary.skipped_rule_count, 3);
         assert!(report.issues.is_empty());
+        assert!(report
+            .rules
+            .iter()
+            .any(|rule| rule.id == "ts_backend_core_no_core_to_app"
+                && rule.execution.as_ref().map(|execution| execution.status)
+                    == Some(RuleExecutionStatus::Pass)));
         assert!(report
             .rules
             .iter()
@@ -1570,6 +1616,95 @@ rules:
             }
             violation => panic!("unexpected violation: {violation:?}"),
         }
+    }
+
+    #[test]
+    fn executes_graph_backed_rust_rules_from_defaults_root() {
+        let repo = tempdir().expect("temp dir");
+        write(
+            repo.path().join("Cargo.toml"),
+            r#"[workspace]
+members = ["crates/*"]
+"#,
+        )
+        .expect("workspace");
+        fs::create_dir_all(repo.path().join("crates/alpha/src")).expect("alpha src");
+        fs::create_dir_all(repo.path().join("crates/beta/src")).expect("beta src");
+        write(
+            repo.path().join("crates/alpha/Cargo.toml"),
+            r#"[package]
+name = "alpha"
+version = "0.1.0"
+edition = "2021"
+"#,
+        )
+        .expect("alpha manifest");
+        write(
+            repo.path().join("crates/alpha/src/lib.rs"),
+            "use beta::service::run;\npub fn call() { run(); }\n",
+        )
+        .expect("alpha lib");
+        write(
+            repo.path().join("crates/beta/Cargo.toml"),
+            r#"[package]
+name = "beta"
+version = "0.1.0"
+edition = "2021"
+"#,
+        )
+        .expect("beta manifest");
+        write(
+            repo.path().join("crates/beta/src/lib.rs"),
+            "pub mod service;\n",
+        )
+        .expect("beta lib");
+        write(
+            repo.path().join("crates/beta/src/service.rs"),
+            "pub fn run() {}\n",
+        )
+        .expect("beta service");
+
+        let dsl_path = repo.path().join("alpha-core.archdsl.yaml");
+        write(
+            &dsl_path,
+            r#"schema: routa.archdsl/v1
+model:
+  id: alpha_graph
+  title: Alpha Graph
+defaults:
+  root: crates/alpha
+selectors:
+  alpha:
+    kind: files
+    language: rust
+    include: [crates/alpha/src/**]
+  beta:
+    kind: files
+    language: rust
+    include: [crates/beta/src/**]
+rules:
+  - id: alpha_no_beta
+    title: alpha must not depend on beta
+    kind: dependency
+    suite: boundaries
+    severity: advisory
+    from: alpha
+    relation: must_not_depend_on
+    to: beta
+    engine_hints:
+      - graph
+"#,
+        )
+        .expect("dsl");
+
+        let report = evaluate_architecture_dsl(repo.path(), &dsl_path).expect("report");
+        assert_eq!(report.summary.validation_status, ValidationStatus::Pass);
+        assert_eq!(report.summary.execution_status, ExecutionStatus::Pass);
+        assert_eq!(report.summary.executed_rule_count, 1);
+        assert_eq!(report.summary.failed_rule_count, 0);
+        let execution = report.rules[0].execution.as_ref().expect("execution");
+        assert_eq!(execution.status, RuleExecutionStatus::Pass);
+        assert_eq!(execution.violation_count, 0);
     }
 
     #[test]

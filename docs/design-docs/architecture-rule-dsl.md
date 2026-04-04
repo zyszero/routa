@@ -110,15 +110,23 @@ selectors:
 
 Rules describe engine-neutral intent.
 
-Shared rule fields:
+Shared rule fields (all rules require these):
 
 - `id`: stable machine id
 - `title`: readable label for CLI/debug output
-- `message_key`: optional future i18n lookup key
-- `kind`: current values `dependency` or `cycle`
-- `suite`: current values `boundaries` or `cycles`
-- `severity`: current values `advisory`, `warning`, or `error`
-- `engine_hints`: optional executor hints such as `archunitts` or `graph`
+- `kind`: rule kind, currently `dependency` or `cycle`
+- `suite`: suite tag, currently `boundaries` or `cycles`
+- `severity`: `advisory`, `warning`, or `error`
+- `relation`: semantics selector
+- `engine_hints` (optional): execution hints, for example `archunitts` and/or `graph`
+
+Compatibility constraints:
+
+- `dependency` requires `from` and `to`
+- `cycle` requires `scope`
+- `relation` is required for all rule kinds
+- `dependency` requires `relation: must_not_depend_on`
+- `cycle` requires `relation: must_be_acyclic`
 
 #### Dependency Rule
 
@@ -127,6 +135,13 @@ Fields:
 - `from`: selector id
 - `relation`: currently `must_not_depend_on`
 - `to`: selector id
+
+Supported combinations:
+
+- `kind: dependency`
+- `suite: boundaries`
+- `relation: must_not_depend_on`
+- executor support: `archunitts` (typescript selectors only) or `graph` (single language selectors)
 
 Example:
 
@@ -149,6 +164,13 @@ Fields:
 
 - `scope`: selector id
 - `relation`: currently `must_be_acyclic`
+
+Supported combinations:
+
+- `kind: cycle`
+- `suite: cycles`
+- `relation: must_be_acyclic`
+- executor support: `archunitts` (typescript selectors only) or `graph` (single language selectors)
 
 Example:
 
@@ -253,6 +275,14 @@ Required frontmatter:
 - `output_format`
 - `temperature_hint`
 
+Frontmatter semantics:
+
+- `schema` must be `routa.archdsl.case/v1`
+- `case_id` is a stable ID for the case prompt and review trace
+- `target_dsl` is the repository-relative output path for the generated DSL file
+- `output_format` is the required generated artifact mode, currently `yaml`
+- `temperature_hint` keeps generation deterministic and low-variance, currently `low`
+
 Recommended sections:
 
 1. `# Goal`
@@ -261,6 +291,12 @@ Recommended sections:
 4. `## Required Rules`
 5. `## Constraints`
 6. `## Output Contract`
+
+Unsupported combinations and validation failures:
+
+- `archunitts` can only run with `typescript` selectors and exactly one include pattern per selector
+- `graph` runs only when all referenced selectors use the same language
+- If a rule references unknown selectors, mixed graph languages, or incompatible engine constraints, validation reports an explicit issue and marks plan/validation as failed
 
 Why this format:
 

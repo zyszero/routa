@@ -446,15 +446,15 @@ function parseDslPath(argv: string[], repoRoot: string): string {
       if (!value || value.startsWith("-")) {
         throw new Error("Missing value for --dsl");
       }
-      return path.resolve(value);
+      return path.resolve(repoRoot, value);
     }
     if (arg.startsWith("--dsl=")) {
-      return path.resolve(arg.slice("--dsl=".length));
+      return path.resolve(repoRoot, arg.slice("--dsl=".length));
     }
   }
 
   const envDslPath = process.env.ROUTA_ARCH_DSL_PATH?.trim();
-  return envDslPath ? path.resolve(envDslPath) : defaultArchitectureDslPath(repoRoot);
+  return envDslPath ? path.resolve(repoRoot, envDslPath) : defaultArchitectureDslPath(repoRoot);
 }
 
 function parseTsConfigPath(argv: string[], repoRoot: string): string {
