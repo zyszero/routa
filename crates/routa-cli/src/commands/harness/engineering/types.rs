@@ -245,7 +245,6 @@ pub(super) struct FluencyBlockingCriterion {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[allow(dead_code)]
-#[serde(rename_all = "camelCase")]
 pub(super) struct EvolutionHistory {
     pub timestamp: String,
     pub repo_root: String,
