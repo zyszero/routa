@@ -2,7 +2,6 @@
 
 use super::learning::*;
 use std::fs;
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 #[test]
@@ -14,9 +13,9 @@ fn test_load_evolution_history() {
     let history_dir = repo_root.join("docs/fitness/evolution");
     fs::create_dir_all(&history_dir).unwrap();
     
-    let history_content = r#"{"timestamp":"2026-04-06T01:00:00Z","repoRoot":"/test","mode":"auto-apply","taskType":"harness_evolution","workflow":"bootstrap","trigger":"manual","gapsDetected":1,"gapCategories":["missing_execution_surface"],"changedPaths":["build.yml"],"patchesApplied":["patch.A"],"patchesFailed":[],"successRate":1.0}
-{"timestamp":"2026-04-06T02:00:00Z","repoRoot":"/test","mode":"auto-apply","taskType":"harness_evolution","workflow":"bootstrap","trigger":"manual","gapsDetected":1,"gapCategories":["missing_execution_surface"],"changedPaths":["build.yml"],"patchesApplied":["patch.A"],"patchesFailed":[],"successRate":1.0}
-{"timestamp":"2026-04-06T03:00:00Z","repoRoot":"/test","mode":"auto-apply","taskType":"harness_evolution","workflow":"bootstrap","trigger":"manual","gapsDetected":1,"gapCategories":["missing_execution_surface"],"changedPaths":["build.yml"],"patchesApplied":["patch.A"],"patchesFailed":[],"successRate":1.0}
+    let history_content = r#"{"timestamp":"2026-04-06T01:00:00Z","repo_root":"/test","mode":"auto-apply","task_type":"harness_evolution","workflow":"bootstrap","trigger":"manual","gaps_detected":1,"gap_categories":["missing_execution_surface"],"changed_paths":["build.yml"],"patches_applied":["patch.A"],"patches_failed":[],"success_rate":1.0}
+{"timestamp":"2026-04-06T02:00:00Z","repo_root":"/test","mode":"auto-apply","task_type":"harness_evolution","workflow":"bootstrap","trigger":"manual","gaps_detected":1,"gap_categories":["missing_execution_surface"],"changed_paths":["build.yml"],"patches_applied":["patch.A"],"patches_failed":[],"success_rate":1.0}
+{"timestamp":"2026-04-06T03:00:00Z","repo_root":"/test","mode":"auto-apply","task_type":"harness_evolution","workflow":"bootstrap","trigger":"manual","gaps_detected":1,"gap_categories":["missing_execution_surface"],"changed_paths":["build.yml"],"patches_applied":["patch.A"],"patches_failed":[],"success_rate":1.0}
 "#;
     
     fs::write(history_dir.join("history.jsonl"), history_content).unwrap();
@@ -38,9 +37,9 @@ fn test_detect_common_patterns() {
     let history_dir = repo_root.join("docs/fitness/evolution");
     fs::create_dir_all(&history_dir).unwrap();
     
-    let history_content = r#"{"timestamp":"2026-04-06T01:00:00Z","repoRoot":"/test","mode":"auto-apply","taskType":"harness_evolution","gapsDetected":2,"gapCategories":["missing_automation","missing_execution_surface"],"patchesApplied":["patch.A","patch.B"],"patchesFailed":[],"successRate":1.0}
-{"timestamp":"2026-04-06T02:00:00Z","repoRoot":"/test","mode":"auto-apply","taskType":"harness_evolution","gapsDetected":2,"gapCategories":["missing_automation","missing_execution_surface"],"patchesApplied":["patch.A","patch.B"],"patchesFailed":[],"successRate":1.0}
-{"timestamp":"2026-04-06T03:00:00Z","repoRoot":"/test","mode":"auto-apply","taskType":"harness_evolution","gapsDetected":2,"gapCategories":["missing_automation","missing_execution_surface"],"patchesApplied":["patch.A","patch.B"],"patchesFailed":[],"successRate":1.0}
+    let history_content = r#"{"timestamp":"2026-04-06T01:00:00Z","repo_root":"/test","mode":"auto-apply","task_type":"harness_evolution","gaps_detected":2,"gap_categories":["missing_automation","missing_execution_surface"],"patches_applied":["patch.A","patch.B"],"patches_failed":[],"success_rate":1.0}
+{"timestamp":"2026-04-06T02:00:00Z","repo_root":"/test","mode":"auto-apply","task_type":"harness_evolution","gaps_detected":2,"gap_categories":["missing_automation","missing_execution_surface"],"patches_applied":["patch.A","patch.B"],"patches_failed":[],"success_rate":1.0}
+{"timestamp":"2026-04-06T03:00:00Z","repo_root":"/test","mode":"auto-apply","task_type":"harness_evolution","gaps_detected":2,"gap_categories":["missing_automation","missing_execution_surface"],"patches_applied":["patch.A","patch.B"],"patches_failed":[],"success_rate":1.0}
 "#;
     
     fs::write(history_dir.join("history.jsonl"), history_content).unwrap();
@@ -63,9 +62,9 @@ fn test_generate_playbook_candidates() {
     let history_dir = repo_root.join("docs/fitness/evolution");
     fs::create_dir_all(&history_dir).unwrap();
     
-    let history_content = r#"{"timestamp":"2026-04-06T01:00:00Z","repoRoot":"/test","mode":"auto-apply","taskType":"harness_evolution","gapsDetected":1,"gapCategories":["missing_governance_gate"],"patchesApplied":["patch.create_codeowners"],"patchesFailed":[],"successRate":1.0}
-{"timestamp":"2026-04-06T02:00:00Z","repoRoot":"/test","mode":"auto-apply","taskType":"harness_evolution","gapsDetected":1,"gapCategories":["missing_governance_gate"],"patchesApplied":["patch.create_codeowners"],"patchesFailed":[],"successRate":1.0}
-{"timestamp":"2026-04-06T03:00:00Z","repoRoot":"/test","mode":"auto-apply","taskType":"harness_evolution","gapsDetected":1,"gapCategories":["missing_governance_gate"],"patchesApplied":["patch.create_codeowners"],"patchesFailed":[],"successRate":1.0}
+    let history_content = r#"{"timestamp":"2026-04-06T01:00:00Z","repo_root":"/test","mode":"auto-apply","task_type":"harness_evolution","gaps_detected":1,"gap_categories":["missing_governance_gate"],"patches_applied":["patch.create_codeowners"],"patches_failed":[],"success_rate":1.0}
+{"timestamp":"2026-04-06T02:00:00Z","repo_root":"/test","mode":"auto-apply","task_type":"harness_evolution","gaps_detected":1,"gap_categories":["missing_governance_gate"],"patches_applied":["patch.create_codeowners"],"patches_failed":[],"success_rate":1.0}
+{"timestamp":"2026-04-06T03:00:00Z","repo_root":"/test","mode":"auto-apply","task_type":"harness_evolution","gaps_detected":1,"gap_categories":["missing_governance_gate"],"patches_applied":["patch.create_codeowners"],"patches_failed":[],"success_rate":1.0}
 "#;
     
     fs::write(history_dir.join("history.jsonl"), history_content).unwrap();
