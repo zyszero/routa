@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
+use tempfile::TempDir;
 
 use routa_server::{start_server, ServerConfig};
 
@@ -72,8 +73,12 @@ fn random_db_path() -> PathBuf {
     std::env::temp_dir().join(format!("routa-server-api-{}.db", uuid::Uuid::new_v4()))
 }
 
-fn random_repo_path() -> PathBuf {
-    std::env::temp_dir().join(format!("routa-server-repo-{}", uuid::Uuid::new_v4()))
+/// Create a temporary directory that will be automatically cleaned up.
+/// Returns both the TempDir (keep it alive) and the PathBuf.
+fn create_temp_repo() -> (TempDir, PathBuf) {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let repo_path = temp_dir.path().to_path_buf();
+    (temp_dir, repo_path)
 }
 
 fn write_repo_file(path: &std::path::Path, file_name: &str, content: &str) {
@@ -451,7 +456,7 @@ async fn api_task_flow_with_validation() {
 #[tokio::test]
 async fn api_codebase_and_file_search_flow() {
     let fixture = ApiFixture::new().await;
-    let repo_path = random_repo_path();
+    let (_temp_dir, repo_path) = create_temp_repo();
     init_git_repo(&repo_path);
     write_repo_file(&repo_path, "README.md", "# routa\n");
     write_repo_file(&repo_path, "src/lib.rs", "pub fn main() {}\n");
@@ -580,7 +585,7 @@ async fn api_codebase_and_file_search_flow() {
         .expect("delete codebase");
     assert_eq!(delete_codebase.status(), StatusCode::OK);
 
-    let _ = fs::remove_dir_all(&repo_path);
+    // _temp_dir is automatically cleaned up when it goes out of scope
 }
 
 #[tokio::test]
