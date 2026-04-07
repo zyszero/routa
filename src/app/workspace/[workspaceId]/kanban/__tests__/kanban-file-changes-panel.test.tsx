@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { FileRow } from "../kanban-file-changes-panel";
 import { KanbanTab } from "../kanban-tab";
 import type { KanbanBoardInfo } from "../../types";
 
@@ -27,6 +28,16 @@ const board: KanbanBoardInfo = {
 };
 
 describe("KanbanTab file changes panel", () => {
+  it("uses a dedicated file-name column so status badges do not clip the first character", () => {
+    const { container } = render(
+      <FileRow file={{ path: "package-lock.json", status: "modified" }} />,
+    );
+
+    expect(screen.getByText("package-lock.json")).toBeTruthy();
+    expect(screen.getByTitle("package-lock.json")).toBeTruthy();
+    expect(container.firstElementChild?.className).toContain("grid-cols-[auto_minmax(0,1fr)]");
+  });
+
   it("renders repo sync progress inline with the repos section", () => {
     render(
       <KanbanTab

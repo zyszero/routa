@@ -59,16 +59,16 @@ export function FileRow({ file }: { file: KanbanFileChangeItem }) {
   const badge = STATUS_BADGE[file.status];
 
   return (
-    <div className="flex items-start gap-2 rounded-xl border border-slate-200/70 bg-slate-50/80 px-2.5 py-2 dark:border-[#202433] dark:bg-[#11141d]">
-      <span className={`inline-flex min-w-7 justify-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${badge.className}`}>
+    <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 rounded-xl border border-slate-200/70 bg-slate-50/80 px-2.5 py-2 dark:border-[#202433] dark:bg-[#11141d]">
+      <span className={`inline-flex min-w-7 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${badge.className}`}>
         {badge.short}
       </span>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-[11px] font-medium text-slate-700 dark:text-slate-200" title={file.path}>
+      <div className="min-w-0 overflow-hidden">
+        <div className="block truncate text-[11px] font-medium text-slate-700 dark:text-slate-200" title={file.path}>
           {file.path}
         </div>
         {file.previousPath && (
-          <div className="truncate text-[10px] text-slate-400 dark:text-slate-500" title={file.previousPath}>
+          <div className="block truncate text-[10px] text-slate-400 dark:text-slate-500" title={file.previousPath}>
             {t.kanban.fromPath} {file.previousPath}
           </div>
         )}
