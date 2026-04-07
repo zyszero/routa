@@ -129,6 +129,21 @@ describe("task delivery readiness", () => {
       isGitHubRepo: true,
       canCreatePullRequest: false,
     }, "Review", "review");
+    const reviewDirtyError = buildTaskDeliveryTransitionError({
+      checked: true,
+      branch: "issue/task-1",
+      baseBranch: "main",
+      baseRef: "origin/main",
+      modified: 2,
+      untracked: 1,
+      ahead: 1,
+      behind: 0,
+      commitsSinceBase: 1,
+      hasCommitsSinceBase: true,
+      hasUncommittedChanges: true,
+      isGitHubRepo: true,
+      canCreatePullRequest: false,
+    }, "Review", "review");
     const doneError = buildTaskDeliveryTransitionError({
       checked: true,
       branch: "issue/task-1",
@@ -146,6 +161,8 @@ describe("task delivery readiness", () => {
     }, "Done", "done");
 
     expect(reviewError).toContain("no committed changes detected");
+    expect(reviewDirtyError).toContain("uncommitted changes");
+    expect(reviewDirtyError).toContain("before requesting review");
     expect(doneError).toContain("uncommitted changes");
   });
 });

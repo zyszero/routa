@@ -159,12 +159,15 @@ export function buildTaskDeliveryTransitionError(
     return `Cannot move task to "${targetColumnName}": no committed changes detected on branch "${readiness.branch ?? "unknown"}" relative to "${formatBaseReference(readiness)}". Commit your implementation before requesting review.`;
   }
 
-  if (targetColumnId !== "done") {
-    return null;
+  if (readiness.hasUncommittedChanges) {
+    const transitionAction = targetColumnId === "review"
+      ? "requesting review"
+      : "marking the task done";
+    return `Cannot move task to "${targetColumnName}": branch "${readiness.branch ?? "unknown"}" still has uncommitted changes (${readiness.modified} modified, ${readiness.untracked} untracked). Commit, stash, or discard them before ${transitionAction}.`;
   }
 
-  if (readiness.hasUncommittedChanges) {
-    return `Cannot move task to "${targetColumnName}": branch "${readiness.branch ?? "unknown"}" still has uncommitted changes (${readiness.modified} modified, ${readiness.untracked} untracked). Commit, stash, or discard them before marking the task done.`;
+  if (targetColumnId !== "done") {
+    return null;
   }
 
   if (readiness.isGitHubRepo && !readiness.canCreatePullRequest) {
