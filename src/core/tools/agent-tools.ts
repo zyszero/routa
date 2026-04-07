@@ -118,6 +118,12 @@ export class AgentTools {
     this.permissionStore = store;
   }
 
+  // ─── EventBus Access ─────────────────────────────────────────────────
+
+  getEventBus() {
+    return this.eventBus;
+  }
+
   // ─── Tool 0: Create Task ────────────────────────────────────────────
 
   async createTask(params: {

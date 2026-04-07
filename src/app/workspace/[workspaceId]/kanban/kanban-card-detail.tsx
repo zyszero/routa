@@ -235,8 +235,9 @@ export function KanbanCardDetail({
     setTaskChangesLoading(false);
   }, [task.id]);
 
+  // Fetch changes when the tab becomes active OR when refreshSignal changes
   useEffect(() => {
-    if (activeTab !== "changes" || taskChanges) {
+    if (activeTab !== "changes") {
       return;
     }
 
@@ -279,7 +280,7 @@ export function KanbanCardDetail({
     return () => {
       cancelled = true;
     };
-  }, [activeTab, task.id, taskChanges, t.common.unavailable, t.kanbanDetail.repo]);
+  }, [activeTab, task.id, refreshSignal, t.common.unavailable, t.kanbanDetail.repo]);
 
   return (
     <div className="h-full w-full overflow-y-auto">

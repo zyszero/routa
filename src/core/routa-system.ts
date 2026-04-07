@@ -33,6 +33,8 @@ import { InMemoryKanbanBoardStore, KanbanBoardStore } from "./store/kanban-board
 import { InMemoryArtifactStore, ArtifactStore } from "./store/artifact-store";
 import { PermissionStore } from "./tools/permission-store";
 import { startWorkflowOrchestrator } from "./kanban/workflow-orchestrator-singleton";
+import { getKanbanEventBroadcaster } from "./kanban/kanban-event-broadcaster";
+import { AgentEventType } from "./events/event-bus";
 
 export interface RoutaSystem {
   agentStore: AgentStore;
@@ -349,6 +351,32 @@ export function getRoutaSystem(): RoutaSystem {
     // Start the workflow orchestrator to listen for column transitions
     const system = g[GLOBAL_KEY] as RoutaSystem;
     startWorkflowOrchestrator(system);
+
+    // Set up EventBus → KanbanEventBroadcaster bridge for file changes
+    setupFileChangeBridge(system);
   }
   return g[GLOBAL_KEY] as RoutaSystem;
+}
+
+// ─── File Change Bridge ────────────────────────────────────────────────
+
+/**
+ * Bridge EventBus FILE_CHANGES events to KanbanEventBroadcaster
+ * so that the Kanban UI can refresh the Changes column in real-time.
+ */
+function setupFileChangeBridge(system: RoutaSystem): void {
+  const kanbanBroadcaster = getKanbanEventBroadcaster();
+
+  system.eventBus.on("file-change-bridge", (event) => {
+    if (event.type === AgentEventType.FILE_CHANGES && event.workspaceId) {
+      // Notify the Kanban SSE clients that files have changed
+      kanbanBroadcaster.notify({
+        workspaceId: event.workspaceId,
+        entity: "task",
+        action: "updated",
+        resourceId: typeof event.data?.taskId === "string" ? event.data.taskId : undefined,
+        source: "agent",
+      });
+    }
+  });
 }
