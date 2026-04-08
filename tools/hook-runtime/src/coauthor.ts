@@ -5,7 +5,7 @@ import path from "node:path";
 
 export type CoauthorMode = "prepare" | "validate";
 
-export type CoauthorEnv = NodeJS.ProcessEnv;
+export type CoauthorEnv = Record<string, string | undefined>;
 
 type AgentIdentity = {
   displayName: string;
