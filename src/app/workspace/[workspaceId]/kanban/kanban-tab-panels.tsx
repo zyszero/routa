@@ -9,7 +9,8 @@ import { RepoPicker, type RepoSelection } from "@/client/components/repo-picker"
 import { resolveEffectiveTaskAutomation } from "@/core/kanban/effective-task-automation";
 import { KanbanCard } from "./kanban-card";
 import { KanbanCardActivityBar, KanbanCardDetail } from "./kanban-card-detail";
-import { KanbanFileChangesPanel, getKanbanFileChangesSummary } from "./kanban-file-changes-panel";
+import { getKanbanFileChangesSummary } from "./kanban-file-changes-panel";
+import { KanbanEnhancedFileChangesPanel } from "./components/kanban-enhanced-file-changes-panel";
 import type { KanbanTaskAgentCopy } from "./i18n/kanban-task-agent";
 import { KanbanCreateModal, type TaskDraft } from "../kanban-create-modal";
 import { KanbanCardActivityPanel, KanbanEmptySessionPane } from "./kanban-card-activity";
@@ -318,11 +319,13 @@ export function KanbanBoardSurface({
       </div>
       <div className="flex min-h-0 flex-1 gap-4">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-          <KanbanFileChangesPanel
+          <KanbanEnhancedFileChangesPanel
+            workspaceId={workspaceId}
             repos={repoChanges}
             loading={repoChangesLoading}
             open={fileChangesOpen}
             onClose={() => setFileChangesOpen(false)}
+            onRefresh={onRefresh}
           />
           <div className="flex-1 min-h-0 overflow-auto pb-2" data-testid="kanban-board-content">
             <div className="flex min-h-full min-w-max items-start gap-3 pr-4">

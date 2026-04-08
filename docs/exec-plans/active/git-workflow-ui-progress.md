@@ -7,8 +7,8 @@
 ## Overall Status
 
 - [x] Phase 1: Data Model + Backend APIs (Week 1) ✅ **COMPLETE**
-- [ ] Phase 2: Core UI (Unstaged/Staged sections) (Week 2) 🔄 **IN PROGRESS**
-- [ ] Phase 3: Commits section + Diff viewer (Week 3)
+- [x] Phase 2: Core UI (Unstaged/Staged sections) (Week 2) ✅ **COMPLETE**
+- [ ] Phase 3: Commits section + Diff viewer (Week 3) 🔜 **NEXT**
 - [ ] Phase 4: Git operations + Shortcuts (Week 4)
 - [ ] Phase 5: Polish + Testing (Week 5)
 - [ ] Phase 6: Documentation + Release (Week 6)
