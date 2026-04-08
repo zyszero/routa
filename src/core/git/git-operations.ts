@@ -5,9 +5,74 @@
 
 import { exec as execCallback } from "node:child_process";
 import { promisify } from "node:util";
-import { isGitRepository } from "./git-utils";
+import { isGitRepository, shellQuote } from "./git-utils";
 
 const exec = promisify(execCallback);
+
+export interface GitIdentity {
+  name: string;
+  email: string;
+  source: "local" | "global";
+}
+
+export function isSuspiciousGitIdentity(name: string, email: string): boolean {
+  const normalizedName = name.trim();
+  const normalizedEmail = email.trim();
+  return [
+    /test@example\.com/i,
+    /@example\.com$/i,
+    /^test$/i,
+    /routa test/i,
+    /placeholder/i,
+  ].some((pattern) => pattern.test(normalizedName) || pattern.test(normalizedEmail));
+}
+
+async function readGitConfigValue(
+  repoPath: string,
+  args: string[],
+): Promise<string> {
+  try {
+    const { stdout } = await exec(`git ${args.join(" ")}`, { cwd: repoPath });
+    return stdout.trim();
+  } catch {
+    return "";
+  }
+}
+
+export async function resolveGitIdentity(repoPath: string): Promise<GitIdentity | null> {
+  const localName = await readGitConfigValue(repoPath, ["config", "--get", "user.name"]);
+  const localEmail = await readGitConfigValue(repoPath, ["config", "--get", "user.email"]);
+  if (localName && localEmail) {
+    return { name: localName, email: localEmail, source: "local" };
+  }
+
+  const globalName = await readGitConfigValue(repoPath, ["config", "--global", "--get", "user.name"]);
+  const globalEmail = await readGitConfigValue(repoPath, ["config", "--global", "--get", "user.email"]);
+  if (globalName && globalEmail) {
+    return { name: globalName, email: globalEmail, source: "global" };
+  }
+
+  return null;
+}
+
+export async function validateGitIdentity(repoPath: string): Promise<void> {
+  const identity = await resolveGitIdentity(repoPath);
+
+  if (!identity) {
+    throw new Error(
+      "Git user identity is not configured. Set repo-local or global git config before committing:\n"
+      + "  git config --global user.name \"Your Name\"\n"
+      + "  git config --global user.email \"your-real-email@domain.com\""
+    );
+  }
+
+  if (isSuspiciousGitIdentity(identity.name, identity.email)) {
+    throw new Error(
+      `Git identity looks like a placeholder (${identity.name} <${identity.email}>). `
+      + "Configure a real repo-local or global identity before committing."
+    );
+  }
+}
 
 /**
  * Execute a git command in the given repository
@@ -89,6 +154,8 @@ export async function createCommit(
     throw new Error("Commit message cannot be empty");
   }
 
+  await validateGitIdentity(repoPath);
+
   // If specific files provided, stage them first
   if (files && files.length > 0) {
     await stageFiles(repoPath, files);
@@ -120,7 +187,10 @@ export async function pullCommits(
   remote = "origin",
   branch?: string,
 ): Promise<void> {
-  const pullCommand = branch ? `git pull ${remote} ${branch}` : `git pull ${remote}`;
+  const quotedRemote = shellQuote(remote);
+  const pullCommand = branch
+    ? `git pull ${quotedRemote} ${shellQuote(branch)}`
+    : `git pull ${quotedRemote}`;
   await gitExec(pullCommand, repoPath);
 }
 
@@ -130,7 +200,7 @@ export async function pullCommits(
  * @param onto - Target branch to rebase onto
  */
 export async function rebaseBranch(repoPath: string, onto: string): Promise<void> {
-  await gitExec(`git rebase ${onto}`, repoPath);
+  await gitExec(`git rebase ${shellQuote(onto)}`, repoPath);
 }
 
 /**
@@ -145,7 +215,7 @@ export async function resetBranch(
   mode: "soft" | "hard",
 ): Promise<void> {
   const resetMode = mode === "hard" ? "--hard" : "--soft";
-  await gitExec(`git reset ${resetMode} ${to}`, repoPath);
+  await gitExec(`git reset ${resetMode} ${shellQuote(to)}`, repoPath);
 }
 
 export interface CommitInfo {

@@ -81,7 +81,7 @@ function gitExecSync(command: string, cwd: string): string {
   return bridge.process.execSync(command, { cwd }).trimEnd();
 }
 
-function shellQuote(value: string): string {
+export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
@@ -262,11 +262,11 @@ export function checkoutBranch(repoPath: string, branch: string): boolean {
   }
 
   try {
-    gitExecSync(`git checkout "${branch}"`, repoPath);
+    gitExecSync(`git checkout ${shellQuote(branch)}`, repoPath);
     return true;
   } catch {
     try {
-      gitExecSync(`git checkout -b "${branch}"`, repoPath);
+      gitExecSync(`git checkout -b ${shellQuote(branch)}`, repoPath);
       return true;
     } catch {
       return false;
