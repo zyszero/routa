@@ -1331,6 +1331,26 @@ export function KanbanTab({
     onRefresh();
   }
 
+  async function runTaskPullRequest(taskId: string): Promise<string | null> {
+    await ensureBoardAutoProviderPersisted();
+    const response = await fetch(`/api/tasks/${encodeURIComponent(taskId)}/pr-run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ specialistLocale: specialistLanguage }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(typeof data?.error === "string" ? data.error : "Failed to start PR session");
+    }
+    const sessionId = typeof data?.sessionId === "string" ? data.sessionId : null;
+    if (sessionId) {
+      setActiveSessionId(sessionId);
+      acp?.selectSession(sessionId);
+      onRefresh();
+    }
+    return sessionId;
+  }
+
   function confirmDeleteTask(task: TaskInfo) {
     setIsDeleting(false);
     setDeleteConfirmTask(task);
@@ -1526,6 +1546,7 @@ export function KanbanTab({
         confirmDeleteTask={confirmDeleteTask}
         patchTask={patchTask}
         retryTaskTrigger={retryTaskTrigger}
+        runTaskPullRequest={runTaskPullRequest}
         openTaskDetail={openTaskDetail}
         agentSession={agentSession}
         onCloseAgentPanel={() => setAgentPanelOpen(false)}
@@ -1576,6 +1597,7 @@ export function KanbanTab({
         combinedSessions={combinedSessions}
         patchTask={patchTask}
         retryTaskTrigger={retryTaskTrigger}
+        runTaskPullRequest={runTaskPullRequest}
         confirmDeleteTask={confirmDeleteTask}
         onRefresh={onRefresh}
         setActiveSessionId={setActiveSessionId}

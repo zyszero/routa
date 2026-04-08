@@ -67,6 +67,7 @@ export interface KanbanTaskChanges extends KanbanRepoChanges {
   worktreePath?: string;
   mode?: "worktree" | "commits";
   baseRef?: string;
+  remoteUrl?: string;
   commits?: KanbanCommitChangeItem[];
 }
 

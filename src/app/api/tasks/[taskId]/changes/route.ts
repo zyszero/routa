@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRoutaSystem } from "@/core/routa-system";
 import {
   getRepoChanges,
+  getRemoteUrl,
   isBareGitRepository,
   isGitRepository,
 } from "@/core/git/git-utils";
@@ -78,6 +79,7 @@ export async function GET(
     }
 
     const changes = getRepoChanges(repoPath);
+    const remoteUrl = getRemoteUrl(repoPath);
     const deliveryReadiness = await buildTaskDeliveryReadiness(task, system);
     const committedChanges = deliveryReadiness.checked
       && deliveryReadiness.hasCommitsSinceBase
@@ -98,6 +100,7 @@ export async function GET(
         files: changes.files,
         mode: committedChanges.length > 0 ? "commits" : "worktree",
         baseRef: deliveryReadiness.baseRef,
+        remoteUrl,
         commits: committedChanges,
         source: worktree ? "worktree" : "repo",
         worktreeId: worktree?.id,

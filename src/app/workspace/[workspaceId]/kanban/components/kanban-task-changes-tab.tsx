@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "@/i18n";
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
+import type { CodebaseData } from "@/client/hooks/use-workspaces";
 import { KanbanEnhancedFileChangesPanel } from "./kanban-enhanced-file-changes-panel";
 import { CommitRow, TaskCommitDiffPreview } from "../kanban-diff-preview";
 import type {
@@ -10,23 +11,62 @@ import type {
   KanbanCommitDiffPreview,
   KanbanTaskChanges,
 } from "../kanban-file-changes-types";
+import type { TaskInfo } from "../../types";
 
 interface KanbanTaskChangesTabProps {
+  task: TaskInfo;
+  codebases: CodebaseData[];
   taskId: string;
   workspaceId: string;
   refreshSignal?: number;
   onRefresh: () => void;
+  onRunPullRequest?: (taskId: string) => Promise<string | null>;
+  onSelectSession?: (sessionId: string) => void;
+}
+
+function isGitLabUrl(value: string | null | undefined): boolean {
+  if (!value) return false;
+  try {
+    return new URL(value).hostname.toLowerCase().includes("gitlab");
+  } catch {
+    return value.toLowerCase().includes("gitlab");
+  }
+}
+
+function detectPrPlatform(
+  taskChanges: KanbanTaskChanges | null,
+  primaryCodebase: CodebaseData | undefined,
+): "github" | "gitlab" | null {
+  const sourceUrl = primaryCodebase?.sourceUrl;
+  const remoteUrl = taskChanges?.remoteUrl;
+
+  if (primaryCodebase?.sourceType === "github") {
+    return "github";
+  }
+  if ((sourceUrl ?? "").includes("github.com") || (remoteUrl ?? "").includes("github.com")) {
+    return "github";
+  }
+  if (isGitLabUrl(sourceUrl) || isGitLabUrl(remoteUrl)) {
+    return "gitlab";
+  }
+  return null;
 }
 
 export function KanbanTaskChangesTab({
+  task,
+  codebases,
   taskId,
   workspaceId,
   refreshSignal,
   onRefresh,
+  onRunPullRequest,
+  onSelectSession,
 }: KanbanTaskChangesTabProps) {
   const { t } = useTranslation();
   const [taskChanges, setTaskChanges] = useState<KanbanTaskChanges | null>(null);
   const [taskChangesLoading, setTaskChangesLoading] = useState(false);
+  const [startingPrSession, setStartingPrSession] = useState(false);
+  const [prSessionError, setPrSessionError] = useState<string | null>(null);
   const [activeCommitSha, setActiveCommitSha] = useState<string | null>(null);
   const [commitDiffCache, setCommitDiffCache] = useState<Record<string, KanbanCommitDiffPreview>>({});
   const [commitDiffErrors, setCommitDiffErrors] = useState<Record<string, string>>({});
@@ -86,8 +126,16 @@ export function KanbanTaskChangesTab({
   const commits = useMemo(() => taskChanges?.commits ?? [], [taskChanges?.commits]);
   const hasCommittedChanges = commits.length > 0;
   const hasLocalChanges = (taskChanges?.files.length ?? 0) > 0;
+  const hasAnyChanges = hasCommittedChanges || hasLocalChanges;
   const scopePath = taskChanges?.worktreePath ?? taskChanges?.repoPath ?? "";
   const sourceLabel = taskChanges?.source === "worktree" ? t.kanbanDetail.worktreeSource : t.kanbanDetail.repoSource;
+  const taskCodebaseIds = task.codebaseIds && task.codebaseIds.length > 0 ? task.codebaseIds : [];
+  const primaryCodebase = taskCodebaseIds.length > 0
+    ? codebases.find((codebase) => codebase.id === taskCodebaseIds[0])
+    : codebases[0];
+  const prPlatform = detectPrPlatform(taskChanges, primaryCodebase);
+  const platformLabel = prPlatform === "gitlab" ? "GitLab" : "GitHub";
+  const canRunPullRequest = Boolean(prPlatform && onRunPullRequest);
   const selectedCommit = useMemo(
     () => commits.find((commit) => commit.sha === activeCommitSha) ?? null,
     [commits, activeCommitSha]
@@ -166,6 +214,11 @@ export function KanbanTaskChangesTab({
               {scopePath}
             </span>
           ) : null}
+          {prPlatform ? (
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-700 dark:border-amber-700/60 dark:bg-amber-900/20 dark:text-amber-200">
+              {platformLabel}
+            </span>
+          ) : null}
         </div>
       ) : null}
 
@@ -222,6 +275,48 @@ export function KanbanTaskChangesTab({
           </div>
         )}
       </section>
+
+      {canRunPullRequest && hasAnyChanges ? (
+        <section className="space-y-2 border-t border-slate-200/70 pt-3 dark:border-slate-800/80">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="space-y-1">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">
+                {t.kanbanDetail.pullRequestSpecialist}
+              </div>
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                {t.kanbanDetail.pullRequestSpecialistHint.replace("{platform}", platformLabel)}
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={startingPrSession}
+              onClick={async () => {
+                if (!onRunPullRequest) return;
+                setStartingPrSession(true);
+                setPrSessionError(null);
+                try {
+                  const sessionId = await onRunPullRequest(taskId);
+                  if (sessionId) {
+                    onSelectSession?.(sessionId);
+                  }
+                } catch (error) {
+                  setPrSessionError(error instanceof Error ? error.message : String(error));
+                } finally {
+                  setStartingPrSession(false);
+                }
+              }}
+              className="rounded border border-amber-500 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-amber-200"
+            >
+              {startingPrSession ? t.kanbanDetail.startingPullRequestSession : t.kanbanDetail.runPullRequestSpecialist}
+            </button>
+          </div>
+          {prSessionError ? (
+            <div className="border-l-2 border-rose-300/80 px-3 py-2 text-xs text-rose-800 dark:border-rose-700/70 dark:text-rose-200">
+              {prSessionError}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
 }

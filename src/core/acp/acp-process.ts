@@ -777,14 +777,11 @@ export class AcpProcess {
     }
 
     private shouldAutoApprovePermissionRequest(params: Record<string, unknown>): boolean {
-        if (!this._sessionContext?.autoApprovePermissions) {
-            return false;
-        }
+        const provider = (this._sessionContext?.provider ?? this.presetId ?? "").toLowerCase();
+        const isCodex = provider === "codex" || provider === "codex-acp";
+        if (isCodex) return typeof params === "object" && params !== null;
 
-        const provider = (this._sessionContext.provider ?? this.presetId ?? "").toLowerCase();
-        if (provider !== "codex" && provider !== "codex-acp") {
-            return false;
-        }
+        if (!this._sessionContext?.autoApprovePermissions) return false;
 
         return typeof params === "object" && params !== null;
     }

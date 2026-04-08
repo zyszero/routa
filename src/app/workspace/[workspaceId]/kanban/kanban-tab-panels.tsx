@@ -82,6 +82,7 @@ export function KanbanBoardSurface({
   confirmDeleteTask,
   patchTask,
   retryTaskTrigger,
+  runTaskPullRequest, // eslint-disable-line @typescript-eslint/no-unused-vars -- used in KanbanTaskCard props
   openTaskDetail,
   agentSession,
   onCloseAgentPanel,
@@ -131,6 +132,7 @@ export function KanbanBoardSurface({
   confirmDeleteTask: (task: TaskInfo) => void;
   patchTask: (taskId: string, payload: Record<string, unknown>) => Promise<TaskInfo>;
   retryTaskTrigger: (taskId: string) => Promise<void>;
+  runTaskPullRequest: (taskId: string) => Promise<string | null>;
   openTaskDetail: (task: TaskInfo) => Promise<void>;
   agentSession?: SessionInfo;
   onCloseAgentPanel: () => void;
@@ -600,6 +602,7 @@ export function KanbanTaskDetailOverlay({
   combinedSessions,
   patchTask,
   retryTaskTrigger,
+  runTaskPullRequest,
   confirmDeleteTask,
   onRefresh,
   setActiveSessionId,
@@ -629,6 +632,7 @@ export function KanbanTaskDetailOverlay({
   combinedSessions: SessionInfo[];
   patchTask: (taskId: string, payload: Record<string, unknown>) => Promise<TaskInfo>;
   retryTaskTrigger: (taskId: string) => Promise<void>;
+  runTaskPullRequest: (taskId: string) => Promise<string | null>;
   confirmDeleteTask: (task: TaskInfo) => void;
   onRefresh: () => void;
   setActiveSessionId: Dispatch<SetStateAction<string | null>>;
@@ -700,6 +704,7 @@ export function KanbanTaskDetailOverlay({
                   selectedProvider={resolveKanbanBoardAutoProviderId(board, boardAutoProviderId) ?? null}
                   onPatchTask={patchTask}
                   onRetryTrigger={retryTaskTrigger}
+                  onRunPullRequest={runTaskPullRequest}
                   onDelete={() => confirmDeleteTask(task)}
                   onRefresh={onRefresh}
                   onProviderChange={(providerId) => {

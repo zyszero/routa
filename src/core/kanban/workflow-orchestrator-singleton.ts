@@ -94,6 +94,7 @@ export async function enqueueKanbanTaskSession(
     task: Awaited<ReturnType<RoutaSystem["taskStore"]["get"]>>;
     expectedColumnId?: string;
     ignoreExistingTrigger?: boolean;
+    bypassQueue?: boolean;
     mutateTask?: (task: NonNullable<Awaited<ReturnType<RoutaSystem["taskStore"]["get"]>>>) => void;
     providerOverride?: string;
     step?: KanbanAutomationStep;
@@ -107,6 +108,15 @@ export async function enqueueKanbanTaskSession(
   }
   if (task.triggerSessionId && !params.ignoreExistingTrigger) {
     return { sessionId: task.triggerSessionId, queued: false };
+  }
+
+  if (params.bypassQueue) {
+    const result = await startKanbanTaskSession(system, task.id, params);
+    return {
+      sessionId: result.sessionId ?? undefined,
+      queued: false,
+      error: result.error,
+    };
   }
 
   const queue = getKanbanSessionQueue(system);
