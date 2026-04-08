@@ -9,6 +9,7 @@ interface KanbanFileChangesSectionProps {
   title: string;
   subtitle?: string;
   files: KanbanFileChangeItem[];
+  embedded?: boolean;
   showCheckbox?: boolean;
   onFileClick?: (file: KanbanFileChangeItem) => void;
   onFileSelect?: (file: KanbanFileChangeItem, selected: boolean) => void;
@@ -22,6 +23,7 @@ export function KanbanFileChangesSection({
   title,
   subtitle,
   files,
+  embedded = false,
   showCheckbox = false,
   onFileClick,
   onFileSelect,
@@ -41,9 +43,9 @@ export function KanbanFileChangesSection({
   };
 
   return (
-    <section className="rounded-xl border border-slate-200/70 bg-slate-50/50 dark:border-[#202433] dark:bg-[#0d1018]/50">
+    <section className={embedded ? "py-1" : "rounded-xl border border-slate-200/70 bg-slate-50/50 dark:border-[#202433] dark:bg-[#0d1018]/50"}>
       {/* Header */}
-      <div className="flex items-center justify-between gap-2 px-3 py-2">
+      <div className={`flex items-center justify-between gap-2 ${embedded ? "px-0 py-1.5" : "px-3 py-2"}`}>
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
@@ -92,9 +94,9 @@ export function KanbanFileChangesSection({
 
       {/* Content */}
       {expanded && (
-        <div className="border-t border-slate-200/70 px-3 py-2 dark:border-[#202433]">
+        <div className={`${embedded ? "border-t border-slate-200/70 px-0 py-2 dark:border-slate-800/80" : "border-t border-slate-200/70 px-3 py-2 dark:border-[#202433]"}`}>
           {files.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-slate-200 bg-white/50 px-3 py-3 text-center text-[10px] text-slate-400 dark:border-slate-700 dark:bg-[#12141c]/50 dark:text-slate-500">
+            <div className={`${embedded ? "px-1 py-2 text-left" : "rounded-lg border border-dashed border-slate-200 bg-white/50 px-3 py-3 dark:border-slate-700 dark:bg-[#12141c]/50"} text-[10px] text-slate-400 dark:text-slate-500`}>
               No files in this section
             </div>
           ) : (

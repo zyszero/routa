@@ -625,6 +625,7 @@ export function KanbanCardDetail({
               compact={compactMode}
             >
               <KanbanEnhancedFileChangesPanel
+                taskId={task.id}
                 workspaceId={task.workspaceId}
                 changes={taskChanges}
                 loading={taskChangesLoading}

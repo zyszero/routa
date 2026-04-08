@@ -22,6 +22,10 @@ export interface KanbanFileChangeItem {
   previousPath?: string;
   additions?: number;
   deletions?: number;
+  /** Inline patch payload when task-level changes already provide diff content */
+  patch?: string;
+  /** Alternate diff field used by some API/test payloads */
+  diff?: string;
   /** Source of the change - useful for distinguishing agent vs manual changes */
   source?: "agent" | "manual" | "git" | "worktree";
   /** Timestamp when the change was detected */

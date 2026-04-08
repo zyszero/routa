@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useCallback } from "react";
 import { useTranslation } from "@/i18n";
-import type { KanbanRepoChanges, KanbanFileChangeItem } from "../kanban-file-changes-types";
+import type { KanbanRepoChanges, KanbanFileChangeItem, KanbanTaskChanges } from "../kanban-file-changes-types";
 import { KanbanUnstagedSection } from "./kanban-unstaged-section";
 import { KanbanStagedSection } from "./kanban-staged-section";
 import { KanbanCommitModal } from "./kanban-commit-modal";
@@ -11,6 +11,7 @@ import { useGitOperations } from "../hooks/use-git-operations";
 import { useKeyboardShortcuts } from "../hooks/use-keyboard-shortcuts";
 
 interface KanbanEnhancedFileChangesPanelProps {
+  taskId?: string;
   workspaceId: string;
   repos?: KanbanRepoChanges[];
   changes?: KanbanTaskChanges | null;
@@ -22,6 +23,7 @@ interface KanbanEnhancedFileChangesPanelProps {
 }
 
 export function KanbanEnhancedFileChangesPanel({
+  taskId,
   workspaceId,
   repos = [],
   changes,
@@ -153,8 +155,50 @@ export function KanbanEnhancedFileChangesPanel({
 
   const handleFileClick = useCallback(async (file: KanbanFileChangeItem, staged = false) => {
     setActiveDiffFile(file);
-    setDiffLoading(true);
     setDiffError(null);
+
+    const inlineDiff = file.patch ?? file.diff;
+    if (typeof inlineDiff === "string") {
+      setDiffContent(inlineDiff);
+      setDiffLoading(false);
+      return;
+    }
+
+    if (embedded && taskId) {
+      setDiffLoading(true);
+      try {
+        const params = new URLSearchParams({
+          path: file.path,
+          status: file.status,
+        });
+        if (file.previousPath) {
+          params.set("previousPath", file.previousPath);
+        }
+        const response = await fetch(
+          `/api/tasks/${encodeURIComponent(taskId)}/changes/file?${params.toString()}`,
+          { method: "GET", cache: "no-store" }
+        );
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to load diff");
+        }
+        setDiffContent(data.diff?.patch || null);
+      } catch (error) {
+        setDiffError(error instanceof Error ? error.message : "Failed to load diff");
+      } finally {
+        setDiffLoading(false);
+      }
+      return;
+    }
+
+    if (!codebaseId) {
+      setDiffContent(null);
+      setDiffLoading(false);
+      setDiffError("No diff available");
+      return;
+    }
+
+    setDiffLoading(true);
 
     try {
       const diff = await getFileDiff(file.path, staged);
@@ -164,7 +208,7 @@ export function KanbanEnhancedFileChangesPanel({
     } finally {
       setDiffLoading(false);
     }
-  }, [getFileDiff]);
+  }, [embedded, taskId, codebaseId, getFileDiff]);
 
   const handleCloseDiff = useCallback(() => {
     setActiveDiffFile(null);
@@ -224,7 +268,7 @@ export function KanbanEnhancedFileChangesPanel({
   if (embedded) {
     return (
       <>
-        <div className="space-y-2">
+        <div className="divide-y divide-slate-200/70 dark:divide-slate-800/80">
           {loading ? (
             <div className="border-b border-slate-200/70 px-1 pb-2 text-sm text-slate-500 dark:border-slate-700/70 dark:text-slate-400">
               {t.kanbanDetail.loadingChanges}
@@ -240,6 +284,7 @@ export function KanbanEnhancedFileChangesPanel({
                 files={unstagedWithSelection}
                 autoCommit={autoCommit}
                 onAutoCommitToggle={setAutoCommit}
+                embedded={true}
                 onFileClick={(file) => handleFileClick(file, false)}
                 onFileSelect={handleFileSelect}
                 onSelectAll={(selected) => handleSelectAll(unstagedWithSelection, selected)}
@@ -255,6 +300,7 @@ export function KanbanEnhancedFileChangesPanel({
                   diff={diffContent || undefined}
                   loading={diffLoading}
                   error={diffError || undefined}
+                  embedded={true}
                   onClose={handleCloseDiff}
                 />
               )}

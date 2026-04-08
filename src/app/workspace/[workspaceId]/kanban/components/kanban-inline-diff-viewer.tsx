@@ -11,6 +11,7 @@ interface KanbanInlineDiffViewerProps {
   error?: string;
   onClose: () => void;
   commitSha?: string;
+  embedded?: boolean;
 }
 
 export function KanbanInlineDiffViewer({
@@ -20,6 +21,7 @@ export function KanbanInlineDiffViewer({
   error,
   onClose,
   commitSha,
+  embedded = false,
 }: KanbanInlineDiffViewerProps) {
   if (!file) return null;
 
@@ -47,9 +49,9 @@ export function KanbanInlineDiffViewer({
   const chunks = diff ? parseDiff(diff) : [];
 
   return (
-    <div className="rounded-lg border border-slate-200/70 bg-white dark:border-slate-700 dark:bg-[#12141c]">
+    <div className={embedded ? "border-t border-slate-200/70 pt-2 dark:border-slate-800/80" : "rounded-lg border border-slate-200/70 bg-white dark:border-slate-700 dark:bg-[#12141c]"}>
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 px-3 py-2 dark:border-slate-700">
+      <div className={`flex items-center justify-between gap-3 ${embedded ? "border-b border-slate-200/70 px-0 pb-2 dark:border-slate-800/80" : "border-b border-slate-200/70 px-3 py-2 dark:border-slate-700"}`}>
         <div className="min-w-0 flex-1">
           <div className="text-xs font-medium text-slate-900 dark:text-slate-100">
             {file.path}
@@ -72,15 +74,15 @@ export function KanbanInlineDiffViewer({
       {/* Content */}
       <div className="max-h-96 overflow-auto">
         {loading ? (
-          <div className="flex items-center justify-center py-8 text-xs text-slate-400 dark:text-slate-500">
+          <div className={`flex items-center justify-center text-xs text-slate-400 dark:text-slate-500 ${embedded ? "px-1 py-6" : "py-8"}`}>
             Loading diff...
           </div>
         ) : error ? (
-          <div className="px-3 py-4 text-xs text-rose-600 dark:text-rose-400">
+          <div className={`${embedded ? "px-0 py-3" : "px-3 py-4"} text-xs text-rose-600 dark:text-rose-400`}>
             {error}
           </div>
         ) : !diff ? (
-          <div className="px-3 py-4 text-xs text-slate-400 dark:text-slate-500">
+          <div className={`${embedded ? "px-0 py-3" : "px-3 py-4"} text-xs text-slate-400 dark:text-slate-500`}>
             No diff available
           </div>
         ) : (
@@ -122,7 +124,7 @@ export function KanbanInlineDiffViewer({
               return (
                 <div
                   key={i}
-                  className={`px-3 py-0.5 ${bgClass} ${textClass}`}
+                  className={`${embedded ? "px-0" : "px-3"} py-0.5 ${bgClass} ${textClass}`}
                 >
                   <span className="inline-block w-3 select-none opacity-50">
                     {prefix}

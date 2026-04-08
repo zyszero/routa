@@ -9,6 +9,7 @@ interface KanbanUnstagedSectionProps {
   files: KanbanFileChangeItem[];
   autoCommit: boolean;
   onAutoCommitToggle: (enabled: boolean) => void;
+  embedded?: boolean;
   onFileClick?: (file: KanbanFileChangeItem) => void;
   onFileSelect?: (file: KanbanFileChangeItem, selected: boolean) => void;
   onSelectAll?: (selected: boolean) => void;
@@ -21,6 +22,7 @@ export function KanbanUnstagedSection({
   files,
   autoCommit,
   onAutoCommitToggle,
+  embedded = false,
   onFileClick,
   onFileSelect,
   onSelectAll,
@@ -67,10 +69,11 @@ export function KanbanUnstagedSection({
         <input
           type="checkbox"
           checked={autoCommit}
+          disabled={true}
           onChange={(e) => onAutoCommitToggle(e.target.checked)}
-          className="h-3 w-3 rounded border-slate-300 text-emerald-600 focus:ring-1 focus:ring-emerald-500 dark:border-slate-600 dark:bg-slate-700"
+          className="h-3 w-3 rounded border-slate-300 text-emerald-600 opacity-50 focus:ring-1 focus:ring-emerald-500 disabled:cursor-not-allowed dark:border-slate-600 dark:bg-slate-700"
         />
-        Auto-commit
+        <span className="opacity-50">Auto-commit</span>
       </label>
     </>
   );
@@ -80,6 +83,7 @@ export function KanbanUnstagedSection({
       title="UNSTAGED"
       subtitle={files.length > 0 ? `${files.length} file${files.length === 1 ? '' : 's'} with changes` : undefined}
       files={files}
+      embedded={embedded}
       showCheckbox={true}
       onFileClick={onFileClick}
       onFileSelect={onFileSelect}
