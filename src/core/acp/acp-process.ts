@@ -413,29 +413,47 @@ export class AcpProcess {
         let result: Record<string, unknown>;
         let notificationRawInput: Record<string, unknown> = response;
         if (pending.method === "session/request_permission") {
-            const requestedPermissions = (
-                typeof pending.params.permissions === "object" && pending.params.permissions !== null
-            ) ? pending.params.permissions as Record<string, unknown> : {};
             const decision = typeof response.decision === "string" ? response.decision : "approve";
             const scope = response.scope === "session" ? "session" : "turn";
-            const grantedPermissions = decision === "deny"
-                ? {}
-                : (
-                    typeof response.permissions === "object" && response.permissions !== null
-                        ? response.permissions as Record<string, unknown>
-                        : requestedPermissions
-                );
-            result = {
-                permissions: grantedPermissions,
-                scope,
-                outcome: decision === "deny" ? "denied" : "approved",
-            };
-            notificationRawInput = {
-                ...pending.params,
-                decision,
-                scope,
-                outcome: result.outcome,
-            };
+            const optionId = this.resolvePermissionOptionId(pending.params, decision, scope);
+
+            if (optionId) {
+                result = {
+                    outcome: {
+                        outcome: "selected",
+                        optionId,
+                    },
+                };
+                notificationRawInput = {
+                    ...pending.params,
+                    decision,
+                    scope,
+                    optionId,
+                    outcome: "selected",
+                };
+            } else {
+                const requestedPermissions = (
+                    typeof pending.params.permissions === "object" && pending.params.permissions !== null
+                ) ? pending.params.permissions as Record<string, unknown> : {};
+                const grantedPermissions = decision === "deny"
+                    ? {}
+                    : (
+                        typeof response.permissions === "object" && response.permissions !== null
+                            ? response.permissions as Record<string, unknown>
+                            : requestedPermissions
+                    );
+                result = {
+                    permissions: grantedPermissions,
+                    scope,
+                    outcome: decision === "deny" ? "denied" : "approved",
+                };
+                notificationRawInput = {
+                    ...pending.params,
+                    decision,
+                    scope,
+                    outcome: result.outcome,
+                };
+            }
         } else {
             result = response;
         }
@@ -787,11 +805,20 @@ export class AcpProcess {
     }
 
     private buildPermissionApprovalResult(params: Record<string, unknown>): Record<string, unknown> {
+        const scope = this.getDefaultPermissionScope();
+        const optionId = this.resolvePermissionOptionId(params, "approve", scope);
+        if (optionId) {
+            return {
+                outcome: {
+                    outcome: "selected",
+                    optionId,
+                },
+            };
+        }
+
         const requestedPermissions = (
             typeof params.permissions === "object" && params.permissions !== null
         ) ? params.permissions as Record<string, unknown> : undefined;
-        const role = (this._sessionContext?.role ?? "").toUpperCase();
-        const scope = role === AgentRole.ROUTA ? "session" : "turn";
 
         if (requestedPermissions) {
             return {
@@ -804,6 +831,84 @@ export class AcpProcess {
         return {
             outcome: {outcome: "approved"},
         };
+    }
+
+    private getDefaultPermissionScope(): "session" | "turn" {
+        const role = (this._sessionContext?.role ?? "").toUpperCase();
+        return role === AgentRole.ROUTA ? "session" : "turn";
+    }
+
+    private resolvePermissionOptionId(
+        params: Record<string, unknown>,
+        decision: string,
+        scope: "session" | "turn",
+    ): string | undefined {
+        const options = Array.isArray(params.options)
+            ? params.options.filter((option): option is Record<string, unknown> => typeof option === "object" && option !== null)
+            : [];
+        if (options.length === 0) {
+            return undefined;
+        }
+
+        const normalizedOptions = options.map((option) => ({
+            optionId: typeof option.optionId === "string" ? option.optionId : undefined,
+            kind: typeof option.kind === "string" ? option.kind : undefined,
+        })).filter((option): option is { optionId: string; kind?: string } => typeof option.optionId === "string");
+
+        if (decision === "deny") {
+            return this.findPermissionOptionId(normalizedOptions, [
+                "abort",
+                "denied",
+                "decline",
+                "cancel",
+                "rejected",
+                "reject",
+            ], [
+                "reject_once",
+                "reject_always",
+            ]);
+        }
+
+        if (scope === "session") {
+            return this.findPermissionOptionId(normalizedOptions, [
+                "approved-for-session",
+                "approved-always",
+                "approved-execpolicy-amendment",
+                "approved",
+            ], [
+                "allow_always",
+                "allow_once",
+            ]);
+        }
+
+        return this.findPermissionOptionId(normalizedOptions, [
+            "approved",
+            "approved-once",
+            "approved-for-session",
+            "approved-always",
+            "approved-execpolicy-amendment",
+        ], [
+            "allow_once",
+            "allow_always",
+        ]);
+    }
+
+    private findPermissionOptionId(
+        options: Array<{ optionId: string; kind?: string }>,
+        preferredIds: string[],
+        preferredKinds: string[],
+    ): string | undefined {
+        for (const optionId of preferredIds) {
+            const match = options.find((option) => option.optionId === optionId);
+            if (match) return match.optionId;
+        }
+
+        for (const kind of preferredKinds) {
+            const match = options.find((option) => option.kind === kind);
+            if (match) return match.optionId;
+        }
+
+        return options[0]?.optionId;
     }
 
     private writeMessage(msg: Record<string, unknown>): void {

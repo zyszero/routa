@@ -802,6 +802,7 @@ export async function POST(request: NextRequest) {
           requestId,
           errorName: error.name,
           errorMessage: error.message,
+          errorData: error.data,
         },
       });
     }

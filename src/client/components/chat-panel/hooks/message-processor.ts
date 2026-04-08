@@ -171,13 +171,20 @@ function applyToolCallUpdate(
   const index = messages.findIndex((message) => message.toolCallId === payload.toolCallId);
   if (index >= 0) {
     const existing = messages[index];
+    const nextToolKind = payload.toolKind ?? existing.toolKind;
+    const mergedRawInput = nextToolKind === "request-permissions" && existing.toolRawInput
+      ? {
+          ...existing.toolRawInput,
+          ...(payload.rawInput ?? {}),
+        }
+      : payload.rawInput ?? existing.toolRawInput;
     messages[index] = {
       ...existing,
       toolStatus: payload.status ?? existing.toolStatus,
       toolName: payload.toolName ?? existing.toolName,
-      toolKind: payload.toolKind ?? existing.toolKind,
+      toolKind: nextToolKind,
       delegatedTaskId: payload.delegatedTaskId ?? existing.delegatedTaskId,
-      toolRawInput: payload.rawInput ?? existing.toolRawInput,
+      toolRawInput: mergedRawInput,
       toolRawOutput: payload.rawOutput ?? existing.toolRawOutput,
       content: payload.outputParts.length
         ? `${payload.toolName ?? existing.toolName ?? "tool"}\n\nOutput:\n${payload.outputParts.join("\n")}`

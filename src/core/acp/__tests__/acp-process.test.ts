@@ -62,6 +62,83 @@ describe("AcpProcess codex permission handling", () => {
     }));
   });
 
+  it("selects the approved option for codex option-based permission requests", () => {
+    const process = createProcess();
+    const writeMessage = vi.fn();
+
+    process.setSessionContext({
+      sessionId: "session-1",
+      provider: "codex",
+      role: "CRAFTER",
+    });
+
+    (process as any).writeMessage = writeMessage;
+    (process as any).handleAgentRequest({
+      jsonrpc: "2.0",
+      id: 9,
+      method: "session/request_permission",
+      params: {
+        options: [
+          { optionId: "approved-for-session", kind: "allow_always" },
+          { optionId: "approved", kind: "allow_once" },
+          { optionId: "abort", kind: "reject_once" },
+        ],
+      },
+    });
+
+    expect(writeMessage).toHaveBeenCalledWith({
+      jsonrpc: "2.0",
+      id: 9,
+      result: {
+        outcome: {
+          outcome: "selected",
+          optionId: "approved",
+        },
+      },
+    });
+  });
+
+  it("maps manual codex permission responses to option selections", () => {
+    const process = createProcess();
+    const writeMessage = vi.fn();
+
+    process.setSessionContext({
+      sessionId: "session-1",
+      provider: "codex",
+      role: "CRAFTER",
+    });
+
+    (process as any).writeMessage = writeMessage;
+    (process as any).pendingInteractiveRequests.set("request-permission-1", {
+      requestId: 10,
+      method: "session/request_permission",
+      params: {
+        options: [
+          { optionId: "approved-for-session", kind: "allow_always" },
+          { optionId: "approved", kind: "allow_once" },
+          { optionId: "abort", kind: "reject_once" },
+        ],
+      },
+    });
+
+    const handled = process.respondToUserInput("request-permission-1", {
+      decision: "approve",
+      scope: "session",
+    });
+
+    expect(handled).toBe(true);
+    expect(writeMessage).toHaveBeenCalledWith({
+      jsonrpc: "2.0",
+      id: 10,
+      result: {
+        outcome: {
+          outcome: "selected",
+          optionId: "approved-for-session",
+        },
+      },
+    });
+  });
+
   it("keeps non-codex permission requests interactive unless auto-approval is enabled", () => {
     const onNotification = vi.fn();
     const process = new AcpProcess({
