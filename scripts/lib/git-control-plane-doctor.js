@@ -4,9 +4,9 @@ import { spawnSync } from "node:child_process";
 
 export const EXPECTED_HOOKS_PATH = ".husky/_";
 export const REQUIRED_HOOK_FILES = ["h", "pre-commit", "pre-push", "post-commit"];
-export const SUSPICIOUS_LOCAL_IDENTITY = {
-  email: "test@test.com",
-  name: "Test",
+const SUSPICIOUS_LOCAL_IDENTITY_PATTERNS = {
+  email: [/@example\.com$/i, /placeholder/i],
+  name: [/^test$/i, /placeholder/i, /routa test/i],
 };
 
 function runGit(args, cwd) {
@@ -58,6 +58,16 @@ function createIssue(code, message, severity = "warning", details = {}) {
   };
 }
 
+function isSuspiciousLocalUserName(value) {
+  if (!value) return false;
+  return SUSPICIOUS_LOCAL_IDENTITY_PATTERNS.name.some((pattern) => pattern.test(value));
+}
+
+function isSuspiciousLocalUserEmail(value) {
+  if (!value) return false;
+  return SUSPICIOUS_LOCAL_IDENTITY_PATTERNS.email.some((pattern) => pattern.test(value));
+}
+
 export function inspectGitControlPlane(cwd = process.cwd()) {
   const repoRoot = resolveGitRepoRoot(cwd);
   if (!repoRoot) {
@@ -100,7 +110,7 @@ export function inspectGitControlPlane(cwd = process.cwd()) {
     );
   }
 
-  if (localUserName === SUSPICIOUS_LOCAL_IDENTITY.name) {
+  if (isSuspiciousLocalUserName(localUserName)) {
     issues.push(
       createIssue(
         "suspicious-local-user-name",
@@ -111,7 +121,7 @@ export function inspectGitControlPlane(cwd = process.cwd()) {
     );
   }
 
-  if (localUserEmail === SUSPICIOUS_LOCAL_IDENTITY.email) {
+  if (isSuspiciousLocalUserEmail(localUserEmail)) {
     issues.push(
       createIssue(
         "suspicious-local-user-email",

@@ -53,7 +53,7 @@ describe("agent hook policy", () => {
   it("blocks dangerous git config mutations", () => {
     const decision = evaluateToolPermissionGuard(
       createPreToolUsePayload("Bash", {
-        command: "git config --local user.email test@test.com",
+        command: "git config --local user.email placeholder@example.com",
       }),
     );
 
@@ -117,7 +117,7 @@ describe("agent hook policy", () => {
 
   it("blocks literal dangerous prompt payloads", () => {
     const decision = evaluatePromptPolicyGuard(
-      createUserPromptSubmitPayload("Run `git config --local user.name Test` and then push."),
+      createUserPromptSubmitPayload("Run `git config --local user.name Placeholder User` and then push."),
     );
 
     expect(decision?.reason).toContain("blocked");
