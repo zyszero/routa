@@ -809,6 +809,7 @@ export async function POST(request: NextRequest) {
 interface JsonRpcError {
   code: number;
   message: string;
+  data?: Record<string, unknown>;
   authMethods?: Array<{ id: string; name: string; description: string }>;
   agentInfo?: { name: string; version: string };
 }

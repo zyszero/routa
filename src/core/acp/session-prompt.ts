@@ -36,7 +36,7 @@ import { persistSessionHistorySnapshot } from "@/core/acp/session-history";
 type JsonRpcResponseFactory = (
   id: string | number | null,
   result: unknown,
-  error?: { code: number; message: string }
+  error?: { code: number; message: string; data?: Record<string, unknown> }
 ) => Response;
 
 type SessionUpdateForwarderFactory = (
@@ -67,7 +67,7 @@ interface DispatchSessionPromptParams {
 function inlineJsonrpcResponse(
   id: string | number | null,
   result: unknown,
-  error?: { code: number; message: string },
+  error?: { code: number; message: string; data?: Record<string, unknown> },
 ): Response {
   const body = error
     ? { jsonrpc: "2.0", id, error }

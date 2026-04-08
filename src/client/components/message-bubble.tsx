@@ -589,7 +589,7 @@ export function PermissionRequestBubble({
                             className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-[#0b1119] dark:text-slate-200"
                         >
                             <option value="turn">{t.kanban.turnComplete}</option>
-                            <option value="session">{t.sessions.session}</option>
+                            <option value="session">{t.chatPanel.session}</option>
                         </select>
                         <button
                             type="button"
