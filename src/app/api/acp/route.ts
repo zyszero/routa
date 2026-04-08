@@ -286,6 +286,8 @@ export async function GET(request: NextRequest) {
 // ─── POST: JSON-RPC request handler ────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  let requestId: string | number | null = null;
+  let requestMethod = "unknown";
   try {
     const body = await request.json();
     const { method, params, id } = body as {
@@ -294,6 +296,8 @@ export async function POST(request: NextRequest) {
       method: string;
       params?: Record<string, unknown>;
     };
+    requestId = id ?? null;
+    requestMethod = method;
 
     // ── initialize ─────────────────────────────────────────────────────
     // No agent process yet; return our own capabilities.
@@ -473,11 +477,11 @@ export async function POST(request: NextRequest) {
       }
 
       const manager = getAcpProcessManager();
-      const handled = manager.respondToClaudeCodeSdkUserInput(sessionId, toolCallId, response);
+      const handled = manager.respondToUserInput(sessionId, toolCallId, response);
       if (!handled) {
         return jsonrpcResponse(id ?? null, null, {
           code: -32000,
-          message: "No pending AskUserQuestion request found for this session",
+          message: "No pending interactive request found for this session",
         });
       }
 
@@ -772,12 +776,30 @@ export async function POST(request: NextRequest) {
         message: error.message,
         authMethods: error.authMethods,
         agentInfo: error.agentInfo,
+        data: {
+          method: requestMethod,
+          requestId,
+          errorName: error.name,
+          errorMessage: error.message,
+        },
       });
     }
 
     return jsonrpcResponse(null, null, {
       code: -32603,
       message: error instanceof Error ? error.message : "Internal error",
+      data: error instanceof Error
+        ? {
+          method: requestMethod,
+          requestId,
+          errorName: error.name,
+          errorMessage: error.message,
+        }
+        : {
+          method: requestMethod,
+          requestId,
+          errorMessage: "Internal error",
+        },
     });
   }
 }

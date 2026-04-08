@@ -88,18 +88,33 @@ export class AcpClientError extends Error {
   code: number;
   authMethods?: AcpAuthMethod[];
   agentInfo?: { name: string; version: string };
+  data?: unknown;
 
   constructor(
     message: string,
     code: number,
     authMethods?: AcpAuthMethod[],
-    agentInfo?: { name: string; version: string }
+    agentInfo?: { name: string; version: string },
+    data?: unknown,
   ) {
     super(message);
     this.name = "AcpClientError";
     this.code = code;
     this.authMethods = authMethods;
     this.agentInfo = agentInfo;
+    this.data = data;
+  }
+
+  toJSON(): Record<string, unknown> {
+    return {
+      name: this.name,
+      message: this.message,
+      code: this.code,
+      authMethods: this.authMethods,
+      agentInfo: this.agentInfo,
+      data: this.data,
+      stack: this.stack,
+    };
   }
 }
 
@@ -307,13 +322,28 @@ export class BrowserAcpClient {
     }
 
     // Handle traditional JSON response
-    const data = await response.json();
+    let data: any;
+    try {
+      data = await response.json();
+    } catch (error) {
+      throw new AcpClientError(
+        `Invalid ACP response (${response.status} ${response.statusText})`,
+        response.status || -32603,
+        undefined,
+        undefined,
+        {
+          responseContentType: contentType,
+          parseError: error instanceof Error ? error.message : String(error),
+        },
+      );
+    }
     if (data.error) {
       throw new AcpClientError(
         data.error.message,
         data.error.code,
         data.error.authMethods,
-        data.error.agentInfo
+        data.error.agentInfo,
+        data.error.data,
       );
     }
 
@@ -666,7 +696,8 @@ export class BrowserAcpClient {
         data.error.message,
         data.error.code,
         data.error.authMethods,
-        data.error.agentInfo
+        data.error.agentInfo,
+        data.error.data,
       );
     }
 

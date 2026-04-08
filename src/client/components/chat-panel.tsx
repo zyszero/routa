@@ -22,6 +22,8 @@ import {
   isAskUserQuestionMessage,
   AskUserQuestionBubble,
   hasAskUserQuestionAnswers,
+  isPermissionRequestMessage,
+  PermissionRequestBubble,
 } from "@/client/components/message-bubble";
 import {TracePanel} from "@/client/components/trace-panel";
 import type {WorkspaceData, CodebaseData} from "../hooks/use-workspaces";
@@ -222,6 +224,16 @@ export function ChatPanel({
     );
   }, [visibleMessages]);
 
+  const pendingPermissionRequests = useMemo(() => {
+    return visibleMessages.filter(
+      (msg) =>
+        msg.role === "tool" &&
+        isPermissionRequestMessage(msg) &&
+        msg.toolStatus !== "failed" &&
+        msg.toolStatus !== "completed",
+    );
+  }, [visibleMessages]);
+
   // File changes summary for TaskProgressBar
   const fileChangesSummary = useMemo<FileChangesSummary | undefined>(() => {
     const summary = getFileChangesSummary(fileChangesState);
@@ -249,6 +261,33 @@ export function ChatPanel({
   ) => {
     await acp.respondToUserInput(toolCallId, response);
     // Optimistically mark as completed so the sticky card disappears immediately
+    if (activeSessionId) {
+      setMessagesBySession((prev) => {
+        const msgs = prev[activeSessionId] ?? [];
+        return {
+          ...prev,
+          [activeSessionId]: msgs.map((msg) =>
+            msg.toolCallId === toolCallId
+              ? {
+                  ...msg,
+                  toolStatus: "completed",
+                  toolRawInput: {
+                    ...((msg.toolRawInput as Record<string, unknown>) ?? {}),
+                    ...response,
+                  },
+                }
+              : msg,
+          ),
+        };
+      });
+    }
+  }, [acp, activeSessionId, setMessagesBySession]);
+
+  const handleSubmitPermissionRequest = useCallback(async (
+    toolCallId: string,
+    response: Record<string, unknown>,
+  ) => {
+    await acp.respondToUserInput(toolCallId, response);
     if (activeSessionId) {
       setMessagesBySession((prev) => {
         const msgs = prev[activeSessionId] ?? [];
@@ -521,6 +560,14 @@ export function ChatPanel({
                   ) {
                     return false;
                   }
+                  if (
+                    msg.role === "tool"
+                    && isPermissionRequestMessage(msg)
+                    && msg.toolStatus !== "failed"
+                    && msg.toolStatus !== "completed"
+                  ) {
+                    return false;
+                  }
                   return true;
                 })
                 .map((msg, index) => (
@@ -528,6 +575,7 @@ export function ChatPanel({
                     key={`${msg.id}-${index}`}
                     message={msg}
                     onSubmitAskUserQuestion={handleSubmitAskUserQuestion}
+                    onSubmitPermissionRequest={handleSubmitPermissionRequest}
                     onTerminalInput={activeSessionId ? handleTerminalInput : undefined}
                     onTerminalResize={activeSessionId ? handleTerminalResize : undefined}
                   />
@@ -539,8 +587,8 @@ export function ChatPanel({
           {/* Input */}
           <div className="border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0f1117]">
             <div className="max-w-3xl mx-auto px-5 py-3 space-y-2">
-              {/* AskUserQuestion sticky cards — displayed above input until user submits */}
-              {pendingAskUserQuestions.length > 0 && (
+              {/* Interactive request sticky cards — displayed above input until user submits */}
+              {(pendingAskUserQuestions.length > 0 || pendingPermissionRequests.length > 0) && (
                 <div className="space-y-2">
                   {pendingAskUserQuestions
                     .filter((msg) => msg.toolStatus !== "completed")
@@ -549,6 +597,15 @@ export function ChatPanel({
                       key={msg.id}
                       message={msg}
                       onSubmit={handleSubmitAskUserQuestion}
+                    />
+                  ))}
+                  {pendingPermissionRequests
+                    .filter((msg) => msg.toolStatus !== "completed")
+                    .map((msg) => (
+                    <PermissionRequestBubble
+                      key={msg.id}
+                      message={msg}
+                      onSubmit={handleSubmitPermissionRequest}
                     />
                   ))}
                 </div>

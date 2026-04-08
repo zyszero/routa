@@ -724,10 +724,26 @@ async fn handle_agent_request(
 ) -> serde_json::Value {
     match method {
         "session/request_permission" => {
-            // Auto-approve all permissions
-            serde_json::json!({
-                "outcome": { "outcome": "approved" }
-            })
+            let requested_permissions = params.get("permissions").cloned();
+            if let Some(permissions) = requested_permissions {
+                tracing::info!(
+                    "[AcpProcess] session/request_permission params={}",
+                    params
+                );
+                serde_json::json!({
+                    "permissions": permissions,
+                    "scope": "turn",
+                    "outcome": "approved"
+                })
+            } else {
+                tracing::info!(
+                    "[AcpProcess] session/request_permission params={}",
+                    params
+                );
+                serde_json::json!({
+                    "outcome": { "outcome": "approved" }
+                })
+            }
         }
         "fs/read_text_file" => {
             let path = params["path"].as_str().unwrap_or("");

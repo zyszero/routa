@@ -30,6 +30,13 @@ interface AskUserQuestionPayload {
     answers?: Record<string, string>;
 }
 
+interface PermissionRequestPayload {
+    reason?: string | null;
+    permissions?: Record<string, unknown>;
+    scope?: string;
+    decision?: string;
+}
+
 export function hasAskUserQuestionAnswers(message: ChatMessage): boolean {
     const payload = message.toolRawInput as AskUserQuestionPayload | undefined;
     const answers = payload?.answers;
@@ -40,11 +47,13 @@ export function hasAskUserQuestionAnswers(message: ChatMessage): boolean {
 export function MessageBubble({
     message,
     onSubmitAskUserQuestion,
+    onSubmitPermissionRequest,
     onTerminalInput,
     onTerminalResize,
 }: {
     message: ChatMessage;
     onSubmitAskUserQuestion?: (toolCallId: string, response: Record<string, unknown>) => Promise<void>;
+    onSubmitPermissionRequest?: (toolCallId: string, response: Record<string, unknown>) => Promise<void>;
     onTerminalInput?: (terminalId: string, data: string) => Promise<void>;
     onTerminalResize?: (terminalId: string, cols: number, rows: number) => Promise<void>;
 }) {
@@ -72,6 +81,14 @@ export function MessageBubble({
                     <AskUserQuestionBubble
                         message={message}
                         onSubmit={onSubmitAskUserQuestion}
+                    />
+                );
+            }
+            if (isPermissionRequestMessage(message)) {
+                return (
+                    <PermissionRequestBubble
+                        message={message}
+                        onSubmit={onSubmitPermissionRequest}
                     />
                 );
             }
@@ -134,6 +151,13 @@ export function isAskUserQuestionMessage(message: ChatMessage): boolean {
     if (message.toolName === "AskUserQuestion") return true;
     const payload = message.toolRawInput as AskUserQuestionPayload | undefined;
     return Array.isArray(payload?.questions) && payload.questions.length > 0;
+}
+
+export function isPermissionRequestMessage(message: ChatMessage): boolean {
+    if (message.toolKind === "request-permissions") return true;
+    if (message.toolName === "RequestPermissions") return true;
+    const payload = message.toolRawInput as PermissionRequestPayload | undefined;
+    return Boolean(payload?.permissions);
 }
 
 function AssistantBubble({content}: { content: string }) {
@@ -503,6 +527,91 @@ export function AskUserQuestionBubble({
                         </button>
                     </div>
                 )}
+            </div>
+        </div>
+    );
+}
+
+export function PermissionRequestBubble({
+    message,
+    onSubmit,
+}: {
+    message: ChatMessage;
+    onSubmit?: (toolCallId: string, response: Record<string, unknown>) => Promise<void>;
+}) {
+    const { t } = useTranslation();
+    const rawInput = (message.toolRawInput ?? {}) as PermissionRequestPayload;
+    const [scope, setScope] = useState(rawInput.scope === "session" ? "session" : "turn");
+    const [submitting, setSubmitting] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
+    const isCompleted = message.toolStatus === "completed";
+    const isFailed = message.toolStatus === "failed";
+    const requestedPermissions = rawInput.permissions ?? {};
+
+    const handleSubmit = async (decision: "approve" | "deny") => {
+        if (!message.toolCallId || !onSubmit || submitting) return;
+        setSubmitting(true);
+        setSubmitError(null);
+        try {
+            await onSubmit(message.toolCallId, {
+                decision,
+                scope,
+                permissions: decision === "approve" ? requestedPermissions : {},
+            });
+        } catch (error) {
+            setSubmitError(error instanceof Error ? error.message : t.messageBubble.failedToSubmit);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="w-full rounded-md border border-sky-200/80 dark:border-sky-800/40 bg-sky-50/40 dark:bg-sky-950/10 overflow-hidden">
+            <div className="px-2.5 py-2 space-y-2">
+                <div className="flex items-center gap-1.5">
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isCompleted ? "bg-emerald-500" : isFailed ? "bg-red-500" : "bg-sky-500 animate-pulse"}`} />
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-400">
+                        {message.toolName ?? "RequestPermissions"}
+                    </span>
+                </div>
+                {rawInput.reason ? (
+                    <div className="text-xs text-slate-700 dark:text-slate-300">
+                        {rawInput.reason}
+                    </div>
+                ) : null}
+                <ToolInputTable input={requestedPermissions} />
+                {!isCompleted && !isFailed && (
+                    <div className="flex flex-wrap items-center gap-2">
+                        <select
+                            value={scope}
+                            onChange={(event) => setScope(event.target.value === "session" ? "session" : "turn")}
+                            disabled={submitting}
+                            className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-[#0b1119] dark:text-slate-200"
+                        >
+                            <option value="turn">{t.kanban.turnComplete}</option>
+                            <option value="session">{t.sessions.session}</option>
+                        </select>
+                        <button
+                            type="button"
+                            disabled={submitting}
+                            onClick={() => void handleSubmit("approve")}
+                            className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900"
+                        >
+                            {t.common.save}
+                        </button>
+                        <button
+                            type="button"
+                            disabled={submitting}
+                            onClick={() => void handleSubmit("deny")}
+                            className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200"
+                        >
+                            {t.common.cancel}
+                        </button>
+                    </div>
+                )}
+                {submitError ? (
+                    <div className="text-xs text-rose-600 dark:text-rose-400">{submitError}</div>
+                ) : null}
             </div>
         </div>
     );

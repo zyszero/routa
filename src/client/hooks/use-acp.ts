@@ -64,6 +64,20 @@ const BUILTIN_PROVIDER_FALLBACKS: AcpProviderInfo[] = [
   },
 ];
 
+function formatAcpErrorForLog(err: unknown): unknown {
+  if (err instanceof AcpClientError) {
+    return {
+      name: err.name,
+      message: err.message,
+      code: err.code,
+      authMethods: err.authMethods,
+      agentInfo: err.agentInfo,
+      data: err.data,
+    };
+  }
+  return err;
+}
+
 /** Convert a custom ACP provider to AcpProviderInfo for the provider list. */
 function toAcpProviderInfo(cp: CustomAcpProvider): AcpProviderInfo {
   return {
@@ -595,7 +609,7 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
         setState((s) => ({ ...s, loading: false }));
         return;
       }
-      logRuntime("error", "useAcp.prompt", "Failed to send prompt", err);
+      logRuntime("error", "useAcp.prompt", "Failed to send prompt", formatAcpErrorForLog(err));
       setState((s) => ({
         ...s,
         loading: false,
@@ -623,7 +637,7 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
         setState((s) => ({ ...s, loading: false }));
         return;
       }
-      logRuntime("error", "useAcp.promptSession", "Failed to send prompt", err);
+      logRuntime("error", "useAcp.promptSession", "Failed to send prompt", formatAcpErrorForLog(err));
       setState((s) => ({
         ...s,
         loading: false,

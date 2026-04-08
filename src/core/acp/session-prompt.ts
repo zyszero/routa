@@ -1,4 +1,5 @@
 import { getAcpProcessManager } from "@/core/acp/processer";
+import { AcpError } from "@/core/acp/acp-process";
 import { getHttpSessionStore, type SessionUpdateNotification } from "@/core/acp/http-session-store";
 import { getPresetById } from "@/core/acp/acp-presets";
 import { isServerlessEnvironment } from "@/core/acp/api-based-providers";
@@ -125,6 +126,26 @@ function markSessionPromptError(
   const message = error instanceof Error ? error.message : fallbackMessage;
   store.updateSessionAcpStatus(sessionId, "error", message);
   return message;
+}
+
+function getPromptErrorData(error: unknown): Record<string, unknown> | undefined {
+  if (error instanceof AcpError) {
+    return {
+      source: "acp",
+      code: error.code,
+      authMethods: error.authMethods,
+      agentInfo: error.agentInfo,
+      data: error.data,
+    };
+  }
+  if (error instanceof Error) {
+    return {
+      source: "app",
+      errorName: error.name,
+      errorMessage: error.message,
+    };
+  }
+  return undefined;
 }
 
 function buildCoordinatorContextPrompt(input: {
@@ -783,6 +804,7 @@ export async function handleSessionPrompt({
         return jsonrpcResponse(id ?? null, null, {
           code: -32000,
           message,
+          data: getPromptErrorData(err),
         });
       }
     }
@@ -799,6 +821,7 @@ export async function handleSessionPrompt({
       return jsonrpcResponse(id ?? null, null, {
         code: -32000,
         message,
+        data: getPromptErrorData(err),
       });
     }
   }
@@ -833,6 +856,7 @@ export async function handleSessionPrompt({
     return jsonrpcResponse(id ?? null, null, {
       code: -32000,
       message,
+      data: getPromptErrorData(err),
     });
   }
 }

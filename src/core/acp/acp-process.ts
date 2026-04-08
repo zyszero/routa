@@ -42,18 +42,21 @@ export class AcpError extends Error {
     code: number;
     authMethods?: AcpAuthMethod[];
     agentInfo?: { name: string; version: string };
+    data?: unknown;
 
     constructor(
         message: string,
         code: number,
         authMethods?: AcpAuthMethod[],
-        agentInfo?: { name: string; version: string }
+        agentInfo?: { name: string; version: string },
+        data?: unknown,
     ) {
         super(message);
         this.name = "AcpError";
         this.code = code;
         this.authMethods = authMethods;
         this.agentInfo = agentInfo;
+        this.data = data;
     }
 }
 
@@ -61,6 +64,11 @@ export class AcpProcess {
     private process: IProcessHandle | null = null;
     private buffer = "";
     private pendingRequests = new Map<number | string, PendingRequest>();
+    private pendingInteractiveRequests = new Map<string, {
+        requestId: number | string;
+        method: string;
+        params: Record<string, unknown>;
+    }>();
     private requestId = 0;
     private onNotification: NotificationHandler;
     private _sessionId: string | null = null;
@@ -253,6 +261,15 @@ export class AcpProcess {
             return this._sessionId;
         } catch (error) {
             // If authentication is required, throw AcpError with auth info
+            if (error instanceof AcpError) {
+                throw new AcpError(
+                    error.message,
+                    error.code,
+                    this._initResult?.authMethods ?? error.authMethods,
+                    this._initResult?.agentInfo ?? error.agentInfo,
+                    error.data,
+                );
+            }
             if (error instanceof Error) {
                 const authMatch = error.message.match(/ACP Error \[(-?\d+)\]:\s*(.+)/);
                 if (authMatch) {
@@ -370,6 +387,62 @@ export class AcpProcess {
             }, 5000);
         }
         this._alive = false;
+        this.pendingInteractiveRequests.clear();
+    }
+
+    respondToUserInput(toolCallId: string, response: Record<string, unknown>): boolean {
+        const pending = this.pendingInteractiveRequests.get(toolCallId);
+        if (!pending) {
+            return false;
+        }
+
+        this.pendingInteractiveRequests.delete(toolCallId);
+
+        let result: Record<string, unknown>;
+        if (pending.method === "session/request_permission") {
+            const requestedPermissions = (
+                typeof pending.params.permissions === "object" && pending.params.permissions !== null
+            ) ? pending.params.permissions as Record<string, unknown> : {};
+            const decision = typeof response.decision === "string" ? response.decision : "approve";
+            const scope = response.scope === "session" ? "session" : "turn";
+            const grantedPermissions = decision === "deny"
+                ? {}
+                : (
+                    typeof response.permissions === "object" && response.permissions !== null
+                        ? response.permissions as Record<string, unknown>
+                        : requestedPermissions
+                );
+            result = {
+                permissions: grantedPermissions,
+                scope,
+                outcome: decision === "deny" ? "denied" : "approved",
+            };
+        } else {
+            result = response;
+        }
+
+        this.writeMessage({
+            jsonrpc: "2.0",
+            id: pending.requestId,
+            result,
+        });
+
+        this.onNotification({
+            jsonrpc: "2.0",
+            method: "session/update",
+            params: {
+                sessionId: this._sessionId ?? "pending",
+                update: {
+                    sessionUpdate: "tool_call_update",
+                    toolCallId,
+                    title: pending.method === "session/request_permission" ? "RequestPermissions" : "UserInputResponse",
+                    status: "completed",
+                    rawInput: response,
+                },
+            },
+        });
+
+        return true;
     }
 
     // ─── Private ────────────────────────────────────────────────────────────
@@ -429,7 +502,13 @@ export class AcpProcess {
                 this.pendingRequests.delete(msg.id);
                 if (msg.error) {
                     pending.reject(
-                        new Error(`ACP Error [${msg.error.code}]: ${msg.error.message}`)
+                        new AcpError(
+                            msg.error.message,
+                            msg.error.code,
+                            undefined,
+                            undefined,
+                            msg.error.data,
+                        )
                     );
                 } else {
                     pending.resolve(msg.result);
@@ -476,13 +555,28 @@ export class AcpProcess {
 
         switch (method) {
             case "session/request_permission": {
-                // Auto-approve all permissions
-                this.writeMessage({
+                const toolCallId = `request-permission-${String(id)}`;
+                const rawInput = (params && typeof params === "object")
+                    ? params as Record<string, unknown>
+                    : {};
+                this.pendingInteractiveRequests.set(toolCallId, {
+                    requestId: id!,
+                    method,
+                    params: rawInput,
+                });
+
+                this.onNotification({
                     jsonrpc: "2.0",
-                    id,
-                    result: {
-                        outcome: {
-                            outcome: "approved",
+                    method: "session/update",
+                    params: {
+                        sessionId: this._sessionId ?? "pending",
+                        update: {
+                            sessionUpdate: "tool_call",
+                            title: "RequestPermissions",
+                            toolCallId,
+                            kind: "request-permissions",
+                            rawInput,
+                            status: "waiting",
                         },
                     },
                 });
