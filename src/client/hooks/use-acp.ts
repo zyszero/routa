@@ -238,6 +238,7 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
   const clientRef = useRef<BrowserAcpClient | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const tearingDownRef = useRef(false);
+  const connectingRef = useRef(false);
   // Track if user manually cancelled the session (to suppress "process exited" errors)
   const userCancelledRef = useRef(false);
 
@@ -293,7 +294,12 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
 
   /** Connect (initialize only). Session creation is explicit. */
   const connect = useCallback(async () => {
+    if (clientRef.current || connectingRef.current) {
+      return;
+    }
+
     try {
+      connectingRef.current = true;
       setState((s) => ({ ...s, loading: true, error: null }));
 
       // In Tauri desktop static mode, use the embedded Rust server URL
@@ -450,6 +456,8 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
         loading: false,
         error: toErrorMessage(err) || "Connection failed",
       }));
+    } finally {
+      connectingRef.current = false;
     }
   }, [baseUrl]);
 

@@ -104,4 +104,17 @@ describe("useAcp selected provider persistence", () => {
       expect(result.current.selectedProvider).toBe("codex");
     });
   });
+
+  it("ignores duplicate connect calls while the client is already connected", async () => {
+    const { result } = renderHook(() => useAcp());
+
+    await act(async () => {
+      await result.current.connect();
+      await result.current.connect();
+    });
+
+    expect(initializeMock).toHaveBeenCalledTimes(1);
+    expect(onUpdateMock).toHaveBeenCalledTimes(1);
+    expect(onConnectionIssueMock).toHaveBeenCalledTimes(1);
+  });
 });

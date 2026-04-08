@@ -167,7 +167,8 @@ export function HomeInput({
     if (!acp.connected && !acp.loading) {
       acp.connect();
     }
-  }, [acp]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [acp.connected, acp.loading]);
 
   // Load repo skills when selection changes
   useEffect(() => {
