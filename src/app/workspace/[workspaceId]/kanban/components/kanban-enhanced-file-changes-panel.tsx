@@ -81,7 +81,8 @@ export function KanbanEnhancedFileChangesPanel({
     if (open && codebaseId) {
       loadCommits();
     }
-  }, [open, codebaseId, loadCommits]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, codebaseId]); // Intentionally exclude loadCommits to prevent infinite loop
 
   // Separate files into unstaged and staged
   const { unstagedFiles, stagedFiles } = useMemo(() => {
