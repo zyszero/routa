@@ -235,6 +235,73 @@ describe("buildTaskPrompt", () => {
     expect(prompt).toContain("Dev");
   });
 
+  it("shows unresolved handoffs when a card returns to the target lane with a new session", () => {
+    const task = createTask({
+      id: "task-4b",
+      title: "Rework review feedback",
+      objective: "Address review feedback in dev",
+      workspaceId: "default",
+      boardId: "board-1",
+      columnId: "dev",
+    });
+    task.laneSessions = [
+      {
+        sessionId: "session-dev-1",
+        columnId: "dev",
+        columnName: "Dev",
+        provider: "opencode",
+        role: "DEVELOPER",
+        status: "completed",
+        startedAt: "2026-03-17T00:00:00.000Z",
+      },
+      {
+        sessionId: "session-review-1",
+        columnId: "review",
+        columnName: "Review",
+        provider: "codex",
+        role: "GATE",
+        status: "completed",
+        startedAt: "2026-03-17T01:00:00.000Z",
+      },
+      {
+        sessionId: "session-dev-2",
+        columnId: "dev",
+        columnName: "Dev",
+        provider: "opencode",
+        role: "DEVELOPER",
+        status: "running",
+        startedAt: "2026-03-17T02:00:00.000Z",
+      },
+    ];
+    task.laneHandoffs = [
+      {
+        id: "handoff-1",
+        fromSessionId: "session-review-1",
+        toSessionId: "session-dev-1",
+        fromColumnId: "review",
+        toColumnId: "dev",
+        requestType: "rerun_command",
+        request: "Please rerun Storybook and attach the failure log.",
+        status: "delivered",
+        requestedAt: "2026-03-17T01:30:00.000Z",
+      },
+    ];
+
+    const prompt = buildTaskPrompt(task, [
+      { id: "backlog", name: "Backlog", position: 0, stage: "backlog" },
+      { id: "dev", name: "Dev", position: 1, stage: "dev" },
+      { id: "review", name: "Review", position: 2, stage: "review" },
+      { id: "done", name: "Done", position: 3, stage: "done" },
+    ], {
+      currentSessionId: "session-dev-2",
+    });
+
+    expect(prompt).toContain("## Lane Handoff Context");
+    expect(prompt).toContain("Pending handoff 1: Rerun command");
+    expect(prompt).toContain("Please rerun Storybook and attach the failure log.");
+    expect(prompt).toContain("submit_lane_handoff");
+  });
+
   it("routes review happy-path guidance to done even if blocked is positioned before it", () => {
     const task = createTask({
       id: "task-review-1",
