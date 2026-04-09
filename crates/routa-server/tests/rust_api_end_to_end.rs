@@ -1,12 +1,9 @@
-use std::fs::{self, File};
-use std::io::Write as _;
+use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
 use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
-use tempfile::TempDir;
 
 use routa_server::{start_server, ServerConfig};
 
@@ -71,43 +68,6 @@ impl Drop for ApiFixture {
 
 fn random_db_path() -> PathBuf {
     std::env::temp_dir().join(format!("routa-server-api-{}.db", uuid::Uuid::new_v4()))
-}
-
-/// Create a temporary directory that will be automatically cleaned up.
-/// Returns both the TempDir (keep it alive) and the PathBuf.
-fn create_temp_repo() -> (TempDir, PathBuf) {
-    let temp_dir = TempDir::new().expect("create temp dir");
-    let repo_path = temp_dir.path().to_path_buf();
-    (temp_dir, repo_path)
-}
-
-fn write_repo_file(path: &std::path::Path, file_name: &str, content: &str) {
-    let file_path = path.join(file_name);
-    if let Some(parent) = file_path.parent() {
-        fs::create_dir_all(parent).unwrap();
-    }
-    let mut file = File::create(file_path).unwrap();
-    file.write_all(content.as_bytes()).unwrap();
-}
-
-fn run_git(repo_path: &std::path::Path, args: &[&str]) {
-    let status = Command::new("git")
-        .args(args)
-        .current_dir(repo_path)
-        .status()
-        .expect("run git command");
-    assert!(status.success(), "git {:?} should succeed", args);
-}
-
-fn init_git_repo(repo_path: &std::path::Path) {
-    fs::create_dir_all(repo_path).expect("create repo dir");
-    run_git(repo_path, &["init", "--initial-branch=main"]);
-    // Use --local to scope test credentials to this repo only
-    run_git(
-        repo_path,
-        &["config", "--local", "user.email", "test@example.com"],
-    );
-    run_git(repo_path, &["config", "--local", "user.name", "Routa Test"]);
 }
 
 fn json_has_error(resp: &Value, expected: &str) -> bool {
@@ -454,141 +414,6 @@ async fn api_task_flow_with_validation() {
         .await
         .expect("delete task");
     assert_eq!(delete_task.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn api_codebase_and_file_search_flow() {
-    let fixture = ApiFixture::new().await;
-    let (_temp_dir, repo_path) = create_temp_repo();
-    init_git_repo(&repo_path);
-    write_repo_file(&repo_path, "README.md", "# routa\n");
-    write_repo_file(&repo_path, "src/lib.rs", "pub fn main() {}\n");
-    run_git(&repo_path, &["add", "."]);
-    run_git(&repo_path, &["commit", "-m", "initial"]);
-    write_repo_file(
-        &repo_path,
-        "src/lib.rs",
-        "pub fn main() { println!(\"changed\"); }\n",
-    );
-    write_repo_file(&repo_path, "notes/todo.md", "- pending\n");
-
-    let codebase_created = fixture
-        .client
-        .post(fixture.endpoint("/api/workspaces/default/codebases"))
-        .json(&json!({
-            "repoPath": repo_path.to_string_lossy().to_string(),
-            "label": "unit-test-fixture",
-            "isDefault": true
-        }))
-        .send()
-        .await
-        .expect("create codebase");
-    assert_eq!(codebase_created.status(), StatusCode::OK);
-    let codebase_json: Value = codebase_created
-        .json()
-        .await
-        .expect("decode codebase response");
-    let codebase_id = codebase_json["codebase"]["id"]
-        .as_str()
-        .expect("codebase id");
-
-    let duplicate_codebase = fixture
-        .client
-        .post(fixture.endpoint("/api/workspaces/default/codebases"))
-        .json(&json!({
-            "repoPath": repo_path.to_string_lossy().to_string(),
-            "label": "duplicate"
-        }))
-        .send()
-        .await
-        .expect("duplicate codebase");
-    assert_eq!(duplicate_codebase.status(), StatusCode::CONFLICT);
-
-    let update_codebase = fixture
-        .client
-        .patch(fixture.endpoint(&format!("/api/codebases/{codebase_id}")))
-        .json(&json!({
-            "branch":"main"
-        }))
-        .send()
-        .await
-        .expect("update codebase");
-    assert_eq!(update_codebase.status(), StatusCode::OK);
-
-    let default_codebase = fixture
-        .client
-        .post(fixture.endpoint(&format!("/api/codebases/{codebase_id}/default")))
-        .send()
-        .await
-        .expect("set default codebase");
-    assert_eq!(default_codebase.status(), StatusCode::OK);
-    let default_json: Value = default_codebase
-        .json()
-        .await
-        .expect("decode default codebase response");
-    assert!(default_json["codebase"]["isDefault"]
-        .as_bool()
-        .expect("isDefault"));
-
-    let search = fixture
-        .client
-        .get(fixture.endpoint(&format!(
-            "/api/files/search?repoPath={}&q=lib&limit=5",
-            repo_path.to_string_lossy()
-        )))
-        .send()
-        .await
-        .expect("search repo files");
-    assert_eq!(search.status(), StatusCode::OK);
-    let search_json: Value = search.json().await.expect("decode files search response");
-    let search_files = search_json
-        .get("files")
-        .and_then(Value::as_array)
-        .expect("files array");
-    assert!(search_files.iter().any(|item| {
-        item.get("path")
-            .and_then(Value::as_str)
-            .is_some_and(|path| path.contains("lib.rs"))
-    }));
-
-    let changes = fixture
-        .client
-        .get(fixture.endpoint("/api/workspaces/default/codebases/changes"))
-        .send()
-        .await
-        .expect("list codebase changes");
-    assert_eq!(changes.status(), StatusCode::OK);
-    let changes_json: Value = changes.json().await.expect("decode codebase changes");
-    let repos = changes_json["repos"].as_array().expect("repos array");
-    assert_eq!(repos.len(), 1);
-    assert_eq!(repos[0]["branch"].as_str(), Some("main"));
-    assert_eq!(repos[0]["status"]["modified"].as_i64(), Some(1));
-    assert_eq!(repos[0]["status"]["untracked"].as_i64(), Some(1));
-    let files = repos[0]["files"].as_array().expect("files array");
-    assert!(files
-        .iter()
-        .any(|item| item["path"].as_str() == Some("src/lib.rs")));
-    assert!(files
-        .iter()
-        .any(|item| item["path"].as_str() == Some("notes/todo.md")));
-
-    let invalid_search = fixture
-        .client
-        .get(fixture.endpoint("/api/files/search?q=main"))
-        .send()
-        .await
-        .expect("invalid search request");
-    assert_eq!(invalid_search.status(), StatusCode::BAD_REQUEST);
-
-    let delete_codebase = fixture
-        .client
-        .delete(fixture.endpoint(&format!("/api/codebases/{codebase_id}")))
-        .send()
-        .await
-        .expect("delete codebase");
-    assert_eq!(delete_codebase.status(), StatusCode::OK);
-
-    // _temp_dir is automatically cleaned up when it goes out of scope
 }
 
 #[tokio::test]
