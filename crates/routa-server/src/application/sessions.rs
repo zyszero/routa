@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 
 use crate::error::ServerError;
 use crate::state::AppState;
-use routa_core::acp::AcpSessionRecord;
+use routa_core::acp::{get_resume_capability, AcpSessionRecord};
 use routa_core::store::acp_session_store::AcpSessionRow;
 
 #[derive(Clone)]
@@ -146,6 +146,8 @@ struct SessionEntry {
     updated_at: Option<Value>,
     parent_session_id: Option<String>,
     first_prompt_sent: bool,
+    /// Whether there is an active in-memory process for this session.
+    is_active: bool,
 }
 
 impl SessionEntry {
@@ -166,6 +168,7 @@ impl SessionEntry {
             updated_at: None,
             parent_session_id: session.parent_session_id,
             first_prompt_sent: session.first_prompt_sent,
+            is_active: true,
         }
     }
 
@@ -186,6 +189,7 @@ impl SessionEntry {
             updated_at: Some(Value::Number(session.updated_at.into())),
             parent_session_id: session.parent_session_id,
             first_prompt_sent: session.first_prompt_sent,
+            is_active: false,
         }
     }
 
@@ -224,7 +228,47 @@ impl SessionEntry {
         self.first_prompt_sent
     }
 
+    /// Derive session continuity status: active / interrupted / restorable / stale.
+    fn continuity_status(&self) -> &'static str {
+        if self.is_active {
+            return "active";
+        }
+        let has_resume = self
+            .provider
+            .as_deref()
+            .and_then(get_resume_capability)
+            .map(|c| c.supported)
+            .unwrap_or(false);
+        if has_resume {
+            // Check age — sessions older than 7 days are stale
+            let age_days = match &self.created_at {
+                Value::Number(n) => {
+                    let ts = n.as_i64().unwrap_or(0);
+                    let now = chrono::Utc::now().timestamp();
+                    (now - ts) / 86400
+                }
+                Value::String(s) => {
+                    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+                        let now = chrono::Utc::now().timestamp();
+                        (now - dt.timestamp()) / 86400
+                    } else {
+                        0
+                    }
+                }
+                _ => 0,
+            };
+            if age_days > 7 {
+                "stale"
+            } else {
+                "restorable"
+            }
+        } else {
+            "interrupted"
+        }
+    }
+
     fn to_list_value(&self) -> Value {
+        let resume_cap = self.provider.as_deref().and_then(get_resume_capability);
         json!({
             "sessionId": self.session_id,
             "name": self.name,
@@ -241,10 +285,13 @@ impl SessionEntry {
             "updatedAt": self.updated_at,
             "firstPromptSent": self.first_prompt_sent,
             "parentSessionId": self.parent_session_id,
+            "continuityStatus": self.continuity_status(),
+            "resumeCapabilities": resume_cap.map(|c| serde_json::to_value(c).ok()).flatten(),
         })
     }
 
     fn to_detail_value(&self) -> Value {
+        let resume_cap = self.provider.as_deref().and_then(get_resume_capability);
         json!({
             "sessionId": self.session_id,
             "name": self.name,
@@ -261,6 +308,8 @@ impl SessionEntry {
             "updatedAt": self.updated_at,
             "parentSessionId": self.parent_session_id,
             "firstPromptSent": self.first_prompt_sent,
+            "continuityStatus": self.continuity_status(),
+            "resumeCapabilities": resume_cap.map(|c| serde_json::to_value(c).ok()).flatten(),
         })
     }
 

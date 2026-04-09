@@ -115,7 +115,14 @@ fn custom_provider_launch_from_row(session: &AcpSessionRow) -> Option<CustomProv
 }
 
 fn should_attempt_native_resume(session: &AcpSessionRow, provider: &str) -> bool {
-    provider == "codex" && session.first_prompt_sent
+    if !session.first_prompt_sent {
+        return false;
+    }
+    // Use preset metadata to decide if native resume should be attempted
+    match routa_core::acp::get_resume_capability(provider) {
+        Some(cap) => cap.mode == "native" || cap.mode == "both",
+        None => false,
+    }
 }
 
 /// Type alias for the SSE stream used in ACP responses.
@@ -1485,6 +1492,10 @@ async fn acp_rpc(
                     )
                     .await;
 
+                    let resume_capabilities = routa_core::acp::get_resume_capability(&provider)
+                        .map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!(null)))
+                        .unwrap_or(serde_json::json!({ "supported": false, "mode": "replay" }));
+
                     Ok(AcpResponse::Json(Json(serde_json::json!({
                         "jsonrpc": "2.0",
                         "id": id,
@@ -1494,6 +1505,7 @@ async fn acp_rpc(
                             "role": role.as_deref().unwrap_or("CRAFTER"),
                             "acpStatus": "ready",
                             "resumeMode": resume_mode,
+                            "resumeCapabilities": resume_capabilities,
                             "nativeResumeError": native_resume_error,
                         }
                     }))))

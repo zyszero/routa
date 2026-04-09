@@ -36,6 +36,7 @@ pub fn router() -> Router<AppState> {
         )
         .route("/{session_id}/context", get(get_session_context))
         .route("/{session_id}/disconnect", post(disconnect_session))
+        .route("/{session_id}/fork", post(fork_session))
 }
 
 #[derive(Debug, Serialize)]
@@ -235,6 +236,56 @@ async fn disconnect_session(
     state.acp_manager.kill_session(&session_id).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// POST /api/sessions/{session_id}/fork — Fork a session.
+///
+/// Creates a new session that inherits the parent's provider, workspace, and settings.
+async fn fork_session(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ServerError> {
+    // Try in-memory first, then DB
+    let (provider, workspace_id, cwd) =
+        if let Some(mem) = state.acp_manager.get_session(&session_id).await {
+            (
+                mem.provider.clone(),
+                mem.workspace_id.clone(),
+                mem.cwd.clone(),
+            )
+        } else if let Ok(Some(row)) = state.acp_session_store.get(&session_id).await {
+            (row.provider.clone(), row.workspace_id.clone(), row.cwd.clone())
+        } else {
+            return Err(ServerError::NotFound(format!(
+                "Session {} not found",
+                session_id
+            )));
+        };
+
+    let new_id = uuid::Uuid::new_v4().to_string();
+
+    state
+        .acp_session_store
+        .create(routa_core::store::acp_session_store::CreateAcpSessionParams {
+            id: &new_id,
+            cwd: &cwd,
+            branch: None,
+            workspace_id: &workspace_id,
+            provider: provider.as_deref(),
+            role: None,
+            custom_command: None,
+            custom_args: None,
+            parent_session_id: Some(&session_id),
+        })
+        .await
+        .map_err(|e| ServerError::Internal(format!("Failed to create forked session: {}", e)))?;
+
+    Ok(Json(serde_json::json!({
+        "sessionId": new_id,
+        "parentSessionId": session_id,
+        "provider": provider,
+        "workspaceId": workspace_id,
+    })))
 }
 
 #[derive(Debug, Deserialize)]

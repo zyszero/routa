@@ -1007,6 +1007,21 @@ impl AcpManager {
 
 // ─── ACP Presets ────────────────────────────────────────────────────────
 
+/// Resume/continuation capability metadata for a provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResumeCapability {
+    pub supported: bool,
+    /// "native" | "replay" | "both"
+    pub mode: String,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_fork: Option<bool>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_list: Option<bool>,
+}
+
 /// ACP provider presets for known coding agents.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AcpPreset {
@@ -1020,6 +1035,10 @@ pub struct AcpPreset {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub env_bin_override: Option<String>,
+    /// Resume/continuation capabilities for this provider.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resume: Option<ResumeCapability>,
 }
 
 /// Get the list of known ACP agent presets (static/builtin only).
@@ -1032,6 +1051,7 @@ pub fn get_presets() -> Vec<AcpPreset> {
             args: vec!["acp".to_string()],
             description: "OpenCode AI coding agent".to_string(),
             env_bin_override: Some("OPENCODE_BIN".to_string()),
+            resume: Some(ResumeCapability { supported: true, mode: "replay".to_string(), supports_fork: None, supports_list: None }),
         },
         AcpPreset {
             id: "gemini".to_string(),
@@ -1040,6 +1060,7 @@ pub fn get_presets() -> Vec<AcpPreset> {
             args: vec!["--experimental-acp".to_string()],
             description: "Google Gemini CLI".to_string(),
             env_bin_override: None,
+            resume: None,
         },
         AcpPreset {
             id: "codex-acp".to_string(),
@@ -1048,6 +1069,7 @@ pub fn get_presets() -> Vec<AcpPreset> {
             args: vec![],
             description: "OpenAI Codex CLI (codex-acp wrapper)".to_string(),
             env_bin_override: Some("CODEX_ACP_BIN".to_string()),
+            resume: Some(ResumeCapability { supported: true, mode: "both".to_string(), supports_fork: None, supports_list: Some(true) }),
         },
         AcpPreset {
             id: "copilot".to_string(),
@@ -1060,6 +1082,7 @@ pub fn get_presets() -> Vec<AcpPreset> {
             ],
             description: "GitHub Copilot CLI".to_string(),
             env_bin_override: Some("COPILOT_BIN".to_string()),
+            resume: None,
         },
         AcpPreset {
             id: "auggie".to_string(),
@@ -1068,6 +1091,7 @@ pub fn get_presets() -> Vec<AcpPreset> {
             args: vec!["--acp".to_string()],
             description: "Augment Code's AI agent".to_string(),
             env_bin_override: None,
+            resume: None,
         },
         AcpPreset {
             id: "kimi".to_string(),
@@ -1076,6 +1100,7 @@ pub fn get_presets() -> Vec<AcpPreset> {
             args: vec!["acp".to_string()],
             description: "Moonshot AI's Kimi CLI".to_string(),
             env_bin_override: None,
+            resume: None,
         },
         AcpPreset {
             id: "kiro".to_string(),
@@ -1084,6 +1109,7 @@ pub fn get_presets() -> Vec<AcpPreset> {
             args: vec!["acp".to_string()],
             description: "Amazon Kiro AI coding agent".to_string(),
             env_bin_override: Some("KIRO_BIN".to_string()),
+            resume: None,
         },
         AcpPreset {
             id: "qoder".to_string(),
@@ -1092,6 +1118,7 @@ pub fn get_presets() -> Vec<AcpPreset> {
             args: vec!["--acp".to_string()],
             description: "Qoder AI coding agent".to_string(),
             env_bin_override: Some("QODER_BIN".to_string()),
+            resume: None,
         },
         AcpPreset {
             id: "claude".to_string(),
@@ -1102,8 +1129,24 @@ pub fn get_presets() -> Vec<AcpPreset> {
             args: vec![],
             description: "Anthropic Claude Code (stream-json protocol)".to_string(),
             env_bin_override: Some("CLAUDE_BIN".to_string()),
+            resume: Some(ResumeCapability { supported: true, mode: "replay".to_string(), supports_fork: Some(true), supports_list: None }),
         },
     ]
+}
+
+/// Get a static preset by ID (synchronous, no registry lookup).
+pub fn get_preset_by_id(id: &str) -> Option<AcpPreset> {
+    let normalized_id = match id {
+        "codex" => "codex-acp",
+        "qodercli" => "qoder",
+        other => other,
+    };
+    get_presets().into_iter().find(|p| p.id == normalized_id)
+}
+
+/// Get the resume capability for a provider ID (synchronous).
+pub fn get_resume_capability(provider: &str) -> Option<ResumeCapability> {
+    get_preset_by_id(provider).and_then(|p| p.resume)
 }
 
 /// Get a preset by ID, checking both static presets and registry.
@@ -1178,6 +1221,7 @@ async fn get_registry_preset(id: &str) -> Result<AcpPreset, String> {
         args,
         description: agent.description,
         env_bin_override: None,
+        resume: None,
     })
 }
 
