@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
 import type { UseAcpState, UseAcpActions } from "@/client/hooks/use-acp";
-import { AcpProviderDropdown } from "@/client/components/acp-provider-dropdown";
 import {
   resolveEffectiveTaskAutomation,
 } from "@/core/kanban/effective-task-automation";
@@ -18,8 +17,7 @@ import type {
   WorktreeInfo,
 } from "../types";
 import { EMPTY_DRAFT, type TaskDraft } from "../kanban-create-modal";
-import { KanbanGitHubImportModal } from "./kanban-github-import-modal";
-import { KanbanSettingsModal, type ColumnAutomationConfig } from "./kanban-settings-modal";
+import { type ColumnAutomationConfig } from "./kanban-settings-modal";
 import { scheduleKanbanRefreshBurst } from "./kanban-agent-input";
 import {
   type KanbanSpecialistLanguage,
@@ -45,22 +43,8 @@ import {
 import {
   importGitHubItems,
 } from "./kanban-github-import";
-import { KanbanTabHeader } from "./kanban-tab-header";
-import { KanbanStatusBar } from "./kanban-status-bar";
 import { getKanbanFileChangesSummary } from "./kanban-file-changes-panel";
-import {
-  KanbanCodebaseModal,
-  KanbanDeleteCodebaseModal,
-  KanbanDeleteTaskModal,
-  KanbanMoveBlockedModal,
-  KanbanReplaceAllReposModal,
-} from "./kanban-tab-modals";
-import {
-  KanbanBoardSurface,
-  KanbanCreateTaskModal,
-  KanbanTaskDetailOverlay,
-} from "./kanban-tab-panels";
-import { ArrowRight } from "lucide-react";
+import { KanbanTabContent } from "./kanban-tab-content";
 
 interface SpecialistOption {
   id: string;
@@ -1474,361 +1458,313 @@ export function KanbanTab({
     }
   }
 
-  const kanbanHeaderActions = board ? (
-    <div className="flex min-w-[560px] flex-1 items-center border border-slate-200 bg-white transition-colors focus-within:border-amber-400/80 focus-within:ring-2 focus-within:ring-amber-400/15 dark:border-slate-700 dark:bg-[#12141c]">
-      {onAgentPrompt && (
-        <>
-          <div className="ml-1 shrink-0 border-l border-r border-slate-200 dark:border-slate-700">
-            <AcpProviderDropdown
-              providers={availableProviders}
-              selectedProvider={resolveKanbanBoardAutoProviderId(board, acp?.selectedProvider) ?? ""}
-              onProviderChange={(providerId) => setKanbanBoardProvider(providerId)}
-              disabled={!acp?.connected || availableProviders.length === 0}
-              ariaLabel={kanbanTaskAgentCopy.providerAriaLabel}
-              dataTestId="kanban-agent-provider"
-              buttonClassName="flex h-7 items-center gap-1.5 bg-transparent px-2 text-[12px] font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800/40"
-              labelClassName="max-w-[110px] truncate"
-            />
-          </div>
-          <input
-            type="text"
-            value={agentInput}
-            onChange={(event) => setAgentInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                void handleAgentSubmit();
-              }
-            }}
-            placeholder={acp?.connected ? kanbanTaskAgentCopy.placeholder : kanbanTaskAgentCopy.connectingPlaceholder}
-            disabled={agentLoading || !acp?.connected}
-            className="h-7 min-w-64 flex-1 bg-transparent px-2 text-[12px] text-slate-800 placeholder-slate-400 outline-none disabled:opacity-50 dark:text-slate-200 dark:placeholder-slate-500"
-          />
-          <button
-            onClick={() => void handleAgentSubmit()}
-            disabled={!agentInput.trim() || agentLoading || !acp?.connected}
-            className="mr-1 inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-slate-900 px-2 text-[11px] font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:bg-amber-500 dark:hover:bg-amber-400 dark:disabled:bg-[#1a1d29] dark:disabled:text-slate-500"
-          >
-            {agentLoading ? "..." : (
-              <>
-                <span>{kanbanTaskAgentCopy.send}</span>
-                <ArrowRight className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
-              </>
-            )}
-          </button>
-        </>
-      )}
-      <button
-        onClick={() => setShowCreateModal(true)}
-        className="mr-1 inline-flex h-6 shrink-0 items-center rounded-md border border-amber-200 bg-amber-50 px-2 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300 dark:hover:bg-amber-900/30"
-      >
-        {kanbanTaskAgentCopy.manual}
-      </button>
-      {agentSessionId && (
-        <button
-          onClick={() => openAgentPanel(agentSessionId)}
-          className="mr-2 shrink-0 text-[11px] text-amber-600 hover:underline dark:text-amber-400"
-          title={kanbanTaskAgentCopy.openPanelTitle}
-        >
-          {kanbanTaskAgentCopy.view}
-        </button>
-      )}
-    </div>
-  ) : null;
+  const kanbanTabHeaderProps = {
+    tasksCount: tasks.length,
+    board,
+    boardQueue,
+    boards: localBoards,
+    selectedBoardId,
+    onSelectBoard: setSelectedBoardId,
+    githubImportEnabled,
+    onOpenGitHubImport: () => setShowGitHubImportModal(true),
+    onRefresh,
+    onOpenSettings: board ? () => setShowSettings(true) : undefined,
+  };
 
-  if (!board) {
-    return (
-      <div className="flex h-full flex-col space-y-2">
-        <KanbanTabHeader
-          tasksCount={tasks.length}
-          board={board}
-          boardQueue={boardQueue}
-          boards={localBoards}
-          selectedBoardId={selectedBoardId}
-          onSelectBoard={setSelectedBoardId}
-          githubImportEnabled={githubImportEnabled}
-          onOpenGitHubImport={() => setShowGitHubImportModal(true)}
-          onRefresh={onRefresh}
-          onOpenSettings={board ? () => setShowSettings(true) : undefined}
-          actionSlot={kanbanHeaderActions}
-        />
-        <div className="rounded-2xl border border-gray-200/60 bg-white p-6 text-sm text-gray-500 dark:border-[#1c1f2e] dark:bg-[#12141c] dark:text-gray-400">
-          No board available yet.
-        </div>
-      </div>
-    );
-  }
+  const kanbanTabHeaderActionProps = {
+    board,
+    onAgentPrompt,
+    availableProviders,
+    selectedProviderId: resolveKanbanBoardAutoProviderId(board, acp?.selectedProvider) ?? "",
+    onBoardProviderChange: setKanbanBoardProvider,
+    disableBoardProvider: !acp?.connected || availableProviders.length === 0,
+    kanbanTaskAgentCopy,
+    agentInput,
+    onAgentInputChange: setAgentInput,
+    onAgentSubmit: () => {
+      void handleAgentSubmit();
+    },
+    showCreateTaskModal: () => setShowCreateModal(true),
+    agentLoading,
+    agentSessionId,
+    openAgentPanel,
+  };
+
+  const settingsModalProps = board ? {
+    board,
+    columnAutomation,
+    availableProviders,
+    specialists,
+    specialistLanguage,
+    onClose: () => setShowSettings(false),
+    onClearAll: async () => {
+      const response = await fetch(`/api/tasks?workspaceId=${encodeURIComponent(workspaceId)}`, {
+        method: "DELETE",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error ?? "Failed to clear tasks");
+      }
+
+      setLocalTasks([]);
+      closeTaskDetail();
+      setShowSettings(false);
+      onRefresh();
+    },
+    onSave: async (
+      newColumns,
+      newColumnAutomation,
+      sessionConcurrencyLimit,
+      devSessionSupervision,
+    ) => {
+      const updatedColumns = newColumns.map((col) => ({
+        ...col,
+        automation: newColumnAutomation[col.id]?.enabled
+          ? normalizeKanbanAutomation(newColumnAutomation[col.id])
+          : undefined,
+      }));
+
+      const response = await fetch(`/api/kanban/boards/${encodeURIComponent(board.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ columns: updatedColumns, sessionConcurrencyLimit, devSessionSupervision }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error ?? "Failed to save settings");
+      }
+
+      const data = await response.json();
+      const updatedBoard = data.board as KanbanBoardInfo | undefined;
+      if (updatedBoard) {
+        setLocalBoards((current) => current.map((item) => (
+          item.id === updatedBoard.id ? updatedBoard : item
+        )));
+      }
+
+      setVisibleColumns(updatedColumns.filter((col) => col.visible !== false).map((col) => col.id));
+      setColumnAutomation(newColumnAutomation);
+      setShowSettings(false);
+      onRefresh();
+    },
+  } : undefined;
+
+  const boardSurfaceProps = board ? {
+    moveError,
+    onDismissMoveError: () => setMoveError(null),
+    codebases,
+    workspaceId,
+    defaultCodebase,
+    repoSync,
+    setSelectedCodebase,
+    fetchCodebaseWorktrees,
+    onRefresh,
+    repoChanges,
+    repoChangesLoading,
+    availableProviders,
+    acp,
+    boardAutoProviderId,
+    kanbanTaskAgentCopy,
+    agentSessionId,
+    openAgentPanel,
+    agentPanelOpen,
+    board,
+    visibleColumns,
+    boardTasks,
+    columnAutomation,
+    providers,
+    specialists,
+    specialistLanguage,
+    sessionMap,
+    liveSessionTails,
+    allCodebaseIds,
+    worktreeCache,
+    queuedPositions,
+    dragTaskId,
+    setDragTaskId,
+    moveTask,
+    confirmDeleteTask,
+    patchTask,
+    retryTaskTrigger,
+    runTaskPullRequest,
+    openTaskDetail,
+    agentSession,
+    onCloseAgentPanel: () => setAgentPanelOpen(false),
+    ensureKanbanAgentSession,
+    kanbanRepoSelection,
+    fileChangesOpen,
+    setFileChangesOpen,
+    gitLogOpen,
+    setGitLogOpen,
+  } : undefined;
+
+  const taskDetailOverlayProps = board ? {
+    activeSessionId,
+    activeTaskId,
+    activeTask,
+    board,
+    resolveSpecialist,
+    acp,
+    boardAutoProviderId,
+    onBoardProviderChange: setKanbanBoardProvider,
+    detailSplitContainerRef,
+    detailSplitRatio,
+    setIsDraggingDetailSplit,
+    refreshSignal,
+    availableProviders,
+    specialists,
+    specialistLanguage,
+    codebases,
+    allCodebaseIds,
+    worktreeCache,
+    combinedSessions,
+    patchTask,
+    retryTaskTrigger,
+    runTaskPullRequest,
+    confirmDeleteTask,
+    onRefresh,
+    setActiveSessionId,
+    sessionMap,
+    workspaceId,
+    isTaskDetailFullscreen,
+    onToggleTaskDetailFullscreen: setIsTaskDetailFullscreen,
+  } : undefined;
+
+  const createTaskModalProps = {
+    showCreateModal,
+    draft,
+    setDraft,
+    onClose: () => setShowCreateModal(false),
+    onCreate: () => {
+      void createTaskCard();
+    },
+    githubAvailable,
+    codebases,
+    allCodebaseIds,
+  };
+
+  const githubImportModalProps = {
+    show: showGitHubImportModal,
+    workspaceId,
+    codebases,
+    tasks: localTasks,
+    onClose: () => setShowGitHubImportModal(false),
+    onImport: importGitHubIssues,
+    onImportPulls: importGitHubPulls,
+  };
+
+  const codebaseModalProps = {
+    key: selectedCodebase?.id ?? "no-codebase-selected",
+    selectedCodebase,
+    editingCodebase,
+    codebases,
+    editRepoSelection,
+    onRepoSelectionChange: handleRepoSelectionChange,
+    editError,
+    recloneError,
+    editSaving,
+    replacingAll,
+    setShowReplaceAllConfirm,
+    handleCancelEditCodebase,
+    codebaseWorktrees,
+    worktreeActionError,
+    localTasks,
+    handleDeleteCodebaseWorktrees,
+    deletingWorktreeIds,
+    liveBranchInfo,
+    branchActionError,
+    handleDeleteIssueBranch,
+    handleDeleteIssueBranches,
+    deletingBranchNames,
+    handleReclone,
+    recloning,
+    recloneSuccess,
+    onStartEditCodebase: handleStartEditCodebase,
+    onRequestRemoveCodebase: () => setShowDeleteCodebaseConfirm(true),
+    onClose: () => {
+      setSelectedCodebase(null);
+      setCodebaseWorktrees([]);
+      setEditingCodebase(false);
+      setLiveBranchInfo(null);
+      setBranchActionError(null);
+      setDeletingBranchNames([]);
+      setRecloneError(null);
+      setRecloneSuccess(null);
+    },
+  };
+
+  const deleteCodebaseModalProps = {
+    show: showDeleteCodebaseConfirm,
+    selectedCodebase,
+    editError,
+    deletingCodebase,
+    onCancel: () => setShowDeleteCodebaseConfirm(false),
+    onConfirm: handleRemoveCodebase,
+  };
+
+  const replaceAllReposModalProps = {
+    show: showReplaceAllConfirm,
+    editRepoSelection,
+    codebasesCount: codebases.length,
+    recloneError,
+    replacingAll,
+    onCancel: () => setShowReplaceAllConfirm(false),
+    onConfirm: handleReplaceAllRepos,
+  };
+
+  const deleteTaskModalProps = {
+    deleteConfirmTask,
+    isDeleting,
+    onCancel: cancelDeleteTask,
+    onConfirm: executeDeleteTask,
+  };
+
+  const moveBlockedModalProps = {
+    message: moveBlockedMessage,
+    onClose: () => setMoveBlockedMessage(null),
+  };
+
+  const statusBarProps = {
+    defaultCodebase,
+    codebases,
+    fileChangesSummary,
+    board,
+    boardQueue,
+    repoHealth,
+    selectedProvider: selectedProviderInfo,
+    onRepoClick: () => {
+      if (defaultCodebase) {
+        setSelectedCodebase(defaultCodebase);
+        void fetchCodebaseWorktrees(defaultCodebase);
+      }
+    },
+    onFileChangesClick: () => setFileChangesOpen((prev) => !prev),
+    onGitLogClick: () => setGitLogOpen((prev) => !prev),
+    onProviderClick: () => {
+      // Could open provider settings or do nothing
+    },
+    fileChangesOpen,
+    gitLogOpen,
+    repoSync,
+  };
 
   return (
-    <div className="flex flex-col h-full">
-      <KanbanTabHeader
-        tasksCount={tasks.length}
-        board={board}
-        boardQueue={boardQueue}
-        boards={localBoards}
-        selectedBoardId={selectedBoardId}
-        onSelectBoard={setSelectedBoardId}
-        githubImportEnabled={githubImportEnabled}
-        onOpenGitHubImport={() => setShowGitHubImportModal(true)}
-        onRefresh={onRefresh}
-        onOpenSettings={() => setShowSettings(true)}
-        actionSlot={kanbanHeaderActions}
-      />
-      <KanbanBoardSurface
-        moveError={moveError}
-        onDismissMoveError={() => setMoveError(null)}
-        codebases={codebases}
-        workspaceId={workspaceId}
-        defaultCodebase={defaultCodebase}
-        repoSync={repoSync}
-        setSelectedCodebase={setSelectedCodebase}
-        fetchCodebaseWorktrees={fetchCodebaseWorktrees}
-        onRefresh={onRefresh}
-        repoChanges={repoChanges}
-        repoChangesLoading={repoChangesLoading}
-        availableProviders={availableProviders}
-        acp={acp}
-        boardAutoProviderId={boardAutoProviderId}
-        kanbanTaskAgentCopy={kanbanTaskAgentCopy}
-        agentSessionId={agentSessionId}
-        openAgentPanel={openAgentPanel}
-        agentPanelOpen={agentPanelOpen}
-        board={board}
-        visibleColumns={visibleColumns}
-        boardTasks={boardTasks}
-        columnAutomation={columnAutomation}
-        providers={providers}
-        specialists={specialists}
-        specialistLanguage={specialistLanguage}
-        sessionMap={sessionMap}
-        liveSessionTails={liveSessionTails}
-        allCodebaseIds={allCodebaseIds}
-        worktreeCache={worktreeCache}
-        queuedPositions={queuedPositions}
-        dragTaskId={dragTaskId}
-        setDragTaskId={setDragTaskId}
-        moveTask={moveTask}
-        confirmDeleteTask={confirmDeleteTask}
-        patchTask={patchTask}
-        retryTaskTrigger={retryTaskTrigger}
-        runTaskPullRequest={runTaskPullRequest}
-        openTaskDetail={openTaskDetail}
-        agentSession={agentSession}
-        onCloseAgentPanel={() => setAgentPanelOpen(false)}
-        ensureKanbanAgentSession={ensureKanbanAgentSession}
-        kanbanRepoSelection={kanbanRepoSelection}
-        fileChangesOpen={fileChangesOpen}
-        setFileChangesOpen={setFileChangesOpen}
-        gitLogOpen={gitLogOpen}
-        setGitLogOpen={setGitLogOpen}
-      />
-      <KanbanCreateTaskModal
-        showCreateModal={showCreateModal}
-        draft={draft}
-        setDraft={setDraft}
-        onClose={() => setShowCreateModal(false)}
-        onCreate={() => void createTaskCard()}
-        githubAvailable={githubAvailable}
-        codebases={codebases}
-        allCodebaseIds={allCodebaseIds}
-      />
-
-      <KanbanGitHubImportModal
-        show={showGitHubImportModal}
-        workspaceId={workspaceId}
-        codebases={codebases}
-        tasks={localTasks}
-        onClose={() => setShowGitHubImportModal(false)}
-        onImport={importGitHubIssues}
-        onImportPulls={importGitHubPulls}
-      />
-
-      <KanbanTaskDetailOverlay
-        activeSessionId={activeSessionId}
-        activeTaskId={activeTaskId}
-        activeTask={activeTask}
-        board={board}
-        resolveSpecialist={resolveSpecialist}
-        acp={acp}
-        boardAutoProviderId={boardAutoProviderId}
-        onBoardProviderChange={setKanbanBoardProvider}
-        detailSplitContainerRef={detailSplitContainerRef}
-        detailSplitRatio={detailSplitRatio}
-        setIsDraggingDetailSplit={setIsDraggingDetailSplit}
-        refreshSignal={refreshSignal}
-        availableProviders={availableProviders}
-        specialists={specialists}
-        specialistLanguage={specialistLanguage}
-        codebases={codebases}
-        allCodebaseIds={allCodebaseIds}
-        worktreeCache={worktreeCache}
-        combinedSessions={combinedSessions}
-        patchTask={patchTask}
-        retryTaskTrigger={retryTaskTrigger}
-        runTaskPullRequest={runTaskPullRequest}
-        confirmDeleteTask={confirmDeleteTask}
-        onRefresh={onRefresh}
-        setActiveSessionId={setActiveSessionId}
-        sessionMap={sessionMap}
-        workspaceId={workspaceId}
-        isTaskDetailFullscreen={isTaskDetailFullscreen}
-        onToggleTaskDetailFullscreen={setIsTaskDetailFullscreen}
-      />
-
-      {/* Settings Modal */}
-      {showSettings && board && (
-        <KanbanSettingsModal
-          board={board}
-          columnAutomation={columnAutomation}
-          availableProviders={availableProviders}
-          specialists={specialists}
-          specialistLanguage={specialistLanguage}
-          onClose={() => setShowSettings(false)}
-          onClearAll={async () => {
-            const response = await fetch(`/api/tasks?workspaceId=${encodeURIComponent(workspaceId)}`, {
-              method: "DELETE",
-            });
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) {
-              throw new Error(data.error ?? "Failed to clear tasks");
-            }
-
-            setLocalTasks([]);
-            closeTaskDetail();
-            setShowSettings(false);
-            onRefresh();
-          }}
-          onSave={async (newColumns, newColumnAutomation, sessionConcurrencyLimit, devSessionSupervision) => {
-            const updatedColumns = newColumns.map((col) => ({
-              ...col,
-              automation: newColumnAutomation[col.id]?.enabled
-                ? normalizeKanbanAutomation(newColumnAutomation[col.id])
-                : undefined,
-            }));
-
-            const response = await fetch(`/api/kanban/boards/${encodeURIComponent(board.id)}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ columns: updatedColumns, sessionConcurrencyLimit, devSessionSupervision }),
-            });
-
-            if (!response.ok) {
-              const data = await response.json();
-              throw new Error(data.error ?? "Failed to save settings");
-            }
-
-            const data = await response.json();
-            const updatedBoard = data.board as KanbanBoardInfo | undefined;
-            if (updatedBoard) {
-              setLocalBoards((current) => current.map((item) => (
-                item.id === updatedBoard.id ? updatedBoard : item
-              )));
-            }
-
-            setVisibleColumns(updatedColumns.filter((col) => col.visible !== false).map((col) => col.id));
-            setColumnAutomation(newColumnAutomation);
-            setShowSettings(false);
-            onRefresh();
-          }}
-        />
-      )}
-
-      {/* Requirement 1: Codebase detail popup */}
-      <KanbanCodebaseModal
-        key={selectedCodebase?.id ?? "no-codebase-selected"}
-        selectedCodebase={selectedCodebase}
-        editingCodebase={editingCodebase}
-        codebases={codebases}
-        editRepoSelection={editRepoSelection}
-        onRepoSelectionChange={handleRepoSelectionChange}
-        editError={editError}
-        recloneError={recloneError}
-        editSaving={editSaving}
-        replacingAll={replacingAll}
-        setShowReplaceAllConfirm={setShowReplaceAllConfirm}
-        handleCancelEditCodebase={handleCancelEditCodebase}
-        codebaseWorktrees={codebaseWorktrees}
-        worktreeActionError={worktreeActionError}
-        localTasks={localTasks}
-        handleDeleteCodebaseWorktrees={handleDeleteCodebaseWorktrees}
-        deletingWorktreeIds={deletingWorktreeIds}
-        liveBranchInfo={liveBranchInfo}
-        branchActionError={branchActionError}
-        handleDeleteIssueBranch={handleDeleteIssueBranch}
-        handleDeleteIssueBranches={handleDeleteIssueBranches}
-        deletingBranchNames={deletingBranchNames}
-        handleReclone={handleReclone}
-        recloning={recloning}
-        recloneSuccess={recloneSuccess}
-        onStartEditCodebase={handleStartEditCodebase}
-        onRequestRemoveCodebase={() => setShowDeleteCodebaseConfirm(true)}
-        onClose={() => {
-          setSelectedCodebase(null);
-          setCodebaseWorktrees([]);
-          setEditingCodebase(false);
-          setLiveBranchInfo(null);
-          setBranchActionError(null);
-          setDeletingBranchNames([]);
-          setRecloneError(null);
-          setRecloneSuccess(null);
-        }}
-      />
-
-      {showDeleteCodebaseConfirm && (
-        <KanbanDeleteCodebaseModal
-          selectedCodebase={selectedCodebase}
-          editError={editError}
-          deletingCodebase={deletingCodebase}
-          onCancel={() => setShowDeleteCodebaseConfirm(false)}
-          onConfirm={handleRemoveCodebase}
-        />
-      )}
-
-      {showReplaceAllConfirm && (
-        <KanbanReplaceAllReposModal
-          editRepoSelection={editRepoSelection}
-          codebasesCount={codebases.length}
-          recloneError={recloneError}
-          replacingAll={replacingAll}
-          onCancel={() => setShowReplaceAllConfirm(false)}
-          onConfirm={handleReplaceAllRepos}
-        />
-      )}
-
-      <KanbanDeleteTaskModal
-        deleteConfirmTask={deleteConfirmTask}
-        isDeleting={isDeleting}
-        onCancel={cancelDeleteTask}
-        onConfirm={executeDeleteTask}
-      />
-      <KanbanMoveBlockedModal
-        message={moveBlockedMessage}
-        onClose={() => setMoveBlockedMessage(null)}
-      />
-
-      <KanbanStatusBar
-        defaultCodebase={defaultCodebase}
-        codebases={codebases}
-        fileChangesSummary={fileChangesSummary}
-        board={board}
-        boardQueue={boardQueue}
-        repoHealth={repoHealth}
-        selectedProvider={selectedProviderInfo}
-        onRepoClick={() => {
-          if (defaultCodebase) {
-            setSelectedCodebase(defaultCodebase);
-            void fetchCodebaseWorktrees(defaultCodebase);
-          }
-        }}
-        onFileChangesClick={() => setFileChangesOpen((prev) => !prev)}
-        onGitLogClick={() => setGitLogOpen((prev) => !prev)}
-        onProviderClick={() => {
-          // Could open provider settings or do nothing
-        }}
-        fileChangesOpen={fileChangesOpen}
-        gitLogOpen={gitLogOpen}
-        repoSync={repoSync}
-      />
-    </div>
+    <KanbanTabContent
+      headerProps={kanbanTabHeaderProps}
+      headerActionProps={kanbanTabHeaderActionProps}
+      boardSurfaceProps={boardSurfaceProps}
+      createTaskModalProps={createTaskModalProps}
+      githubImportModalProps={githubImportModalProps}
+      taskDetailOverlayProps={taskDetailOverlayProps}
+      showSettingsModal={showSettings}
+      settingsModalProps={settingsModalProps}
+      codebaseModalProps={codebaseModalProps}
+      deleteCodebaseModalProps={deleteCodebaseModalProps}
+      replaceAllReposModalProps={replaceAllReposModalProps}
+      deleteTaskModalProps={deleteTaskModalProps}
+      moveBlockedModalProps={moveBlockedModalProps}
+      statusBarProps={statusBarProps}
+    />
   );
 }
