@@ -231,9 +231,20 @@ describe("KanbanTaskChangesTab", () => {
     });
 
     fireEvent.keyDown(screen.getByTestId("kanban-commit-files-changed"), { key: "f", metaKey: true });
-    fireEvent.change(await screen.findByTestId("kanban-commit-diff-search-input"), { target: { value: "version" } });
+    const searchInput = await screen.findByTestId("kanban-commit-diff-search-input");
+    fireEvent.change(searchInput, { target: { value: "VERSION" } });
     await waitFor(() => {
       expect(screen.getByTestId("kanban-commit-diff-search-count").textContent).toMatch(/1\/\d+/);
+    });
+    fireEvent.click(screen.getByTestId("kanban-commit-diff-search-case"));
+    await waitFor(() => {
+      expect(screen.getByTestId("kanban-commit-diff-search-count").textContent).toBe("0/0");
+    });
+    fireEvent.click(screen.getByTestId("kanban-commit-diff-search-case"));
+    fireEvent.click(screen.getByTestId("kanban-commit-diff-search-regex"));
+    fireEvent.change(searchInput, { target: { value: "[" } });
+    await waitFor(() => {
+      expect(screen.getByTestId("kanban-commit-diff-search-count").textContent).toBe("!");
     });
 
     const editorSection = screen.getByTestId("kanban-commit-file-section-src/editor.ts");

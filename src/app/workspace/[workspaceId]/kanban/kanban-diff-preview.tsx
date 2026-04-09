@@ -109,6 +109,29 @@ interface DiffSearchResult {
   element: HTMLElement;
 }
 
+interface DiffSearchOptions {
+  matchCase: boolean;
+  useRegex: boolean;
+  wholeWord: boolean;
+}
+
+interface DiffSearchMatch {
+  node: Text;
+  start: number;
+  end: number;
+}
+
+interface DiffSearchResultSet {
+  invalidPattern: boolean;
+  results: DiffSearchResult[];
+}
+
+const DEFAULT_DIFF_SEARCH_OPTIONS: DiffSearchOptions = {
+  matchCase: false,
+  useRegex: false,
+  wholeWord: false,
+};
+
 function normalizeKanbanPierreDiff(node: HTMLElement) {
   for (const searchRoot of getDiffSearchRoots(node)) {
     for (const label of searchRoot.querySelectorAll("[data-unmodified-lines]")) {
@@ -146,21 +169,25 @@ function getDiffSearchRoots(root: HTMLElement): Array<ShadowRoot | HTMLElement> 
   return searchRoots.length > 0 ? searchRoots : [root];
 }
 
-function highlightDiffSearchMatches(root: HTMLElement, query: string): DiffSearchResult[] {
+function highlightDiffSearchMatches(root: HTMLElement, query: string, options: DiffSearchOptions): DiffSearchResultSet {
   clearDiffSearchHighlights(root);
-  const normalizedQuery = query.trim().toLowerCase();
-  if (!normalizedQuery) {
-    return [];
+  if (!query) {
+    return { invalidPattern: false, results: [] };
+  }
+
+  const matcher = createDiffSearchMatcher(query, options);
+  if (!matcher) {
+    return { invalidPattern: true, results: [] };
   }
 
   const results: DiffSearchResult[] = [];
   for (const searchRoot of getDiffSearchRoots(root)) {
     for (const codeNode of getDiffSearchContentNodes(searchRoot)) {
-      highlightTextNodeMatches(codeNode, normalizedQuery, results);
+      highlightTextNodeMatches(codeNode, matcher, options, results);
     }
   }
 
-  return results;
+  return { invalidPattern: false, results };
 }
 
 function getDiffSearchContentNodes(searchRoot: ShadowRoot | HTMLElement): HTMLElement[] {
@@ -168,20 +195,27 @@ function getDiffSearchContentNodes(searchRoot: ShadowRoot | HTMLElement): HTMLEl
   return nodes.filter((node) => !nodes.some((candidate) => candidate !== node && node.contains(candidate)));
 }
 
-function highlightTextNodeMatches(root: Node, normalizedQuery: string, results: DiffSearchResult[]) {
+function createDiffSearchMatcher(query: string, options: DiffSearchOptions): RegExp | null {
+  const source = options.useRegex ? query : escapeDiffSearchRegex(query);
+  try {
+    return new RegExp(source, options.matchCase ? "g" : "gi");
+  } catch {
+    return null;
+  }
+}
+
+function escapeDiffSearchRegex(query: string) {
+  return query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function highlightTextNodeMatches(root: Node, matcher: RegExp, options: DiffSearchOptions, results: DiffSearchResult[]) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  const matches: Array<{ node: Text; start: number; end: number }> = [];
+  const matches: DiffSearchMatch[] = [];
   let currentNode = walker.nextNode();
 
   while (currentNode) {
     const node = currentNode as Text;
-    const text = node.textContent ?? "";
-    const normalizedText = text.toLowerCase();
-    let index = normalizedText.indexOf(normalizedQuery);
-    while (index !== -1) {
-      matches.push({ node, start: index, end: index + normalizedQuery.length });
-      index = normalizedText.indexOf(normalizedQuery, index + normalizedQuery.length);
-    }
+    matches.push(...findDiffSearchTextMatches(node, matcher, options));
     currentNode = walker.nextNode();
   }
 
@@ -190,7 +224,36 @@ function highlightTextNodeMatches(root: Node, normalizedQuery: string, results: 
   }
 }
 
-function addDiffSearchHighlight(match: { node: Text; start: number; end: number }, results: DiffSearchResult[]) {
+function findDiffSearchTextMatches(node: Text, matcher: RegExp, options: DiffSearchOptions): DiffSearchMatch[] {
+  const text = node.textContent ?? "";
+  const matches: DiffSearchMatch[] = [];
+  matcher.lastIndex = 0;
+
+  let match = matcher.exec(text);
+  while (match) {
+    const matchedText = match[0];
+    const end = match.index + matchedText.length;
+    if (matchedText && (!options.wholeWord || isWholeWordDiffSearchMatch(text, match.index, end))) {
+      matches.push({ node, start: match.index, end });
+    }
+    if (!matchedText) {
+      matcher.lastIndex += 1;
+    }
+    match = matcher.exec(text);
+  }
+
+  return matches;
+}
+
+function isWholeWordDiffSearchMatch(text: string, start: number, end: number) {
+  return !isDiffSearchWordCharacter(text[start - 1]) && !isDiffSearchWordCharacter(text[end]);
+}
+
+function isDiffSearchWordCharacter(character: string | undefined) {
+  return character != null && /[\p{L}\p{N}_]/u.test(character);
+}
+
+function addDiffSearchHighlight(match: DiffSearchMatch, results: DiffSearchResult[]) {
   const text = match.node.textContent ?? "";
   const before = text.slice(0, match.start);
   const matchedText = text.slice(match.start, match.end);
@@ -923,22 +986,29 @@ function CommitFileDiffSection({
 
 function CommitDiffSearchOverlay({
   query,
+  options,
   currentIndex,
   resultCount,
+  invalidPattern,
   inputRef,
   onQueryChange,
+  onOptionsChange,
   onNavigate,
   onClear,
 }: {
   query: string;
+  options: DiffSearchOptions;
   currentIndex: number;
   resultCount: number;
+  invalidPattern: boolean;
   inputRef: RefObject<HTMLInputElement | null>;
   onQueryChange: (query: string) => void;
+  onOptionsChange: (options: DiffSearchOptions) => void;
   onNavigate: (direction: -1 | 1) => void;
   onClear: () => void;
 }) {
   const { t } = useTranslation();
+  const countText = invalidPattern ? "!" : resultCount > 0 ? `${currentIndex + 1}/${resultCount}` : "0/0";
 
   return (
     <div className="absolute right-3 top-12 z-20 flex min-w-[min(22rem,calc(100%-1.5rem))] items-center gap-1 rounded-md border border-slate-200 bg-white/98 p-1.5 text-[11px] font-normal normal-case tracking-normal shadow-xl shadow-slate-900/10 dark:border-slate-700 dark:bg-[#0d1018]/98 dark:shadow-black/30">
@@ -961,11 +1031,35 @@ function CommitDiffSearchOverlay({
           data-testid="kanban-commit-diff-search-input"
         />
         {query ? (
-          <span className="ml-2 shrink-0 tabular-nums text-slate-400" data-testid="kanban-commit-diff-search-count">
-            {resultCount > 0 ? `${currentIndex + 1}/${resultCount}` : "0/0"}
+          <span
+            className={`ml-2 shrink-0 tabular-nums ${invalidPattern ? "font-semibold text-rose-500" : "text-slate-400"}`}
+            data-testid="kanban-commit-diff-search-count"
+          >
+            {countText}
           </span>
         ) : null}
       </div>
+      <DiffSearchOptionButton
+        active={options.matchCase}
+        onClick={() => onOptionsChange({ ...options, matchCase: !options.matchCase })}
+        testId="kanban-commit-diff-search-case"
+      >
+        Aa
+      </DiffSearchOptionButton>
+      <DiffSearchOptionButton
+        active={options.wholeWord}
+        onClick={() => onOptionsChange({ ...options, wholeWord: !options.wholeWord })}
+        testId="kanban-commit-diff-search-word"
+      >
+        W
+      </DiffSearchOptionButton>
+      <DiffSearchOptionButton
+        active={options.useRegex}
+        onClick={() => onOptionsChange({ ...options, useRegex: !options.useRegex })}
+        testId="kanban-commit-diff-search-regex"
+      >
+        .*
+      </DiffSearchOptionButton>
       {query ? (
         <>
           <button
@@ -1006,6 +1100,34 @@ function CommitDiffSearchOverlay({
   );
 }
 
+function DiffSearchOptionButton({
+  active,
+  children,
+  onClick,
+  testId,
+}: {
+  active: boolean;
+  children: ReactNode;
+  onClick: () => void;
+  testId: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      data-testid={testId}
+      className={`rounded border px-2 py-1 text-[10px] font-semibold transition-colors ${
+        active
+          ? "border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-200"
+          : "border-slate-200 text-slate-500 hover:text-slate-900 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-100"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function TaskCommitDiffPreview({
   commit,
   diff,
@@ -1026,8 +1148,10 @@ export function TaskCommitDiffPreview({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchOptions, setSearchOptions] = useState<DiffSearchOptions>(DEFAULT_DIFF_SEARCH_OPTIONS);
   const [searchResults, setSearchResults] = useState<DiffSearchResult[]>([]);
   const [searchIndex, setSearchIndex] = useState(0);
+  const [searchInvalidPattern, setSearchInvalidPattern] = useState(false);
 
   // Calculate file list and diff preview from commit
   const preview = commit ? (diff ?? { ...commit, patch: "" }) : null;
@@ -1056,13 +1180,14 @@ export function TaskCommitDiffPreview({
     setSearchOpen(true);
   };
 
-  const runSearch = (query: string, nextIndex = 0) => {
+  const runSearch = (query: string, nextIndex = 0, options = searchOptions) => {
     const root = diffSearchRootRef.current;
     if (!root) {
       return;
     }
-    const results = highlightDiffSearchMatches(root, query);
+    const { invalidPattern, results } = highlightDiffSearchMatches(root, query, options);
     const boundedIndex = results.length > 0 ? Math.max(0, Math.min(nextIndex, results.length - 1)) : 0;
+    setSearchInvalidPattern(invalidPattern);
     setSearchResults(results);
     setSearchIndex(boundedIndex);
     selectDiffSearchResult(results, boundedIndex);
@@ -1071,6 +1196,11 @@ export function TaskCommitDiffPreview({
   const updateSearchQuery = (query: string) => {
     setSearchQuery(query);
     runSearch(query);
+  };
+
+  const updateSearchOptions = (options: DiffSearchOptions) => {
+    setSearchOptions(options);
+    runSearch(searchQuery, 0, options);
   };
 
   const navigateSearchResults = (direction: -1 | 1) => {
@@ -1089,6 +1219,7 @@ export function TaskCommitDiffPreview({
     setSearchQuery("");
     setSearchResults([]);
     setSearchIndex(0);
+    setSearchInvalidPattern(false);
   };
 
   const closeSearch = () => {
@@ -1150,9 +1281,12 @@ export function TaskCommitDiffPreview({
             <CommitDiffSearchOverlay
               inputRef={searchInputRef}
               query={searchQuery}
+              options={searchOptions}
               currentIndex={searchIndex}
               resultCount={searchResults.length}
+              invalidPattern={searchInvalidPattern}
               onQueryChange={updateSearchQuery}
+              onOptionsChange={updateSearchOptions}
               onNavigate={navigateSearchResults}
               onClear={closeSearch}
             />
