@@ -1,6 +1,5 @@
 import { useTranslation } from "@/i18n";
 import { Select } from "@/client/components/select";
-import { QueueStatusBadge } from "./kanban-tab-helpers";
 import type { KanbanBoardInfo } from "../types";
 import { Columns2, Download, RefreshCw } from "lucide-react";
 
@@ -22,7 +21,7 @@ interface KanbanTabHeaderProps {
 export function KanbanTabHeader({
   tasksCount,
   board,
-  boardQueue,
+  boardQueue: _boardQueue,
   repoHealth,
   boards,
   selectedBoardId,
@@ -35,7 +34,7 @@ export function KanbanTabHeader({
   const { t } = useTranslation();
   return (
     <div
-      className="shrink-0 border-b border-slate-200/70 px-4 py-1 dark:border-[#1c1f2e]"
+      className="shrink-0 border-b border-slate-200/70 px-4 py-1.5 dark:border-[#1c1f2e]"
       data-testid="kanban-page-header"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -47,29 +46,14 @@ export function KanbanTabHeader({
               ({tasksCount} {t.kanban.tasksCount})
             </span>
           )}
+          {board && (
+            <span className="inline-flex h-6 items-center rounded-full bg-slate-100 px-2 text-[11px] text-slate-500 dark:bg-[#191c28] dark:text-slate-400">
+              {t.kanban.limit} {board.sessionConcurrencyLimit ?? 1}
+            </span>
+          )}
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-          {board && (
-            <>
-              <span className="inline-flex h-6 items-center rounded-full bg-slate-100 px-2 text-[11px] dark:bg-[#191c28]">
-                {t.kanban.limit} {board.sessionConcurrencyLimit ?? 1}
-              </span>
-              <QueueStatusBadge
-                label={t.kanban.runningLabel}
-                count={boardQueue?.runningCount ?? 0}
-                cards={boardQueue?.runningCards ?? []}
-                className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
-              />
-              <QueueStatusBadge
-                label={t.kanban.queuedLabel}
-                count={boardQueue?.queuedCount ?? 0}
-                cards={boardQueue?.queuedCards ?? []}
-                className="bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
-              />
-            </>
-          )}
-
           {(repoHealth.missingRepoTasks > 0 || repoHealth.cwdMismatchTasks > 0) && (
             <div className="inline-flex h-6 items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-2 text-[11px] text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300">
               <span className="font-medium">{t.kanban.kanbanHealth}</span>

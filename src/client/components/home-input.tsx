@@ -65,6 +65,16 @@ interface HomeInputProps {
   displaySkills?: Array<{ name: string; description: string }>;
   /** Called when a skill pill is clicked */
   onSkillPillClick?: (name: string) => void;
+  /**
+   * Extra ACP session params injected at creation time.
+   * Useful for kanban-planning mode: pass role, mcpProfile, systemPrompt.
+   * systemPrompt can be a factory function that receives the user's input text.
+   */
+  extraSessionParams?: {
+    role?: string;
+    mcpProfile?: string;
+    systemPrompt?: string | ((text: string) => string);
+  };
 }
 
 export function HomeInput({
@@ -81,6 +91,7 @@ export function HomeInput({
   onExternalSkillConsumed,
   displaySkills,
   onSkillPillClick: _onSkillPillClick,
+  extraSessionParams,
 }: HomeInputProps) {
   const router = useRouter();
   const acp = useAcp();
@@ -244,7 +255,10 @@ export function HomeInput({
         const modelAliasOrName = context.model ?? selectedSpec?.model ?? conn.model;
         const def = modelAliasOrName ? getModelDefinitionByAlias(modelAliasOrName) : undefined;
         // When a custom specialist is selected, use the specialist's role
-        const effectiveRole = (selectedSpec?.role as typeof selectedRole) ?? selectedRole;
+        const effectiveRole = extraSessionParams?.role ?? (selectedSpec?.role as typeof selectedRole) ?? selectedRole;
+        const resolvedSystemPrompt = typeof extraSessionParams?.systemPrompt === "function"
+          ? extraSessionParams.systemPrompt(text)
+          : extraSessionParams?.systemPrompt;
         const result = await acp.createSession(
           effectiveCwd,
           effectiveProvider,
@@ -258,6 +272,10 @@ export function HomeInput({
           def?.baseUrl ?? conn.baseUrl,
           def?.apiKey ?? conn.apiKey,
           effectiveRepoSelection?.branch,
+          undefined,
+          undefined,
+          extraSessionParams?.mcpProfile as Parameters<typeof acp.createSession>[14],
+          resolvedSystemPrompt,
         );
 
         if (result?.sessionId) {
@@ -267,7 +285,12 @@ export function HomeInput({
             : wsId
               ? `/workspace/${wsId}/sessions/${result.sessionId}`
               : `/workspace/${result.sessionId}`;
-          storePendingPrompt(result.sessionId, promptText);
+          if (extraSessionParams) {
+            // Kanban-planning mode: send prompt directly (no pending prompt storage)
+            void acp.promptSession(result.sessionId, promptText);
+          } else {
+            storePendingPrompt(result.sessionId, promptText);
+          }
           onSessionCreated?.(result.sessionId, promptText, {
             cwd: effectiveCwd,
             branch: effectiveRepoSelection?.branch,
@@ -280,7 +303,7 @@ export function HomeInput({
         setIsSubmitting(false);
       }
     },
-    [acp, buildSessionUrl, lockedSpecialistId, requireRepoSelection, selectedRole, selectedWorkspaceId, selectedSpecialistId, router, onSessionCreated, specialists],
+    [acp, buildSessionUrl, extraSessionParams, lockedSpecialistId, requireRepoSelection, selectedRole, selectedWorkspaceId, selectedSpecialistId, router, onSessionCreated, specialists],
   );
 
   const activeWorkspace = workspacesHook.workspaces.find((w) => w.id === selectedWorkspaceId);

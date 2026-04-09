@@ -28,6 +28,7 @@ import {
   type OnboardingMode,
 } from "@/client/utils/onboarding";
 import { useTranslation } from "@/i18n";
+import { buildKanbanTaskAgentPrompt } from "@/app/workspace/[workspaceId]/kanban/i18n/kanban-task-agent";
 import type { SessionInfo } from "@/app/workspace/[workspaceId]/types";
 
 interface WorkspaceHomeData {
@@ -301,15 +302,25 @@ export default function HomePage() {
                         />
                       )}
 
-                      {/* Main input */}
+                      {/* Main input — kanban-first mode */}
                       <div className="rounded-3xl border border-black/6 bg-white/80 p-4 shadow-sm dark:border-white/8 dark:bg-white/5">
                         <HomeInput
                           workspaceId={activeWorkspaceId ?? undefined}
                           variant="default"
-                          defaultAgentRole={preferredMode === "CRAFTER" ? "CRAFTER" : "ROUTA"}
-                          buildSessionUrl={(nextWorkspaceId, sessionId) =>
-                            `/workspace/${nextWorkspaceId ?? activeWorkspaceId}/sessions/${sessionId}`
+                          defaultAgentRole="CRAFTER"
+                          buildSessionUrl={(nextWorkspaceId) =>
+                            `/workspace/${nextWorkspaceId ?? activeWorkspaceId}/kanban`
                           }
+                          extraSessionParams={activeWorkspaceId ? {
+                            role: "CRAFTER",
+                            mcpProfile: "kanban-planning",
+                            systemPrompt: (text) => buildKanbanTaskAgentPrompt({
+                              workspaceId: activeWorkspaceId,
+                              boardId: "default",
+                              repoPath: codebases[0]?.repoPath,
+                              agentInput: text,
+                            }),
+                          } : undefined}
                         />
                       </div>
 

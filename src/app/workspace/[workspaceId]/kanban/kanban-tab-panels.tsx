@@ -9,7 +9,7 @@ import { RepoPicker, type RepoSelection } from "@/client/components/repo-picker"
 import { resolveEffectiveTaskAutomation } from "@/core/kanban/effective-task-automation";
 import { KanbanCard } from "./kanban-card";
 import { KanbanCardActivityBar, KanbanCardDetail } from "./kanban-card-detail";
-import { getKanbanFileChangesSummary } from "./kanban-file-changes-panel";
+import { getKanbanFileChangesSummary as _getKanbanFileChangesSummary } from "./kanban-file-changes-panel";
 import { KanbanEnhancedFileChangesPanel } from "./components/kanban-enhanced-file-changes-panel";
 import type { KanbanTaskAgentCopy } from "./i18n/kanban-task-agent";
 import { KanbanCreateModal, type TaskDraft } from "../kanban-create-modal";
@@ -27,7 +27,7 @@ import {
 import type { ColumnAutomationConfig } from "./kanban-settings-modal";
 import type { KanbanBoardInfo, SessionInfo, TaskInfo, WorktreeInfo } from "../types";
 import type { KanbanRepoChanges } from "./kanban-file-changes-types";
-import { ChevronRight, ArrowRight, GitBranch } from "lucide-react";
+import { ChevronRight as _ChevronRight, ArrowRight, GitBranch as _GitBranch } from "lucide-react";
 import { GitLogPanel, RealGitAdapter, MockGitAdapter } from "./git-log";
 
 interface SessionRestoreTranscriptMessage {
@@ -157,8 +157,8 @@ export function KanbanBoardSurface({
   workspaceId,
   defaultCodebase,
   repoSync,
-  setSelectedCodebase,
-  fetchCodebaseWorktrees,
+  setSelectedCodebase: _setSelectedCodebase,
+  fetchCodebaseWorktrees: _fetchCodebaseWorktrees,
   onRefresh,
   onAgentPrompt,
   repoChanges,
@@ -255,12 +255,21 @@ export function KanbanBoardSurface({
     model?: string,
   ) => Promise<string | null>;
   kanbanRepoSelection: RepoSelection | null;
+  fileChangesOpen?: boolean;
+  setFileChangesOpen?: Dispatch<SetStateAction<boolean>>;
+  gitLogOpen?: boolean;
+  setGitLogOpen?: Dispatch<SetStateAction<boolean>>;
 }) {
   const { t } = useTranslation();
-  const [fileChangesOpen, setFileChangesOpen] = useState(false);
-  const [gitLogOpen, setGitLogOpen] = useState(false);
+  const [localFileChangesOpen, setLocalFileChangesOpen] = useState(false);
+  const [localGitLogOpen, setLocalGitLogOpen] = useState(false);
   const [gitLogRepoPath, setGitLogRepoPath] = useState<string | null>(defaultCodebase?.repoPath ?? null);
-  const fileChangesSummary = getKanbanFileChangesSummary(repoChanges);
+
+  // Use external state if provided, otherwise use local state
+  const _fileChangesOpenValue = fileChangesOpen ?? localFileChangesOpen;
+  const _setFileChangesOpenValue = setFileChangesOpen ?? setLocalFileChangesOpen;
+  const _gitLogOpenValue = gitLogOpen ?? localGitLogOpen;
+  const _setGitLogOpenValue = setGitLogOpen ?? setLocalGitLogOpen;
 
   // Use RealGitAdapter when a real repo is available; fall back to MockGitAdapter for demo
   const gitAdapter = useMemo(() => {
@@ -305,102 +314,37 @@ export function KanbanBoardSurface({
       <div className="shrink-0 border border-slate-200/70 bg-white px-4 py-2 dark:border-[#1c1f2e] dark:bg-[#12141c]">
         <div className="flex flex-col gap-1.5 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
           <div className="flex min-w-0 flex-1 flex-col gap-1.5 lg:flex-row lg:items-center lg:gap-2">
-            <div className="flex min-w-0 flex-wrap items-center gap-2 xl:max-w-[56rem]">
-              <span className="inline-flex h-8 items-center text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{t.kanbanBoard.repos}</span>
-              {codebases.length === 0 ? (
-                <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-[#0d1018]">
-                  <span className="text-sm text-slate-400 dark:text-slate-500">{t.kanbanBoard.noReposLinked}</span>
-                  <div className="flex items-center gap-2">
-                    <RepoPicker
-                      value={null}
-                      onChange={async (selection) => {
-                        if (!selection) return;
-                        try {
-                          const res = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/codebases`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              repoPath: selection.path,
-                              branch: selection.branch,
-                              label: selection.name,
-                            }),
-                          });
-                          const data = await res.json();
-                          if (!res.ok) throw new Error(data.error ?? "Failed to add repository");
-                          onRefresh?.();
-                        } catch (err) {
-                          console.error("Failed to add repository:", err);
-                          alert(err instanceof Error ? err.message : "Failed to add repository");
-                        }
-                      }}
-                      additionalRepos={[]}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="flex min-w-0 items-center gap-2">
-                  {defaultCodebase && (
-                    <button
-                      onClick={() => {
-                        setSelectedCodebase(defaultCodebase);
-                        void fetchCodebaseWorktrees(defaultCodebase);
-                      }}
-                      className="inline-flex h-8 max-w-[200px] items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-[11px] text-slate-700 transition-colors hover:border-amber-400 hover:bg-amber-50 dark:border-slate-700 dark:bg-[#0d1018] dark:text-slate-300 dark:hover:bg-amber-900/10"
-                      data-testid="codebase-badge"
-                      title={`${defaultCodebase.label ?? defaultCodebase.repoPath} - ${defaultCodebase.branch ? `@${defaultCodebase.branch}` : ""}`}
-                    >
-                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${defaultCodebase.sourceType === "github" ? "bg-blue-500" : "bg-emerald-500"}`} />
-                      <span className="truncate font-medium">{defaultCodebase.label ?? defaultCodebase.repoPath.split("/").pop() ?? defaultCodebase.repoPath}</span>
-                      {defaultCodebase.branch && <span className="shrink-0 text-slate-400 dark:text-slate-500">@{defaultCodebase.branch}</span>}
-                    </button>
-                  )}
-                  {codebases.length > 1 && (
-                    <button
-                      onClick={() => {
-                        const otherRepo = codebases.find((codebase) => codebase.id !== defaultCodebase?.id);
-                        if (otherRepo) {
-                          setSelectedCodebase(otherRepo);
-                          void fetchCodebaseWorktrees(otherRepo);
-                        }
-                      }}
-                      className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 text-[11px] text-slate-600 transition-colors hover:border-amber-400 hover:bg-amber-50 dark:border-slate-700 dark:bg-[#0d1018] dark:text-slate-400 dark:hover:bg-amber-900/10"
-                      title={`+${codebases.length - 1} more ${codebases.length - 1 === 1 ? "repository" : "repositories"} - click to view all`}
-                    >
-                      <span className="font-medium">+{codebases.length - 1}</span>
-                    </button>
-                  )}
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={() => setFileChangesOpen((current) => !current)}
-                className="inline-flex h-8 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-[11px] font-medium text-slate-700 transition-colors hover:border-amber-400 hover:bg-amber-50 dark:border-slate-700 dark:bg-[#0d1018] dark:text-slate-300 dark:hover:bg-amber-900/10"
-                data-testid={fileChangesOpen ? "kanban-file-changes-close" : "kanban-file-changes-open"}
-                aria-label={fileChangesOpen ? "Close file changes drawer" : "Open file changes drawer"}
-                title={`${fileChangesSummary.changedFiles} changed file${fileChangesSummary.changedFiles === 1 ? "" : "s"}`}
-              >
-                <ChevronRight className={`h-3.5 w-3.5 text-slate-400 transition-transform ${fileChangesOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}/>
-                <span>Changes</span>
-                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] text-slate-500 dark:bg-[#191c28] dark:text-slate-400">
-                  {fileChangesSummary.changedFiles}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setGitLogOpen((current) => !current)}
-                className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-medium transition-colors ${
-                  gitLogOpen
-                    ? "border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-600 dark:bg-amber-900/20 dark:text-amber-300"
-                    : "border-slate-200 bg-slate-50 text-slate-700 hover:border-amber-400 hover:bg-amber-50 dark:border-slate-700 dark:bg-[#0d1018] dark:text-slate-300 dark:hover:bg-amber-900/10"
-                }`}
-                data-testid={gitLogOpen ? "kanban-git-log-close" : "kanban-git-log-open"}
-                aria-label={gitLogOpen ? "Close git log panel" : "Open git log panel"}
-              >
-                <GitBranch className="h-3.5 w-3.5" />
-                <span>{t.gitLog.title}</span>
-              </button>
-              <KanbanRepoSyncStatus repoSync={repoSync} />
-            </div>
+            {codebases.length === 0 && (
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">{t.kanbanBoard.noReposLinked}</span>
+                <RepoPicker
+                  value={null}
+                  onChange={async (selection) => {
+                    if (!selection) return;
+                    try {
+                      const res = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/codebases`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          repoPath: selection.path,
+                          branch: selection.branch,
+                          label: selection.name,
+                        }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok) throw new Error(data.error ?? "Failed to add repository");
+                      onRefresh?.();
+                    } catch (err) {
+                      console.error("Failed to add repository:", err);
+                      alert(err instanceof Error ? err.message : "Failed to add repository");
+                    }
+                  }}
+                  additionalRepos={[]}
+                />
+              </div>
+            )}
+            <KanbanRepoSyncStatus repoSync={repoSync} />
+            <KanbanRepoSyncStatus repoSync={repoSync} />
           </div>
 
           {onAgentPrompt ? (
@@ -477,11 +421,11 @@ export function KanbanBoardSurface({
             workspaceId={workspaceId}
             repos={repoChanges}
             loading={repoChangesLoading}
-            open={fileChangesOpen}
-            onClose={() => setFileChangesOpen(false)}
+            open={fileChangesOpenValue}
+            onClose={() => setFileChangesOpenValue(false)}
             onRefresh={onRefresh}
           />
-          {gitLogOpen && (
+          {gitLogOpenValue && (
             <div className="shrink-0 border-b border-slate-200 dark:border-[#1c1f2e]" style={{ height: "340px" }}>
               <GitLogPanel
                 adapter={gitAdapter}

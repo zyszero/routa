@@ -164,6 +164,8 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     specialists: string;
     debug: string;
     advanced: string;
+    advancedGroupCollab: string;
+    advancedGroupQuality: string;
     records: string;
   };
 

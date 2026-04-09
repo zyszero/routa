@@ -158,6 +158,8 @@ const en: TranslationDictionary = {
     specialists: "Specialists",
     debug: "Debug",
     advanced: "Advanced",
+    advancedGroupCollab: "Collaboration",
+    advancedGroupQuality: "Quality & Tools",
     records: "Records",
   },
 

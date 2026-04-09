@@ -117,7 +117,7 @@ export function AdvancedNavMenu({
     ? `/settings/fluency?workspaceId=${encodeURIComponent(normalizedWorkspaceId)}`
     : "/settings/fluency";
 
-  const items: AdvancedNavItem[] = [
+  const tier1Items: AdvancedNavItem[] = [
     {
       id: "team",
       label: t.nav.team,
@@ -136,6 +136,9 @@ export function AdvancedNavMenu({
       href: "/settings/schedules",
       icon: <Calendar className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} />,
     },
+  ];
+
+  const tier2Items: AdvancedNavItem[] = [
     {
       id: "harness",
       label: t.nav.harness,
@@ -167,6 +170,8 @@ export function AdvancedNavMenu({
       icon: <Monitor className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} />,
     },
   ];
+
+  const items = [...tier1Items, ...tier2Items];
 
   React.useEffect(() => {
     if (!collapsed || !menuOpen) {
@@ -237,14 +242,67 @@ export function AdvancedNavMenu({
       </button>
 
       {!collapsed && isExpanded ? (
-        <div className="mt-1 space-y-0.5">
-          {items.map((item) => {
+        <div className="mt-1 space-y-1">
+          <div className="px-2 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-secondary/60">
+            {t.nav.advancedGroupCollab}
+          </div>
+          <div className="space-y-0.5">
+            {tier1Items.map((item) => {
+              const active = isActive(item.href);
+              return (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  className={`flex items-center gap-2 rounded-md px-2 py-2 text-[11px] transition-colors ${
+                    active
+                      ? "bg-desktop-bg-active text-desktop-accent"
+                      : "text-desktop-text-secondary hover:bg-desktop-bg-active/80 hover:text-desktop-text-primary"
+                  }`}
+                >
+                  {item.icon}
+                  <span className="truncate">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+          <div className="px-2 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-secondary/60">
+            {t.nav.advancedGroupQuality}
+          </div>
+          <div className="space-y-0.5">
+            {tier2Items.map((item) => {
+              const active = isActive(item.href);
+              return (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  className={`flex items-center gap-2 rounded-md px-2 py-2 text-[11px] transition-colors ${
+                    active
+                      ? "bg-desktop-bg-active text-desktop-accent"
+                      : "text-desktop-text-secondary hover:bg-desktop-bg-active/80 hover:text-desktop-text-primary"
+                  }`}
+                >
+                  {item.icon}
+                  <span className="truncate">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {collapsed && menuOpen ? (
+        <div className={`absolute z-30 ${menuPositionClass} rounded-lg border border-desktop-border bg-desktop-bg-secondary/95 p-1 text-[11px] shadow-lg backdrop-blur`}>
+          <div className="px-2 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-secondary">
+            {t.nav.advancedGroupCollab}
+          </div>
+          {tier1Items.map((item) => {
             const active = isActive(item.href);
             return (
               <Link
                 key={item.id}
                 href={item.href}
-                className={`flex items-center gap-2 rounded-md px-2 py-2 text-[11px] transition-colors ${
+                onClick={() => setMenuOpen(false)}
+                className={`mb-0.5 last:mb-0 flex items-center gap-2 rounded-md px-2 py-2 transition-colors ${
                   active
                     ? "bg-desktop-bg-active text-desktop-accent"
                     : "text-desktop-text-secondary hover:bg-desktop-bg-active/80 hover:text-desktop-text-primary"
@@ -255,15 +313,11 @@ export function AdvancedNavMenu({
               </Link>
             );
           })}
-        </div>
-      ) : null}
-
-      {collapsed && menuOpen ? (
-        <div className={`absolute z-30 ${menuPositionClass} rounded-lg border border-desktop-border bg-desktop-bg-secondary/95 p-1 text-[11px] shadow-lg backdrop-blur`}>
-          <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-secondary">
-            {t.nav.advanced}
+          <div className="my-1 border-t border-desktop-border/50" />
+          <div className="px-2 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-secondary">
+            {t.nav.advancedGroupQuality}
           </div>
-          {items.map((item) => {
+          {tier2Items.map((item) => {
             const active = isActive(item.href);
             return (
               <Link

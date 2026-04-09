@@ -157,6 +157,8 @@ const zh: TranslationDictionary = {
     specialists: "专家",
     debug: "调试",
     advanced: "高级",
+    advancedGroupCollab: "协作",
+    advancedGroupQuality: "质量与工具",
     records: "记录",
   },
 
