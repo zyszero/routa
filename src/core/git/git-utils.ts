@@ -762,14 +762,19 @@ export function getRepoCommitChanges(
     });
 }
 
-export function getRepoCommitDiff(repoPath: string, sha: string): RepoCommitDiff {
+export function getRepoCommitDiff(
+  repoPath: string,
+  sha: string,
+  options?: { context?: "preview" | "full" },
+): RepoCommitDiff {
   const quotedSha = shellQuote(sha);
+  const unifiedContext = options?.context === "full" ? 1_000_000 : 3;
   const summary = gitExecSync(`git show -s --format=%s ${quotedSha}`, repoPath);
   const shortSha = gitExecSync(`git rev-parse --short ${quotedSha}`, repoPath);
   const authorName = gitExecSync(`git show -s --format=%an ${quotedSha}`, repoPath);
   const authoredAt = gitExecSync(`git show -s --format=%aI ${quotedSha}`, repoPath);
   const patch = gitExecSync(
-    `git --no-pager show --no-ext-diff --find-renames --find-copies --format=medium --unified=3 ${quotedSha}`,
+    `git --no-pager show --no-ext-diff --find-renames --find-copies --format=medium --unified=${unifiedContext} ${quotedSha}`,
     repoPath,
   );
   const counts = countDiffPatchLines(patch);

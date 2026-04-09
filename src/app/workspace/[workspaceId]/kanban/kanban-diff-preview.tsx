@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
+import type { ReactNode } from "react";
 import type { KanbanCommitChangeItem, KanbanCommitDiffPreview, KanbanFileChangeItem, KanbanFileDiffPreview } from "./kanban-file-changes-types";
 import { splitFilePath, STATUS_BADGE } from "./kanban-file-changes-panel";
 import { useTranslation } from "@/i18n";
@@ -23,6 +24,10 @@ export interface CommitDiffFile {
   additions: number;
   deletions: number;
   startLineIndex: number; // Line index in the patch where this file's diff starts
+}
+
+export interface CommitDiffFileSection extends CommitDiffFile {
+  patch: string;
 }
 
 /**
@@ -96,6 +101,20 @@ export function parseCommitDiffFiles(patch: string): CommitDiffFile[] {
   }
 
   return files;
+}
+
+export function splitCommitDiffIntoFileSections(patch: string): CommitDiffFileSection[] {
+  const lines = patch.split("\n");
+  const files = parseCommitDiffFiles(patch);
+
+  return files.map((file, index) => {
+    const nextFile = files[index + 1];
+    const endLineIndex = nextFile?.startLineIndex ?? lines.length;
+    return {
+      ...file,
+      patch: lines.slice(file.startLineIndex, endLineIndex).join("\n"),
+    };
+  });
 }
 
 export function parseUnifiedDiffPreview(diff: { patch: string; additions?: number; deletions?: number }): ParsedDiffPreview {
@@ -197,6 +216,84 @@ export function renderUnifiedDiffLines(parsedDiff: ParsedDiffPreview) {
       )}
     </div>
   ));
+}
+
+function HiddenContextRun({
+  lines,
+  indexOffset,
+  hiddenLinesLabel,
+}: {
+  lines: ParsedDiffPreview["lines"];
+  indexOffset: number;
+  hiddenLinesLabel: (count: number) => string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const hiddenCount = Math.max(0, lines.length - 6);
+  const prefix = lines.slice(0, expanded ? lines.length : 3);
+  const suffix = expanded || hiddenCount === 0 ? [] : lines.slice(-3);
+
+  return (
+    <>
+      {renderUnifiedDiffLines({ additions: 0, deletions: 0, lines: prefix })}
+      {!expanded && hiddenCount > 0 ? (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="flex w-full items-center gap-3 border-y border-dashed border-slate-300/70 bg-slate-50 px-3 py-1.5 text-left text-[11px] font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:border-slate-700/70 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          data-testid={`kanban-diff-hidden-lines-${indexOffset + 3}`}
+        >
+          <span className="select-none text-slate-400">↕</span>
+          <span>{hiddenLinesLabel(hiddenCount)}</span>
+        </button>
+      ) : null}
+      {suffix.length > 0 ? renderUnifiedDiffLines({ additions: 0, deletions: 0, lines: suffix }) : null}
+    </>
+  );
+}
+
+function renderUnifiedDiffWithHiddenContext(
+  parsedDiff: ParsedDiffPreview,
+  hiddenLinesLabel: (count: number) => string,
+) {
+  const rendered: ReactNode[] = [];
+  let contextRun: ParsedDiffPreview["lines"] = [];
+  let contextStartIndex = 0;
+
+  const flushContextRun = () => {
+    if (contextRun.length === 0) {
+      return;
+    }
+
+    if (contextRun.length > 12) {
+      rendered.push(
+        <HiddenContextRun
+          key={`context-${contextStartIndex}`}
+          lines={contextRun}
+          indexOffset={contextStartIndex}
+          hiddenLinesLabel={hiddenLinesLabel}
+        />,
+      );
+    } else {
+      rendered.push(...renderUnifiedDiffLines({ additions: 0, deletions: 0, lines: contextRun }));
+    }
+    contextRun = [];
+  };
+
+  parsedDiff.lines.forEach((line, index) => {
+    if (line.kind === "context" && typeof line.oldLineNumber === "number") {
+      if (contextRun.length === 0) {
+        contextStartIndex = index;
+      }
+      contextRun.push(line);
+      return;
+    }
+
+    flushContextRun();
+    rendered.push(...renderUnifiedDiffLines({ additions: 0, deletions: 0, lines: [line] }));
+  });
+
+  flushContextRun();
+  return rendered;
 }
 
 export function TaskFileDiffPreview({
@@ -417,32 +514,98 @@ export function CommitFileList({
   );
 }
 
+function CommitFileDiffSection({
+  file,
+  defaultOpen,
+}: {
+  file: CommitDiffFileSection;
+  defaultOpen: boolean;
+}) {
+  const { t } = useTranslation();
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const statusBadges = {
+    modified: { icon: "M", className: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200" },
+    added: { icon: "A", className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200" },
+    deleted: { icon: "D", className: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200" },
+    renamed: { icon: "R", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200" },
+  };
+  const badge = statusBadges[file.status];
+  const parsedDiff = parseUnifiedDiffPreview({
+    patch: file.patch,
+    additions: file.additions,
+    deletions: file.deletions,
+  });
+  const { name, directory } = splitFilePath(file.path);
+
+  return (
+    <details
+      className="group overflow-hidden border-b border-slate-200/70 last:border-b-0 dark:border-[#202433]"
+      open={isOpen}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+      data-testid={`kanban-commit-file-section-${file.path}`}
+    >
+      <summary className="grid cursor-pointer list-none grid-cols-[auto_20px_minmax(0,1fr)_auto] items-center gap-x-2 px-3 py-2 transition-colors hover:bg-slate-50 dark:hover:bg-[#171b27] [&::-webkit-details-marker]:hidden">
+        <svg
+          className="h-3.5 w-3.5 text-slate-400 transition-transform group-open:rotate-90"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+          aria-hidden="true"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+        <span className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-[9px] font-bold ${badge.className}`}>
+          {badge.icon}
+        </span>
+        <div className="min-w-0">
+          <div className="truncate text-xs font-medium text-slate-900 dark:text-slate-100" title={file.path}>
+            {name}
+          </div>
+          {directory ? (
+            <div className="truncate text-[10px] text-slate-500 dark:text-slate-400" title={directory}>
+              {directory}
+            </div>
+          ) : null}
+        </div>
+        <div className="flex min-w-[3.5rem] shrink-0 items-center justify-end gap-1 self-start text-[10px] font-mono leading-4">
+          <span className="text-emerald-600 dark:text-emerald-300">+{file.additions}</span>
+          <span className="text-rose-600 dark:text-rose-300">-{file.deletions}</span>
+        </div>
+      </summary>
+      <div className="max-h-[28rem] overflow-auto border-t border-slate-200/70 dark:border-[#202433]">
+        <pre className="min-w-full bg-slate-950/95 px-0 py-0 text-[11px] leading-5 text-slate-100">
+          {renderUnifiedDiffWithHiddenContext(
+            parsedDiff,
+            (count) => t.kanbanDetail.hiddenLines.replace("{count}", String(count)),
+          )}
+        </pre>
+      </div>
+    </details>
+  );
+}
+
 export function TaskCommitDiffPreview({
   commit,
   diff,
   loading,
   error,
   compact = false,
+  onClose,
 }: {
   commit: KanbanCommitChangeItem | null;
   diff?: KanbanCommitDiffPreview;
   loading: boolean;
   error?: string;
   compact?: boolean;
+  onClose?: () => void;
 }) {
   const { t } = useTranslation();
-  const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
-  const diffViewerRef = useRef<HTMLDivElement>(null);
 
   // Calculate file list and diff preview from commit
   const preview = commit ? (diff ?? { ...commit, patch: "" }) : null;
   const parsedDiff = preview?.patch ? parseUnifiedDiffPreview(preview) : null;
-  const fileList = preview?.patch ? parseCommitDiffFiles(preview.patch) : [];
-
-  // Auto-collapse file list if more than 10 files
-  // Default to expanded for small commits, collapsed for large ones
-  const shouldAutoExpand = fileList.length <= 10;
-  const [isExpanded, setIsExpanded] = useState(() => shouldAutoExpand);
+  const fileSections = preview?.patch ? splitCommitDiffIntoFileSections(preview.patch) : [];
 
   if (!commit) {
     return (
@@ -452,55 +615,11 @@ export function TaskCommitDiffPreview({
     );
   }
 
-  const handleFileClick = (file: CommitDiffFile) => {
-    setActiveFilePath(file.path);
-
-    // Scroll to the file's diff section
-    if (diffViewerRef.current && parsedDiff) {
-      const targetLine = parsedDiff.lines[file.startLineIndex];
-      if (targetLine) {
-        // Find the DOM element for this line and scroll to it
-        const lineElement = diffViewerRef.current.querySelector(`[data-line-index="${file.startLineIndex}"]`);
-        if (lineElement) {
-          lineElement.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-      }
-    }
-  };
-
   // TypeScript guard: preview is guaranteed to be non-null here due to commit check above
   if (!preview) return null;
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white dark:border-[#202433] dark:bg-[#0d1018]">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/70 px-3 py-2 dark:border-[#202433]">
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium text-slate-900 dark:text-slate-100" title={preview.summary}>
-            {preview.summary}
-          </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-            <span className="rounded-full border border-slate-200 px-2 py-0.5 dark:border-slate-700">{preview.shortSha}</span>
-            <span>{preview.authorName}</span>
-            <span>{new Date(preview.authoredAt).toLocaleString()}</span>
-          </div>
-        </div>
-        <div className="shrink-0 text-[11px] font-mono">
-          <span className="text-emerald-600 dark:text-emerald-300">+{preview.additions}</span>
-          {" "}
-          <span className="text-rose-600 dark:text-rose-300">-{preview.deletions}</span>
-        </div>
-      </div>
-
-      {fileList.length > 0 && (
-        <CommitFileList
-          files={fileList}
-          expanded={isExpanded}
-          onToggle={() => setIsExpanded(!isExpanded)}
-          onFileClick={handleFileClick}
-          activeFilePath={activeFilePath}
-        />
-      )}
-
       {loading ? (
         <div className={`px-3 py-3 text-sm text-slate-500 dark:text-slate-400 ${compact ? "leading-5" : "leading-6"}`}>
           {t.kanbanDetail.loadingCommitDiff}
@@ -509,12 +628,34 @@ export function TaskCommitDiffPreview({
         <div className={`border-l-2 border-rose-400/80 px-3 py-2 text-sm text-rose-700 dark:border-rose-500/70 dark:text-rose-300 ${compact ? "leading-5" : "leading-6"}`}>
           {error}
         </div>
+      ) : fileSections.length > 0 ? (
+        <div data-testid="kanban-commit-files-changed">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 bg-slate-50/80 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-[#202433] dark:bg-[#0a0d14] dark:text-slate-400">
+            <span>{fileSections.length} {t.kanbanDetail.filesChanged}</span>
+            {onClose ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded border border-slate-200 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 transition-colors hover:border-amber-300 hover:text-amber-700 dark:border-slate-700 dark:text-slate-400 dark:hover:border-amber-700 dark:hover:text-amber-200"
+              >
+                {t.common.close}
+              </button>
+            ) : null}
+          </div>
+          {fileSections.map((file, index) => (
+            <CommitFileDiffSection
+              key={`${file.path}-${file.startLineIndex}`}
+              file={file}
+              defaultOpen={index === 0}
+            />
+          ))}
+        </div>
       ) : !parsedDiff ? (
         <div className={`px-3 py-3 text-sm text-slate-500 dark:text-slate-400 ${compact ? "leading-5" : "leading-6"}`}>
           {t.kanbanDetail.noDiffAvailable}
         </div>
       ) : (
-        <div ref={diffViewerRef} className="max-h-[28rem] overflow-auto">
+        <div className="max-h-[28rem] overflow-auto">
           <pre className="min-w-full bg-slate-950/95 px-0 py-0 text-[11px] leading-5 text-slate-100">
             {renderUnifiedDiffLines(parsedDiff)}
           </pre>

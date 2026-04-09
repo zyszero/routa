@@ -168,7 +168,7 @@ export function KanbanTaskChangesTab({
 
       try {
         const response = await desktopAwareFetch(
-          `/api/tasks/${encodeURIComponent(taskId)}/changes/commit?sha=${encodeURIComponent(commit.sha)}`,
+          `/api/tasks/${encodeURIComponent(taskId)}/changes/commit?sha=${encodeURIComponent(commit.sha)}&context=full`,
           { cache: "no-store", signal: controller.signal },
         );
         const data = await response.json().catch(() => ({}));
@@ -241,7 +241,7 @@ export function KanbanTaskChangesTab({
                 key={commit.sha}
                 commit={commit}
                 selected={selectedCommit?.sha === commit.sha}
-                onClick={() => setActiveCommitSha(commit.sha)}
+                onClick={() => setActiveCommitSha((current) => (current === commit.sha ? null : commit.sha))}
               />
             ))}
           </div>
@@ -252,6 +252,7 @@ export function KanbanTaskChangesTab({
             loading={selectedCommitLoading}
             error={selectedCommitError}
             compact={true}
+            onClose={() => setActiveCommitSha(null)}
           />
         </section>
       ) : null}

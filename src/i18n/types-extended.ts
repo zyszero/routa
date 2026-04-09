@@ -720,6 +720,7 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     clickFileToInspectDiff: string;
     clickCommitToInspectDiff: string;
     filesChanged: string;
+    hiddenLines: string;
     loadingFileDiff: string;
     loadingCommitDiff: string;
     failedToLoadFileDiff: string;

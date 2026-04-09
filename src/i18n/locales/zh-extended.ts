@@ -715,6 +715,7 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     clickFileToInspectDiff: "点击文件可查看对应 diff。",
     clickCommitToInspectDiff: "点击提交可查看对应 diff。",
     filesChanged: "变更文件",
+    hiddenLines: "隐藏 {count} 行",
     loadingFileDiff: "正在加载 diff...",
     loadingCommitDiff: "正在加载提交 diff...",
     failedToLoadFileDiff: "加载文件 diff 失败",

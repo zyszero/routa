@@ -74,4 +74,123 @@ describe("KanbanTaskChangesTab", () => {
       expect(onSelectSession).toHaveBeenCalledWith("session-pr-1");
     });
   });
+
+  it("renders committed diff as independently collapsible changed-file sections", async () => {
+    desktopAwareFetch.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/tasks/task-commit/changes") {
+        return {
+          ok: true,
+          json: async () => ({
+            changes: {
+              codebaseId: "codebase-1",
+              repoPath: "/repo",
+              label: "platform",
+              branch: "feature/diff",
+              status: { clean: true, ahead: 1, behind: 0, modified: 0, untracked: 0 },
+              files: [],
+              commits: [{
+                sha: "abc1234567890",
+                shortSha: "abc1234",
+                summary: "Update editor",
+                authorName: "Codex",
+                authoredAt: "2026-04-08T00:00:00.000Z",
+                additions: 2,
+                deletions: 2,
+              }],
+              source: "repo",
+            },
+          }),
+        } as Response;
+      }
+      if (url === "/api/tasks/task-commit/changes/commit?sha=abc1234567890&context=full") {
+        return {
+          ok: true,
+          json: async () => ({
+            diff: {
+              sha: "abc1234567890",
+              shortSha: "abc1234",
+              summary: "Update editor",
+              authorName: "Codex",
+              authoredAt: "2026-04-08T00:00:00.000Z",
+              additions: 2,
+              deletions: 2,
+              patch: [
+                "diff --git a/package.json b/package.json",
+                "index 1111111..2222222 100644",
+                "--- a/package.json",
+                "+++ b/package.json",
+                "@@ -1,22 +1,22 @@",
+                '   "context0": true,',
+                '   "context1": true,',
+                '   "context2": true,',
+                '   "context3": true,',
+                '   "context4": true,',
+                '   "context5": true,',
+                '   "context6": true,',
+                '   "context7": true,',
+                '   "context8": true,',
+                '   "context9": true,',
+                '   "context10": true,',
+                '   "context11": true,',
+                '   "context12": true,',
+                '   "context13": true,',
+                '   "context14": true,',
+                '   "context15": true,',
+                '   "context16": true,',
+                '   "context17": true,',
+                '   "context18": true,',
+                '   "context19": true,',
+                '-  "version": "1.0.0",',
+                '+  "version": "1.1.0",',
+                "diff --git a/src/editor.ts b/src/editor.ts",
+                "index 3333333..4444444 100644",
+                "--- a/src/editor.ts",
+                "+++ b/src/editor.ts",
+                "@@ -1 +1 @@",
+                "-export const editor = 'old';",
+                "+export const editor = 'new';",
+              ].join("\n"),
+            },
+          }),
+        } as Response;
+      }
+      throw new Error(`Unexpected desktopAwareFetch: ${url}`);
+    });
+
+    render(
+      <KanbanTaskChangesTab
+        task={{
+          id: "task-commit",
+          title: "Review commits",
+          status: "COMPLETED",
+          comments: [],
+          labels: [],
+          dependencies: [],
+          createdAt: "2026-04-08T00:00:00.000Z",
+          updatedAt: "2026-04-08T00:00:00.000Z",
+        }}
+        codebases={[]}
+        taskId="task-commit"
+        workspaceId="workspace-1"
+        onRefresh={vi.fn()}
+      />
+    );
+
+    fireEvent.click(await screen.findByTestId("kanban-commit-row-abc1234567890"));
+
+    expect(await screen.findByText(/"version": "1\.1\.0"/)).toBeTruthy();
+    expect(screen.getByTestId("kanban-commit-files-changed").textContent).toContain("2 Files Changed");
+    expect(screen.getByTestId("kanban-commit-file-section-package.json")).toBeTruthy();
+    expect(screen.getByTestId("kanban-commit-file-section-src/editor.ts")).toBeTruthy();
+    expect(screen.queryByText(/context10/)).toBeNull();
+    fireEvent.click(screen.getByText("14 hidden lines"));
+    expect(screen.getByText(/context10/)).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId("kanban-commit-file-section-src/editor.ts").querySelector("summary")!);
+    expect(screen.getByText("export const editor = 'new';")).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId("kanban-commit-row-abc1234567890"));
+    expect(screen.queryByTestId("kanban-commit-files-changed")).toBeNull();
+  });
 });

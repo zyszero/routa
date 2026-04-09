@@ -9,6 +9,7 @@ export async function GET(
   const { taskId } = await params;
   const url = new URL(request.url);
   const sha = url.searchParams.get("sha")?.trim();
+  const context = url.searchParams.get("context") === "full" ? "full" : "preview";
   const system = getRoutaSystem();
   const task = await system.taskStore.get(taskId);
 
@@ -31,6 +32,6 @@ export async function GET(
     return NextResponse.json({ error: "Repository is missing or not a git repository" }, { status: 400 });
   }
 
-  const diff = getRepoCommitDiff(repoPath, sha);
+  const diff = getRepoCommitDiff(repoPath, sha, { context });
   return NextResponse.json({ diff }, { headers: { "Cache-Control": "no-store" } });
 }

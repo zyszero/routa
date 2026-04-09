@@ -715,6 +715,7 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     clickFileToInspectDiff: "Click a file to inspect its diff.",
     clickCommitToInspectDiff: "Click a commit to inspect its diff.",
     filesChanged: "Files Changed",
+    hiddenLines: "{count} hidden lines",
     loadingFileDiff: "Loading diff...",
     loadingCommitDiff: "Loading commit diff...",
     failedToLoadFileDiff: "Failed to load file diff",

@@ -1131,7 +1131,7 @@ describe("KanbanCardDetail changes tab", () => {
           }),
         } as Response;
       }
-      if (url === "/api/tasks/task-1/changes/commit?sha=abc1234567890") {
+      if (url === "/api/tasks/task-1/changes/commit?sha=abc1234567890&context=full") {
         return {
           ok: true,
           json: async () => ({
@@ -1233,7 +1233,7 @@ describe("KanbanCardDetail changes tab", () => {
 
     await waitFor(() => {
       expect(desktopAwareFetch).toHaveBeenCalledWith(
-        "/api/tasks/task-1/changes/commit?sha=abc1234567890",
+        "/api/tasks/task-1/changes/commit?sha=abc1234567890&context=full",
         { cache: "no-store", signal: expect.any(AbortSignal) },
       );
     });
