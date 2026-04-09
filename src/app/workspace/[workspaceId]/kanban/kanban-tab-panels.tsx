@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction, type RefObject } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction, type RefObject } from "react";
 import { useTranslation } from "@/i18n";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
 import type { UseAcpActions, UseAcpState } from "@/client/hooks/use-acp";
 import { ChatPanel } from "@/client/components/chat-panel";
-import { AcpProviderDropdown } from "@/client/components/acp-provider-dropdown";
-import { RepoPicker, type RepoSelection } from "@/client/components/repo-picker";
+import type { RepoSelection } from "@/client/components/repo-picker";
 import { resolveEffectiveTaskAutomation } from "@/core/kanban/effective-task-automation";
 import { KanbanCard } from "./kanban-card";
 import { KanbanCardActivityBar, KanbanCardDetail } from "./kanban-card-detail";
@@ -27,7 +26,7 @@ import {
 import type { ColumnAutomationConfig } from "./kanban-settings-modal";
 import type { KanbanBoardInfo, SessionInfo, TaskInfo, WorktreeInfo } from "../types";
 import type { KanbanRepoChanges } from "./kanban-file-changes-types";
-import { ChevronRight as _ChevronRight, ArrowRight, GitBranch as _GitBranch } from "lucide-react";
+import { ChevronRight as _ChevronRight, GitBranch as _GitBranch } from "lucide-react";
 import { GitLogPanel, RealGitAdapter, MockGitAdapter } from "./git-log";
 
 interface SessionRestoreTranscriptMessage {
@@ -160,19 +159,12 @@ export function KanbanBoardSurface({
   setSelectedCodebase: _setSelectedCodebase,
   fetchCodebaseWorktrees: _fetchCodebaseWorktrees,
   onRefresh,
-  onAgentPrompt,
   repoChanges,
   repoChangesLoading,
   availableProviders,
   acp,
   boardAutoProviderId,
-  onBoardProviderChange,
   kanbanTaskAgentCopy,
-  agentInput,
-  setAgentInput,
-  agentLoading,
-  handleAgentSubmit,
-  setShowCreateModal,
   agentSessionId,
   openAgentPanel,
   agentPanelOpen,
@@ -214,19 +206,12 @@ export function KanbanBoardSurface({
   setSelectedCodebase: Dispatch<SetStateAction<CodebaseData | null>>;
   fetchCodebaseWorktrees: (codebase: CodebaseData) => Promise<void>;
   onRefresh: () => void;
-  onAgentPrompt?: unknown;
   repoChanges: KanbanRepoChanges[];
   repoChangesLoading: boolean;
   availableProviders: AcpProviderInfo[];
   acp?: UseAcpState & UseAcpActions;
   boardAutoProviderId?: string;
-  onBoardProviderChange: (providerId: string) => void;
   kanbanTaskAgentCopy: KanbanTaskAgentCopy;
-  agentInput: string;
-  setAgentInput: Dispatch<SetStateAction<string>>;
-  agentLoading: boolean;
-  handleAgentSubmit: () => Promise<void>;
-  setShowCreateModal: Dispatch<SetStateAction<boolean>>;
   agentSessionId: string | null;
   openAgentPanel: (sessionId: string) => void;
   agentPanelOpen: boolean;
@@ -267,7 +252,7 @@ export function KanbanBoardSurface({
   const { t } = useTranslation();
   const [localFileChangesOpen, setLocalFileChangesOpen] = useState(false);
   const [localGitLogOpen, setLocalGitLogOpen] = useState(false);
-  const [gitLogRepoPath, setGitLogRepoPath] = useState<string | null>(defaultCodebase?.repoPath ?? null);
+  const [gitLogRepoPath, setGitLogRepoPath] = useState<string | null>(null);
 
   // Use external state if provided, otherwise use local state
   const fileChangesOpenValue = fileChangesOpen ?? localFileChangesOpen;
@@ -281,22 +266,11 @@ export function KanbanBoardSurface({
     return hasRealRepo ? new RealGitAdapter() : new MockGitAdapter();
   }, [codebases.length]);
 
-  useEffect(() => {
+  const activeGitLogRepoPath = useMemo(() => {
     if (gitLogRepoPath && codebases.some((codebase) => codebase.repoPath === gitLogRepoPath)) {
-      return;
+      return gitLogRepoPath;
     }
-
-    if (defaultCodebase?.repoPath) {
-      setGitLogRepoPath(defaultCodebase.repoPath);
-      return;
-    }
-
-    if (codebases[0]?.repoPath) {
-      setGitLogRepoPath(codebases[0].repoPath);
-      return;
-    }
-
-    setGitLogRepoPath(null);
+    return defaultCodebase?.repoPath ?? codebases[0]?.repoPath ?? null;
   }, [codebases, defaultCodebase?.repoPath, gitLogRepoPath]);
 
   return (
@@ -315,108 +289,6 @@ export function KanbanBoardSurface({
           </div>
         </div>
       )}
-      <div className="shrink-0 border border-slate-200/70 bg-white px-4 py-2 dark:border-[#1c1f2e] dark:bg-[#12141c]">
-        <div className="flex flex-col gap-1.5 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
-          <div className="flex min-w-0 flex-1 flex-col gap-1.5 lg:flex-row lg:items-center lg:gap-2">
-            {codebases.length === 0 && (
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="text-[11px] text-slate-500 dark:text-slate-400">{t.kanbanBoard.noReposLinked}</span>
-                <RepoPicker
-                  value={null}
-                  onChange={async (selection) => {
-                    if (!selection) return;
-                    try {
-                      const res = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/codebases`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          repoPath: selection.path,
-                          branch: selection.branch,
-                          label: selection.name,
-                        }),
-                      });
-                      const data = await res.json();
-                      if (!res.ok) throw new Error(data.error ?? "Failed to add repository");
-                      onRefresh?.();
-                    } catch (err) {
-                      console.error("Failed to add repository:", err);
-                      alert(err instanceof Error ? err.message : "Failed to add repository");
-                    }
-                  }}
-                  additionalRepos={[]}
-                />
-              </div>
-            )}
-          </div>
-
-          {onAgentPrompt ? (
-            <div className="flex min-w-0 flex-1 items-center justify-center">
-                <div className="group relative flex w-full max-w-3xl items-center border border-slate-200 bg-white transition-colors focus-within:border-amber-400/80 focus-within:ring-2 focus-within:ring-amber-400/15 dark:border-slate-700 dark:bg-[#12141c]">
-                  <div className="shrink-0 border-r border-slate-200 dark:border-slate-700">
-                    <AcpProviderDropdown
-                      providers={availableProviders}
-                    selectedProvider={resolveKanbanBoardAutoProviderId(board, acp?.selectedProvider) ?? ""}
-                    onProviderChange={(providerId) => onBoardProviderChange(providerId)}
-                    disabled={!acp?.connected || availableProviders.length === 0}
-                    ariaLabel={kanbanTaskAgentCopy.providerAriaLabel}
-                    dataTestId="kanban-agent-provider"
-                    buttonClassName="flex h-8 items-center gap-1.5 border-r border-slate-200 bg-transparent px-2.5 text-[12px] font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-r-slate-700 dark:text-slate-200 dark:hover:bg-slate-800/40"
-                    labelClassName="max-w-[120px] truncate"
-                  />
-                </div>
-                <input
-                  type="text"
-                  value={agentInput}
-                  onChange={(event) => setAgentInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      void handleAgentSubmit();
-                    }
-                  }}
-                  placeholder={acp?.connected ? kanbanTaskAgentCopy.placeholder : kanbanTaskAgentCopy.connectingPlaceholder}
-                  disabled={agentLoading || !acp?.connected}
-                  className="h-8 w-full bg-transparent px-3 pr-2 text-sm text-slate-800 placeholder-slate-400 outline-none disabled:opacity-50 dark:text-slate-200 dark:placeholder-slate-500"
-                />
-                <button
-                  onClick={() => void handleAgentSubmit()}
-                  disabled={!agentInput.trim() || agentLoading || !acp?.connected}
-                  className="mr-1.5 inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-slate-900 px-3 text-[12px] font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:bg-amber-500 dark:hover:bg-amber-400 dark:disabled:bg-[#1a1d29] dark:disabled:text-slate-500"
-                >
-                  {agentLoading ? "..." : (
-                    <>
-                      <span>{kanbanTaskAgentCopy.send}</span>
-                      <ArrowRight className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => setShowCreateModal(true)}
-                  className="inline-flex h-8 shrink-0 items-center rounded-lg bg-gradient-to-r from-amber-500 to-amber-500 px-3 py-0 text-[12px] font-semibold text-white shadow-sm transition-all hover:from-amber-600 hover:to-amber-500"
-                >
-                  {kanbanTaskAgentCopy.manual}
-                </button>
-              </div>
-              {agentSessionId && (
-                <button
-                  onClick={() => openAgentPanel(agentSessionId)}
-                  className="shrink-0 text-xs text-amber-600 hover:underline dark:text-amber-400"
-                  title={kanbanTaskAgentCopy.openPanelTitle}
-                >
-                  {kanbanTaskAgentCopy.view}
-                </button>
-              )}
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="inline-flex h-8 items-center rounded-lg bg-gradient-to-r from-amber-500 to-amber-500 px-3 text-[12px] font-medium text-white shadow-sm transition-all hover:from-amber-600 hover:to-amber-500"
-            >
-              {kanbanTaskAgentCopy.manual}
-            </button>
-          )}
-        </div>
-      </div>
       <div className="flex min-h-0 flex-1 gap-4">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           <KanbanEnhancedFileChangesPanel
@@ -431,7 +303,7 @@ export function KanbanBoardSurface({
             <div className="absolute bottom-0 left-0 right-0 z-10 border-t border-slate-200 dark:border-[#1c1f2e] shadow-xl" style={{ height: "340px" }}>
               <GitLogPanel
                 adapter={gitAdapter}
-                repoPath={gitLogRepoPath ?? "/mock/repo"}
+                repoPath={activeGitLogRepoPath ?? "/mock/repo"}
                 codebases={codebases}
                 onSelectRepoPath={setGitLogRepoPath}
                 title={t.gitLog.title}

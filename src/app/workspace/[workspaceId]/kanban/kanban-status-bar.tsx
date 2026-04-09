@@ -1,6 +1,6 @@
 "use client";
 
-import { GitBranch, FileCode, Activity, Zap, Settings } from "lucide-react";
+import { GitBranch, FileCode, Activity, Zap } from "lucide-react";
 import { useTranslation } from "@/i18n";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
 import type { AcpProviderInfo } from "@/client/acp-client";
@@ -22,6 +22,8 @@ interface KanbanStatusBarProps {
   board: KanbanBoardInfo | null;
   /** 看板队列状态 */
   boardQueue?: KanbanBoardInfo["queue"];
+  /** 看板与 session/repo 绑定健康状态 */
+  repoHealth?: { missingRepoTasks: number; cwdMismatchTasks: number };
   /** 当前选中的 Provider */
   selectedProvider?: AcpProviderInfo | null;
   /** 点击仓库时的回调 */
@@ -36,8 +38,6 @@ interface KanbanStatusBarProps {
   fileChangesOpen?: boolean;
   /** Git Log 面板是否打开 */
   gitLogOpen?: boolean;
-  /** 点击设置时的回调 */
-  onSettingsClick?: () => void;
   /** 仓库同步状态 */
   repoSync?: RepoSyncState;
 }
@@ -48,12 +48,12 @@ export function KanbanStatusBar({
   fileChangesSummary,
   board,
   boardQueue,
+  repoHealth,
   selectedProvider,
   onRepoClick,
   onFileChangesClick,
   onGitLogClick,
   onProviderClick,
-  onSettingsClick,
   fileChangesOpen = false,
   gitLogOpen = false,
   repoSync,
@@ -133,6 +133,19 @@ export function KanbanStatusBar({
 
       {/* 右侧：同步状态、运行状态和 Provider */}
       <div className="flex items-center divide-x divide-desktop-border/50">
+        {/* 看板健康 */}
+        {repoHealth && (repoHealth.missingRepoTasks > 0 || repoHealth.cwdMismatchTasks > 0) && (
+          <div className="flex items-center gap-2 px-2.5 h-6 text-amber-600 dark:text-amber-300">
+            <span className="font-medium">{t.kanban.kanbanHealth}</span>
+            {repoHealth.missingRepoTasks > 0 && (
+              <span>{repoHealth.missingRepoTasks} {t.kanban.missing}</span>
+            )}
+            {repoHealth.cwdMismatchTasks > 0 && (
+              <span>{repoHealth.cwdMismatchTasks} {t.kanban.sessionMismatch}</span>
+            )}
+          </div>
+        )}
+
         {/* 同步状态 */}
         {repoSync && repoSync.status !== "idle" && (
           <div className="flex items-center gap-1.5 px-2.5 h-6 text-desktop-text-secondary text-[11px]">
@@ -180,17 +193,6 @@ export function KanbanStatusBar({
           >
             <Zap className="w-3 h-3" />
             <span className="max-w-[120px] truncate">{selectedProvider.name}</span>
-          </button>
-        )}
-
-        {/* Settings */}
-        {onSettingsClick && (
-          <button
-            onClick={onSettingsClick}
-            className="flex items-center gap-1.5 px-2.5 h-6 text-desktop-text-primary hover:bg-desktop-bg-active transition-colors"
-            title={t.kanban.boardSettings}
-          >
-            <Settings className="w-3 h-3" />
           </button>
         )}
       </div>

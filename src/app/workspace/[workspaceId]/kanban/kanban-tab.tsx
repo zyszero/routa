@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
 import type { UseAcpState, UseAcpActions } from "@/client/hooks/use-acp";
+import { AcpProviderDropdown } from "@/client/components/acp-provider-dropdown";
 import {
   resolveEffectiveTaskAutomation,
 } from "@/core/kanban/effective-task-automation";
@@ -59,6 +60,7 @@ import {
   KanbanCreateTaskModal,
   KanbanTaskDetailOverlay,
 } from "./kanban-tab-panels";
+import { ArrowRight } from "lucide-react";
 
 interface SpecialistOption {
   id: string;
@@ -1476,6 +1478,68 @@ export function KanbanTab({
     }
   }
 
+  const kanbanHeaderActions = board ? (
+    <div className="flex min-w-[280px] flex-1 items-center border border-slate-200 bg-white transition-colors focus-within:border-amber-400/80 focus-within:ring-2 focus-within:ring-amber-400/15 dark:border-slate-700 dark:bg-[#12141c]">
+      {onAgentPrompt && (
+        <>
+          <div className="shrink-0 border-r border-slate-200 dark:border-slate-700">
+            <AcpProviderDropdown
+              providers={availableProviders}
+              selectedProvider={resolveKanbanBoardAutoProviderId(board, acp?.selectedProvider) ?? ""}
+              onProviderChange={(providerId) => setKanbanBoardProvider(providerId)}
+              disabled={!acp?.connected || availableProviders.length === 0}
+              ariaLabel={kanbanTaskAgentCopy.providerAriaLabel}
+              dataTestId="kanban-agent-provider"
+              buttonClassName="flex h-7 items-center gap-1.5 bg-transparent px-2 text-[12px] font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800/40"
+              labelClassName="max-w-[110px] truncate"
+            />
+          </div>
+          <input
+            type="text"
+            value={agentInput}
+            onChange={(event) => setAgentInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                void handleAgentSubmit();
+              }
+            }}
+            placeholder={acp?.connected ? kanbanTaskAgentCopy.placeholder : kanbanTaskAgentCopy.connectingPlaceholder}
+            disabled={agentLoading || !acp?.connected}
+            className="h-7 min-w-36 flex-1 bg-transparent px-2 text-[12px] text-slate-800 placeholder-slate-400 outline-none disabled:opacity-50 dark:text-slate-200 dark:placeholder-slate-500"
+          />
+          <button
+            onClick={() => void handleAgentSubmit()}
+            disabled={!agentInput.trim() || agentLoading || !acp?.connected}
+            className="mr-1 inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-slate-900 px-2 text-[11px] font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:bg-amber-500 dark:hover:bg-amber-400 dark:disabled:bg-[#1a1d29] dark:disabled:text-slate-500"
+          >
+            {agentLoading ? "..." : (
+              <>
+                <span>{kanbanTaskAgentCopy.send}</span>
+                <ArrowRight className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
+              </>
+            )}
+          </button>
+        </>
+      )}
+      <button
+        onClick={() => setShowCreateModal(true)}
+        className="mr-1 inline-flex h-6 shrink-0 items-center rounded-md bg-amber-500 px-2 text-[11px] font-semibold text-white shadow-sm transition-colors hover:bg-amber-600"
+      >
+        {kanbanTaskAgentCopy.manual}
+      </button>
+      {agentSessionId && (
+        <button
+          onClick={() => openAgentPanel(agentSessionId)}
+          className="mr-2 shrink-0 text-[11px] text-amber-600 hover:underline dark:text-amber-400"
+          title={kanbanTaskAgentCopy.openPanelTitle}
+        >
+          {kanbanTaskAgentCopy.view}
+        </button>
+      )}
+    </div>
+  ) : null;
+
   if (!board) {
     return (
       <div className="flex h-full flex-col space-y-2">
@@ -1483,13 +1547,14 @@ export function KanbanTab({
           tasksCount={tasks.length}
           board={board}
           boardQueue={boardQueue}
-          repoHealth={repoHealth}
           boards={localBoards}
           selectedBoardId={selectedBoardId}
           onSelectBoard={setSelectedBoardId}
           githubImportEnabled={githubImportEnabled}
           onOpenGitHubImport={() => setShowGitHubImportModal(true)}
           onRefresh={onRefresh}
+          onOpenSettings={board ? () => setShowSettings(true) : undefined}
+          actionSlot={kanbanHeaderActions}
         />
         <div className="rounded-2xl border border-gray-200/60 bg-white p-6 text-sm text-gray-500 dark:border-[#1c1f2e] dark:bg-[#12141c] dark:text-gray-400">
           No board available yet.
@@ -1504,13 +1569,14 @@ export function KanbanTab({
         tasksCount={tasks.length}
         board={board}
         boardQueue={boardQueue}
-        repoHealth={repoHealth}
         boards={localBoards}
         selectedBoardId={selectedBoardId}
         onSelectBoard={setSelectedBoardId}
         githubImportEnabled={githubImportEnabled}
         onOpenGitHubImport={() => setShowGitHubImportModal(true)}
         onRefresh={onRefresh}
+        onOpenSettings={() => setShowSettings(true)}
+        actionSlot={kanbanHeaderActions}
       />
       <KanbanBoardSurface
         moveError={moveError}
@@ -1522,19 +1588,12 @@ export function KanbanTab({
         setSelectedCodebase={setSelectedCodebase}
         fetchCodebaseWorktrees={fetchCodebaseWorktrees}
         onRefresh={onRefresh}
-        onAgentPrompt={onAgentPrompt}
         repoChanges={repoChanges}
         repoChangesLoading={repoChangesLoading}
         availableProviders={availableProviders}
         acp={acp}
         boardAutoProviderId={boardAutoProviderId}
-        onBoardProviderChange={setKanbanBoardProvider}
         kanbanTaskAgentCopy={kanbanTaskAgentCopy}
-        agentInput={agentInput}
-        setAgentInput={setAgentInput}
-        agentLoading={agentLoading}
-        handleAgentSubmit={handleAgentSubmit}
-        setShowCreateModal={setShowCreateModal}
         agentSessionId={agentSessionId}
         openAgentPanel={openAgentPanel}
         agentPanelOpen={agentPanelOpen}
@@ -1758,6 +1817,7 @@ export function KanbanTab({
         fileChangesSummary={fileChangesSummary}
         board={board}
         boardQueue={boardQueue}
+        repoHealth={repoHealth}
         selectedProvider={selectedProviderInfo}
         onRepoClick={() => {
           if (defaultCodebase) {
@@ -1770,7 +1830,6 @@ export function KanbanTab({
         onProviderClick={() => {
           // Could open provider settings or do nothing
         }}
-        onSettingsClick={() => setShowSettings(true)}
         fileChangesOpen={fileChangesOpen}
         gitLogOpen={gitLogOpen}
         repoSync={repoSync}
