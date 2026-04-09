@@ -361,45 +361,8 @@ jobs:
             entrix release-trigger --manifest "${manifest}" --fail-on-trigger
           done
 
-  generate-release-notes:
-    name: Generate desktop release notes
-    # Temporarily disabled due to issues with git tag resolution
-    if: false
-    permissions:
-      contents: read
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0  # Need full history to find previous tags
-          submodules: true
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: 'npm'
-
-      - name: Generate release notes from git history
-        shell: bash
-        env:
-          RELEASE_VERSION: ${{ inputs.version || github.event.inputs.version }}
-        run: |
-          node scripts/release/generate-changelog.mjs \
-            --version "${RELEASE_VERSION}" \
-            --to HEAD \
-            --out dist/release/release-notes.md \
-            --changelog-out dist/release/CHANGELOG.generated.md \
-            --prompt-out dist/release/changelog-summary-prompt.json
-
-      - name: Upload release notes
-        uses: actions/upload-artifact@v4
-        with:
-          name: tauri-release-notes
-          path: |
-            dist/release/release-notes.md
-            dist/release/CHANGELOG.generated.md
-            dist/release/changelog-summary-prompt.json
+  # Disabled: generate-release-notes job removed due to git tag resolution issues
+  # Release notes can be manually written after the release is created
 
   publish-tauri:
     name: Publish desktop release
