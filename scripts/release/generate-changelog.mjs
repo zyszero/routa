@@ -24,6 +24,45 @@ const COMMIT_TYPE_MAP = {
   revert: "Changed",
 };
 
+const SUMMARY_TOPIC_RULES = [
+  {
+    id: "kanban",
+    label: "Kanban and task delivery",
+    pattern: /kanban|card|board|task[- ]scoped|task change|changes tab|worktree|review handoff|pull request|pr import|diff/i,
+    outcome: "Kanban and task delivery changes make cards, reviews, PRs, diffs, and worktree-driven handoffs easier to inspect.",
+  },
+  {
+    id: "sessions",
+    label: "Sessions and agent runtime",
+    pattern: /session|transcript|trace|acp|provider|runner|prompt|stream|claude|codex|opencode|a2a|agent/i,
+    outcome: "Session and agent-runtime updates improve transcript recovery, provider behavior, streaming, and long-running agent execution.",
+  },
+  {
+    id: "desktop",
+    label: "Desktop and release",
+    pattern: /desktop|tauri|macos|windows|linux|installer|bundle|release|publish|artifact|sign|notar|portable-pty|ci/i,
+    outcome: "Desktop, CI, and release workflow changes improve packaging, optional signing, release verification, and cross-platform runtime behavior.",
+  },
+  {
+    id: "harness",
+    label: "Harness and architecture",
+    pattern: /harness|fitness|fluency|architecture|arch|dsl|graph|playbook|evolution|learning|quality/i,
+    outcome: "Harness and architecture work adds stronger repository analysis, fitness checks, generated playbooks, and evolution history.",
+  },
+  {
+    id: "cli",
+    label: "CLI and developer tooling",
+    pattern: /cli|command|doctor|hook|pre-commit|pre-push|git|graph|java|skill|docx|pdf|office/i,
+    outcome: "CLI and developer-tooling updates expand graph analysis, repository safety checks, skills, hooks, and diagnostics.",
+  },
+  {
+    id: "security",
+    label: "Security and dependency upkeep",
+    pattern: /security|audit|vulnerabilit|cve|xss|csrf|ssrf|injection|auth|deps|bump|upgrade|pin/i,
+    outcome: "Security, dependency, and maintenance commits refresh core packages, reduce audit noise, and document operational fixes.",
+  },
+];
+
 function runGit(args, options = {}) {
   return execFileSync("git", args, {
     encoding: "utf8",
@@ -239,22 +278,67 @@ function renderStandaloneChangelog({ commits, date, range, repo, version }) {
   ].join("\n");
 }
 
-function renderDeterministicSummary(commits, changedFiles) {
-  const groups = groupedCommits(commits);
-  const highlights = [...groups.Added, ...groups.Fixed, ...groups.Changed].slice(0, 5);
-  const lines = ["## Summary", ""];
-  if (highlights.length === 0) {
-    lines.push("- No user-visible commit summaries were found for this range.");
+function matchSummaryTopics(commits, changedFiles) {
+  const corpus = [
+    ...commits.map((commit) => `${commit.subject} ${commit.description} ${commit.scope ?? ""}`),
+    ...changedFiles,
+  ];
+  return SUMMARY_TOPIC_RULES
+    .map((rule) => ({
+      ...rule,
+      count: corpus.filter((entry) => rule.pattern.test(entry)).length,
+    }))
+    .filter((rule) => rule.count > 0)
+    .sort((left, right) => right.count - left.count);
+}
+
+function renderUpgradeNotes(commits) {
+  const breaking = commits.filter((commit) => commit.section === BREAKING_SECTION);
+  const releaseRisk = commits.filter((commit) => /release|sign|notar|installer|package|publish|migration|database|schema/i.test(commit.subject));
+  const lines = ["### Upgrade Notes", ""];
+  if (breaking.length > 0) {
+    lines.push(...breaking.slice(0, 5).map((commit) => `- Breaking: ${commit.description}.`));
+  } else if (releaseRisk.length > 0) {
+    lines.push(
+      "- No breaking changes were identified from conventional commit markers.",
+      "- Review release, installer, signing, package, migration, or schema-related technical changelog entries before publishing.",
+    );
   } else {
-    for (const commit of highlights) {
-      const area = inferArea(commit);
-      lines.push(`- ${area ? `${area}: ` : ""}${commit.description}`);
+    lines.push("- No breaking changes were identified from conventional commit markers.");
+  }
+  return lines;
+}
+
+function renderDeterministicSummary({ commits, changedFiles, range, version }) {
+  const groups = groupedCommits(commits);
+  const topics = matchSummaryTopics(commits, changedFiles).slice(0, 5);
+  const fallbackHighlights = [...groups.Added, ...groups.Fixed, ...groups.Changed].slice(0, 5);
+  const displayRange = `${range.from ?? "(repository start)"}..${range.to}`;
+  const displayVersion = version ? `v${version}` : range.to;
+  const lines = ["## Summary", ""];
+  lines.push(
+    `Routa Desktop ${displayVersion} includes ${commits.length} non-merge commits from \`${displayRange}\`.`,
+    "",
+    "### Highlights",
+    "",
+  );
+  if (topics.length > 0) {
+    for (const topic of topics) {
+      lines.push(`- **${topic.label}:** ${topic.outcome}`);
     }
+  } else if (fallbackHighlights.length > 0) {
+    for (const commit of fallbackHighlights) {
+      const area = inferArea(commit);
+      lines.push(`- ${area ? `**${area}:** ` : ""}${commit.description}.`);
+    }
+  } else {
+    lines.push("- No user-visible commit summaries were found for this range.");
   }
   if (changedFiles.length > 0) {
-    const topLevel = [...new Set(changedFiles.map((file) => file.split("/")[0]))].slice(0, 6);
-    lines.push("", `Changed areas: ${topLevel.map((area) => `\`${area}\``).join(", ")}`);
+    const topLevel = [...new Set(changedFiles.map((file) => file.split("/")[0]))].slice(0, 8);
+    lines.push("", `Changed top-level areas: ${topLevel.map((area) => `\`${area}\``).join(", ")}.`);
   }
+  lines.push("", ...renderUpgradeNotes(commits));
   return lines.join("\n");
 }
 
@@ -326,7 +410,7 @@ function runAiSummary(prompt, { aiProvider }) {
 
 function renderReleaseNotes({ aiSummary, changedFiles, commits, range, repo, version }) {
   const titleVersion = version ? ` v${version}` : ` ${range.to}`;
-  const summary = aiSummary ?? renderDeterministicSummary(commits, changedFiles);
+  const summary = aiSummary ?? renderDeterministicSummary({ commits, changedFiles, range, version });
   const lines = [
     `# Routa Desktop${titleVersion}`,
     "",

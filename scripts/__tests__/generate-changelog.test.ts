@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 const changelog = await import("../release/generate-changelog.mjs");
 
+const minimalRange = { from: "v0.2.5", to: "v0.2.6", logRange: "v0.2.5..v0.2.6" };
+
 describe("generate-changelog", () => {
   it("parses conventional commits and breaking markers", () => {
     expect(changelog.parseCommitHeader("feat(kanban): add lane history")).toEqual({
@@ -50,7 +52,7 @@ describe("generate-changelog", () => {
       aiSummary: "## Summary\n\nA curated desktop release summary.",
       changedFiles: ["scripts/release/generate-changelog.mjs"],
       commits: [],
-      range: { from: "v0.2.5", to: "v0.2.6", logRange: "v0.2.5..v0.2.6" },
+      range: minimalRange,
       repo: "phodal/routa",
       version: "0.2.6",
     });
@@ -94,7 +96,7 @@ describe("generate-changelog", () => {
         },
       ],
       date: "2026-04-09",
-      range: { from: "v0.2.5", to: "v0.2.6", logRange: "v0.2.5..v0.2.6" },
+      range: minimalRange,
       repo: "phodal/routa",
       version: "0.2.6",
     });
@@ -104,5 +106,48 @@ describe("generate-changelog", () => {
     expect(output).toContain("### Fixed");
     expect(output).toContain("Range: `v0.2.5..v0.2.6`");
     expect(output).not.toContain("## Technical Changelog");
+  });
+
+  it("renders deterministic summaries as release highlights instead of raw commit excerpts", () => {
+    const output = changelog.renderReleaseNotes({
+      aiSummary: null,
+      changedFiles: [
+        "src/client/components/kanban-card-detail.tsx",
+        "crates/routa-core/src/acp/process.rs",
+        ".github/workflows/tauri-release.yml",
+      ],
+      commits: [
+        {
+          hash: "1111111111111111111111111111111111111111",
+          shortHash: "1111111",
+          type: "feat",
+          scope: "kanban",
+          description: "show committed changes in card detail",
+          breaking: false,
+          subject: "feat(kanban): show committed changes in card detail",
+          section: "Added",
+        },
+        {
+          hash: "2222222222222222222222222222222222222222",
+          shortHash: "2222222",
+          type: "fix",
+          scope: "desktop",
+          description: "make macOS signing optional in release workflow",
+          breaking: false,
+          subject: "fix(desktop): make macOS signing optional in release workflow",
+          section: "Fixed",
+        },
+      ],
+      range: minimalRange,
+      repo: "phodal/routa",
+      version: "0.2.6",
+    });
+
+    expect(output).toContain("## Summary");
+    expect(output).toContain("### Highlights");
+    expect(output).toContain("**Kanban and task delivery:**");
+    expect(output).toContain("**Desktop and release:**");
+    expect(output).toContain("### Upgrade Notes");
+    expect(output).toContain("No breaking changes were identified");
   });
 });
