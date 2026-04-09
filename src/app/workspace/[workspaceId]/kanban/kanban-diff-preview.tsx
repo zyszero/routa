@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 import type { ReactNode } from "react";
 import { FileDiff as PierreFileDiffInstance, parseDiffFromFile } from "@pierre/diffs";
 import type { FileContents, FileDiffMetadata } from "@pierre/diffs";
 import type { KanbanCommitChangeItem, KanbanCommitDiffPreview, KanbanFileChangeItem, KanbanFileDiffPreview } from "./kanban-file-changes-types";
 import { splitFilePath, STATUS_BADGE } from "./kanban-file-changes-panel";
+import { isDarkThemeActive, subscribeToThemePreference } from "@/client/utils/theme";
 import { useTranslation } from "@/i18n";
 
 export interface ParsedDiffPreview {
@@ -51,7 +52,7 @@ const PIERRE_DIFF_OPTIONS = {
     dark: "github-dark" as const,
     light: "github-light" as const,
   },
-  themeType: "system" as const,
+  themeType: "light" as const,
   unsafeCSS: `
     :host {
       --diffs-bg: light-dark(#ffffff, #0d1018) !important;
@@ -230,16 +231,28 @@ function selectDiffSearchResult(results: DiffSearchResult[], index: number) {
   result.element.scrollIntoView?.({ behavior: "smooth", block: "center", inline: "nearest" });
 }
 
+function useResolvedRoutaTheme() {
+  const [themeType, setThemeType] = useState<"dark" | "light">(() => isDarkThemeActive() ? "dark" : "light");
+
+  useEffect(() => subscribeToThemePreference((_preference, resolvedTheme) => {
+    setThemeType(resolvedTheme);
+  }), []);
+
+  return themeType;
+}
+
 function KanbanPierreFileDiff({ fileDiff }: { fileDiff: FileDiffMetadata }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<PierreFileDiffInstance | null>(null);
+  const themeType = useResolvedRoutaTheme();
+  const diffOptions = useMemo(() => ({ ...PIERRE_DIFF_OPTIONS, themeType }), [themeType]);
 
   useEffect(() => {
     if (!containerRef.current) {
       return;
     }
 
-    const instance = new PierreFileDiffInstance(PIERRE_DIFF_OPTIONS);
+    const instance = new PierreFileDiffInstance(diffOptions);
     instanceRef.current = instance;
     instance.render({
       fileDiff,
@@ -250,7 +263,7 @@ function KanbanPierreFileDiff({ fileDiff }: { fileDiff: FileDiffMetadata }) {
       instance.cleanUp();
       instanceRef.current = null;
     };
-  }, [fileDiff]);
+  }, [fileDiff, diffOptions]);
 
   return (
     <div
@@ -908,10 +921,11 @@ function CommitFileDiffSection({
   );
 }
 
-function CommitDiffSearchControls({
+function CommitDiffSearchOverlay({
   query,
   currentIndex,
   resultCount,
+  inputRef,
   onQueryChange,
   onNavigate,
   onClear,
@@ -919,6 +933,7 @@ function CommitDiffSearchControls({
   query: string;
   currentIndex: number;
   resultCount: number;
+  inputRef: RefObject<HTMLInputElement | null>;
   onQueryChange: (query: string) => void;
   onNavigate: (direction: -1 | 1) => void;
   onClear: () => void;
@@ -926,12 +941,22 @@ function CommitDiffSearchControls({
   const { t } = useTranslation();
 
   return (
-    <div className="flex min-w-0 flex-1 items-center justify-end gap-1">
-      <div className="flex min-w-[9rem] max-w-[16rem] flex-1 items-center rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-normal normal-case tracking-normal dark:border-slate-700 dark:bg-[#0d1018]">
+    <div className="absolute right-3 top-12 z-20 flex min-w-[min(22rem,calc(100%-1.5rem))] items-center gap-1 rounded-md border border-slate-200 bg-white/98 p-1.5 text-[11px] font-normal normal-case tracking-normal shadow-xl shadow-slate-900/10 dark:border-slate-700 dark:bg-[#0d1018]/98 dark:shadow-black/30">
+      <div className="flex min-w-0 flex-1 items-center rounded border border-slate-200 bg-white px-2 py-1 dark:border-slate-700 dark:bg-[#0a0d14]">
         <input
+          ref={inputRef}
           className="min-w-0 flex-1 bg-transparent text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500"
           value={query}
           onChange={(event) => onQueryChange(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              onNavigate(event.shiftKey ? -1 : 1);
+            } else if (event.key === "Escape") {
+              event.preventDefault();
+              onClear();
+            }
+          }}
           placeholder={t.common.search}
           data-testid="kanban-commit-diff-search-input"
         />
@@ -968,6 +993,15 @@ function CommitDiffSearchControls({
           </button>
         </>
       ) : null}
+      {!query ? (
+        <button
+          type="button"
+          onClick={onClear}
+          className="rounded border border-slate-200 px-2 py-1 text-[10px] text-slate-500 transition-colors hover:text-slate-900 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-100"
+        >
+          {t.common.close}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -989,6 +1023,8 @@ export function TaskCommitDiffPreview({
 }) {
   const { t } = useTranslation();
   const diffSearchRootRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<DiffSearchResult[]>([]);
   const [searchIndex, setSearchIndex] = useState(0);
@@ -997,6 +1033,13 @@ export function TaskCommitDiffPreview({
   const preview = commit ? (diff ?? { ...commit, patch: "" }) : null;
   const parsedDiff = preview?.patch ? parseUnifiedDiffPreview(preview) : null;
   const fileSections = preview?.patch ? splitCommitDiffIntoFileSections(preview.patch) : [];
+
+  useEffect(() => {
+    if (searchOpen) {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    }
+  }, [searchOpen]);
 
   if (!commit) {
     return (
@@ -1008,6 +1051,10 @@ export function TaskCommitDiffPreview({
 
   // TypeScript guard: preview is guaranteed to be non-null here due to commit check above
   if (!preview) return null;
+
+  const openSearch = () => {
+    setSearchOpen(true);
+  };
 
   const runSearch = (query: string, nextIndex = 0) => {
     const root = diffSearchRootRef.current;
@@ -1044,6 +1091,23 @@ export function TaskCommitDiffPreview({
     setSearchIndex(0);
   };
 
+  const closeSearch = () => {
+    clearSearch();
+    setSearchOpen(false);
+  };
+
+  const handleCommitDiffKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
+      event.preventDefault();
+      openSearch();
+      return;
+    }
+    if (event.key === "Escape" && searchOpen) {
+      event.preventDefault();
+      closeSearch();
+    }
+  };
+
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white dark:border-[#202433] dark:bg-[#0d1018]">
       {loading ? (
@@ -1055,17 +1119,22 @@ export function TaskCommitDiffPreview({
           {error}
         </div>
       ) : fileSections.length > 0 ? (
-        <div data-testid="kanban-commit-files-changed">
+        <div
+          className="relative"
+          data-testid="kanban-commit-files-changed"
+          onKeyDown={handleCommitDiffKeyDown}
+          tabIndex={-1}
+        >
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/70 bg-slate-50/80 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-[#202433] dark:bg-[#0a0d14] dark:text-slate-400">
             <span className="shrink-0">{fileSections.length} {t.kanbanDetail.filesChanged}</span>
-            <CommitDiffSearchControls
-              query={searchQuery}
-              currentIndex={searchIndex}
-              resultCount={searchResults.length}
-              onQueryChange={updateSearchQuery}
-              onNavigate={navigateSearchResults}
-              onClear={clearSearch}
-            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={openSearch}
+                className="rounded border border-slate-200 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 transition-colors hover:border-amber-300 hover:text-amber-700 dark:border-slate-700 dark:text-slate-400 dark:hover:border-amber-700 dark:hover:text-amber-200"
+              >
+                {t.common.search}
+              </button>
             {onClose ? (
               <button
                 type="button"
@@ -1075,7 +1144,19 @@ export function TaskCommitDiffPreview({
                 {t.common.close}
               </button>
             ) : null}
+            </div>
           </div>
+          {searchOpen ? (
+            <CommitDiffSearchOverlay
+              inputRef={searchInputRef}
+              query={searchQuery}
+              currentIndex={searchIndex}
+              resultCount={searchResults.length}
+              onQueryChange={updateSearchQuery}
+              onNavigate={navigateSearchResults}
+              onClear={closeSearch}
+            />
+          ) : null}
           <div
             ref={diffSearchRootRef}
             className="max-h-[70vh] overflow-auto"

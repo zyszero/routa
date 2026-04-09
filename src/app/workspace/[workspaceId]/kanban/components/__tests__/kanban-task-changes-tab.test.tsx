@@ -230,7 +230,8 @@ describe("KanbanTaskChangesTab", () => {
       expect(editorDiffText).toContain("export const editor = 'new';");
     });
 
-    fireEvent.change(screen.getByTestId("kanban-commit-diff-search-input"), { target: { value: "version" } });
+    fireEvent.keyDown(screen.getByTestId("kanban-commit-files-changed"), { key: "f", metaKey: true });
+    fireEvent.change(await screen.findByTestId("kanban-commit-diff-search-input"), { target: { value: "version" } });
     await waitFor(() => {
       expect(screen.getByTestId("kanban-commit-diff-search-count").textContent).toMatch(/1\/\d+/);
     });
