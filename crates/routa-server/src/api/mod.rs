@@ -64,6 +64,7 @@ pub fn api_router() -> Router<AppState> {
     Router::new()
         .nest("/api/agents", agents::router())
         .nest("/api/notes", notes::router())
+        .nest("/api/git", git::read_router())
         .nest("/api/kanban", kanban::router())
         .nest("/api/tasks", tasks::router())
         .nest("/api/workspaces", workspaces::router())

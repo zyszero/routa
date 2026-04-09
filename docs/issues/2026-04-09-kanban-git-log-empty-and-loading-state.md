@@ -1,7 +1,7 @@
 ---
 title: "Kanban Git Log panel returned empty data or stayed in loading state"
 date: "2026-04-09"
-status: open
+status: resolved
 severity: medium
 area: "ui"
 tags: ["kanban", "git-log", "multi-repo", "nextjs", "rust-parity"]
@@ -45,7 +45,7 @@ The Kanban Git Log panel should:
 - The list endpoint serialized commit body text with `%B`, then parsed the output line-by-line. Multiline commit bodies broke record parsing and caused valid commits to be dropped.
 - The frontend hook reset `activeBranches` inside an effect that also depended on the derived log loader, which could create a self-triggered loading loop.
 - The panel originally read only the default codebase path, so multi-repo behavior was implicit rather than explicit.
-- Rust backend parity is still missing; the current working implementation is backed by Next.js API routes.
+- The desktop/runtime parity gap existed until the Rust server exposed matching root-level `/api/git/refs`, `/api/git/log`, and `/api/git/commit` routes.
 
 ## Relevant Files
 
@@ -58,6 +58,7 @@ The Kanban Git Log panel should:
 ## Observations
 
 - Direct API verification after the fix returned commit data for both repositories.
+- Rust parity verification confirmed the same contract on `routa-server` via live requests to `/api/git/refs`, `/api/git/log`, and `/api/git/commit`, including `branches=origin/main` remote filtering.
 - Browser verification confirmed:
   - commit list rendering,
   - commit detail rendering,
@@ -69,4 +70,4 @@ The Kanban Git Log panel should:
 ## References
 
 - Browser verification artifacts captured during implementation.
-- Follow-up GitHub issue tracks Rust backend parity for this panel: https://github.com/phodal/routa/issues/407
+- Follow-up GitHub issue originally tracked Rust backend parity for this panel: https://github.com/phodal/routa/issues/407

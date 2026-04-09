@@ -243,8 +243,8 @@ export async function getCommitList(
 ): Promise<CommitInfo[]> {
   const { limit = 20, since } = options;
 
-  // Git log format: sha|shortSha|authorName|authorEmail|authoredAt|subject|body|parents
-  const format = "%H|%h|%an|%ae|%aI|%s|%b|%P";
+  // Use explicit record/field separators so multiline commit bodies do not break parsing.
+  const format = "%x1e%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%s%x1f%b%x1f%P%x1d";
   let command = `git log --format="${format}" --numstat -n ${limit}`;
 
   if (since) {
@@ -255,43 +255,41 @@ export async function getCommitList(
   if (!output) return [];
 
   const commits: CommitInfo[] = [];
-  const lines = output.split("\n");
-  let i = 0;
+  const records = output
+    .split("\x1e")
+    .map((record) => record.trim())
+    .filter(Boolean);
 
-  while (i < lines.length) {
-    const line = lines[i].trim();
-    if (!line) {
-      i++;
+  for (const record of records) {
+    const separatorIndex = record.indexOf("\x1d");
+    if (separatorIndex < 0) {
       continue;
     }
 
-    // Parse commit header
-    const parts = line.split("|");
-    if (parts.length < 7) {
-      i++;
+    const header = record.slice(0, separatorIndex);
+    const statsSection = record.slice(separatorIndex + 1);
+    const parts = header.split("\x1f");
+    if (parts.length < 8) {
       continue;
     }
 
     const [sha, shortSha, authorName, authorEmail, authoredAt, subject, body, parentsStr] = parts;
-    const parents = parentsStr ? parentsStr.split(" ") : [];
+    const parents = parentsStr
+      ? parentsStr.split(/\s+/).map((value) => value.trim()).filter(Boolean)
+      : [];
 
-    // Parse numstat (additions/deletions)
     let additions = 0;
     let deletions = 0;
-    i++;
-
-    while (i < lines.length && lines[i].includes("\t")) {
-      const statLine = lines[i].trim();
+    for (const statLine of statsSection.split("\n").map((line) => line.trim()).filter(Boolean)) {
       const [add, del] = statLine.split("\t");
       additions += add === "-" ? 0 : parseInt(add, 10) || 0;
       deletions += del === "-" ? 0 : parseInt(del, 10) || 0;
-      i++;
     }
 
     commits.push({
       sha,
       shortSha,
-      message: body ? `${subject}\n\n${body}` : subject,
+      message: body ? `${subject}\n\n${body.trim()}` : subject,
       summary: subject,
       authorName,
       authorEmail,

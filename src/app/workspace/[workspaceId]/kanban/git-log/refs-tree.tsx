@@ -25,6 +25,10 @@ interface TreeNodeProps {
   count?: number;
 }
 
+function gitRefKey(gitRef: GitRef): string {
+  return gitRef.remote ? `${gitRef.remote}/${gitRef.name}` : gitRef.name;
+}
+
 function TreeNode({ label, icon, children, defaultOpen = true, count }: TreeNodeProps) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -66,7 +70,7 @@ function RefItem({
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-full items-center gap-1.5 rounded px-2 py-[3px] text-left text-[11px] transition-colors ${
+      className={`flex w-full items-center gap-1.5 rounded px-2 py-0.75 text-left text-[11px] transition-colors ${
         active
           ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
           : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-[#1a1d29]"
@@ -77,7 +81,7 @@ function RefItem({
         <MapPin className="h-2.5 w-2.5 shrink-0 text-emerald-500" />
       )}
       <span className="truncate">
-        {gitRef.remote ? `${gitRef.remote}/${gitRef.name}` : gitRef.name}
+        {gitRefKey(gitRef)}
       </span>
     </button>
   );
@@ -112,8 +116,8 @@ export function RefsTree({ refs, activeBranches, onToggleBranch }: RefsTreeProps
         >
           <RefItem
             gitRef={refs.head}
-            active={activeBranches.includes(refs.head.name)}
-            onClick={() => onToggleBranch(refs.head!.name)}
+            active={activeBranches.includes(gitRefKey(refs.head))}
+            onClick={() => onToggleBranch(gitRefKey(refs.head))}
           />
         </TreeNode>
       )}
@@ -129,8 +133,8 @@ export function RefsTree({ refs, activeBranches, onToggleBranch }: RefsTreeProps
           <RefItem
             key={r.name}
             gitRef={r}
-            active={activeBranches.includes(r.name)}
-            onClick={() => onToggleBranch(r.name)}
+            active={activeBranches.includes(gitRefKey(r))}
+            onClick={() => onToggleBranch(gitRefKey(r))}
           />
         ))}
       </TreeNode>
@@ -153,8 +157,8 @@ export function RefsTree({ refs, activeBranches, onToggleBranch }: RefsTreeProps
               <RefItem
                 key={`${r.remote}/${r.name}`}
                 gitRef={r}
-                active={activeBranches.includes(r.name)}
-                onClick={() => onToggleBranch(r.name)}
+                active={activeBranches.includes(gitRefKey(r))}
+                onClick={() => onToggleBranch(gitRefKey(r))}
               />
             ))}
           </TreeNode>
@@ -173,8 +177,8 @@ export function RefsTree({ refs, activeBranches, onToggleBranch }: RefsTreeProps
             <RefItem
               key={r.name}
               gitRef={r}
-              active={activeBranches.includes(r.name)}
-              onClick={() => onToggleBranch(r.name)}
+              active={activeBranches.includes(gitRefKey(r))}
+              onClick={() => onToggleBranch(gitRefKey(r))}
             />
           ))}
         </TreeNode>
