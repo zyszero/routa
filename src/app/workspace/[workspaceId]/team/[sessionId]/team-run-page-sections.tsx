@@ -125,7 +125,7 @@ export function SessionTimelineSection({
 }) {
   const { t } = useTranslation();
   return (
-    <section className="flex min-h-0 flex-col overflow-hidden bg-desktop-bg-primary">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-desktop-bg-primary">
       <div className="border-b border-desktop-border px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           <div>

@@ -1424,7 +1424,7 @@ export function TeamRunPageClient() {
               }}
             />
 
-            <div className="border-t border-desktop-border bg-desktop-bg-primary px-3 py-2">
+            <div className="shrink-0 border-t border-desktop-border bg-desktop-bg-primary px-3 py-2">
               <TiptapInput
                 key={timelineInputKey}
                 onSend={(text) => handleTimelinePrompt(text)}
