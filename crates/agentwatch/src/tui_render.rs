@@ -68,15 +68,20 @@ pub(super) fn render(
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Percentage(28),
-            Constraint::Percentage(40),
-            Constraint::Percentage(32),
+            Constraint::Percentage(34),
+            Constraint::Percentage(38),
         ])
         .split(outer[1]);
+    let center = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(62), Constraint::Percentage(38)])
+        .split(columns[1]);
 
     render_title_bar(frame, outer[0], state);
     render_sessions(frame, columns[0], state);
-    render_files(frame, columns[1], state, cache);
-    render_detail(frame, columns[2], state, cache);
+    render_files(frame, center[0], state, cache);
+    render_details_panel(frame, center[1], state, cache);
+    render_preview_panel(frame, columns[2], state, cache);
     render_log(frame, outer[2], state);
     render_footer(frame, outer[3], state);
 }
@@ -233,16 +238,7 @@ fn render_files(
     frame.render_widget(list, split[2]);
 }
 
-fn render_detail(frame: &mut Frame, area: Rect, state: &RuntimeState, cache: &AppCache) {
-    let sections = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(11), Constraint::Min(6)])
-        .split(area);
-    render_detail_summary(frame, sections[0], state, cache);
-    render_detail_body(frame, sections[1], state, cache);
-}
-
-fn render_detail_summary(frame: &mut Frame, area: Rect, state: &RuntimeState, cache: &AppCache) {
+fn render_details_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cache: &AppCache) {
     let colors = palette(state.theme_mode);
     let mut lines = Vec::new();
     if let Some(file) = state.selected_file() {
@@ -362,7 +358,7 @@ fn render_detail_summary(frame: &mut Frame, area: Rect, state: &RuntimeState, ca
         }
     }
 
-    let block = panel_block("Details", state.focus == FocusPane::Detail, colors);
+    let block = panel_block("Details", false, colors);
     frame.render_widget(
         Paragraph::new(lines)
             .block(block)
@@ -372,12 +368,11 @@ fn render_detail_summary(frame: &mut Frame, area: Rect, state: &RuntimeState, ca
     );
 }
 
-fn render_detail_body(frame: &mut Frame, area: Rect, state: &RuntimeState, cache: &AppCache) {
+fn render_preview_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cache: &AppCache) {
     let colors = palette(state.theme_mode);
     let title = match state.detail_mode {
-        DetailMode::Summary => "Diff Summary",
         DetailMode::File => "File Preview",
-        DetailMode::Diff => "Diff Summary",
+        DetailMode::Diff => "Diff Preview",
     };
     let file_text = match state.detail_mode {
         DetailMode::File => state
@@ -388,7 +383,7 @@ fn render_detail_body(frame: &mut Frame, area: Rect, state: &RuntimeState, cache
                     .map(str::to_string)
             })
             .unwrap_or_else(|| "<loading file preview...>".to_string()),
-        DetailMode::Summary | DetailMode::Diff => state
+        DetailMode::Diff => state
             .selected_file()
             .and_then(|file| {
                 cache
@@ -400,18 +395,11 @@ fn render_detail_body(frame: &mut Frame, area: Rect, state: &RuntimeState, cache
     let file_path = state.selected_file().map(|file| file.rel_path.as_str());
     let content = match state.detail_mode {
         DetailMode::File => highlight_code_text(file_path, &file_text, state.theme_mode),
-        DetailMode::Summary | DetailMode::Diff => {
-            let diff_slice = if state.detail_mode == DetailMode::Summary {
-                file_text.lines().take(18).collect::<Vec<_>>().join("\n")
-            } else {
-                file_text
-            };
-            highlight_diff_text(file_path, &diff_slice, state.theme_mode)
-        }
+        DetailMode::Diff => highlight_diff_text(file_path, &file_text, state.theme_mode),
     };
     frame.render_widget(
         Paragraph::new(content)
-            .block(panel_block(title, false, colors))
+            .block(panel_block(title, state.focus == FocusPane::Detail, colors))
             .style(Style::default().bg(colors.surface).fg(colors.text))
             .wrap(Wrap { trim: false })
             .scroll((state.detail_scroll, 0)),
@@ -478,7 +466,9 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, state: &Runtime
         Span::styled("↑↓", Style::default().fg(colors.accent)),
         Span::styled(" select  ", Style::default().fg(colors.muted)),
         Span::styled("Enter", Style::default().fg(colors.accent)),
-        Span::styled(" inspect  ", Style::default().fg(colors.muted)),
+        Span::styled(" preview  ", Style::default().fg(colors.muted)),
+        Span::styled("D", Style::default().fg(colors.accent)),
+        Span::styled(" diff  ", Style::default().fg(colors.muted)),
         Span::styled("/", Style::default().fg(colors.accent)),
         Span::styled(
             if state.search_query.is_empty() {

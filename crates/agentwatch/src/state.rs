@@ -14,7 +14,6 @@ pub enum FocusPane {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DetailMode {
-    Summary,
     File,
     Diff,
 }
@@ -110,7 +109,7 @@ impl RuntimeState {
             follow_mode: true,
             file_list_mode: FileListMode::BySession,
             focus: FocusPane::Sessions,
-            detail_mode: DetailMode::Summary,
+            detail_mode: DetailMode::File,
             theme_mode: ThemeMode::Dark,
             event_log_filter: EventLogFilter::All,
             detail_scroll: 0,
@@ -494,19 +493,14 @@ impl RuntimeState {
     }
 
     pub fn toggle_file_view(&mut self) {
-        self.detail_mode = match self.detail_mode {
-            DetailMode::Summary => DetailMode::File,
-            DetailMode::File => DetailMode::Summary,
-            DetailMode::Diff => DetailMode::File,
-        };
+        self.detail_mode = DetailMode::File;
         self.restore_detail_scroll_for_selection();
     }
 
     pub fn toggle_detail_mode(&mut self) {
         self.detail_mode = match self.detail_mode {
-            DetailMode::Summary => DetailMode::Diff,
+            DetailMode::Diff => DetailMode::File,
             DetailMode::File => DetailMode::Diff,
-            DetailMode::Diff => DetailMode::Summary,
         };
         self.restore_detail_scroll_for_selection();
     }

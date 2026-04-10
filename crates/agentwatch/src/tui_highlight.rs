@@ -52,12 +52,19 @@ pub(super) fn highlight_code_text(
     let syntax = syntax_for_path(file_path);
     let mut highlighter = HighlightLines::new(syntax, syntax_theme(theme_mode));
     let mut lines = Vec::new();
-    for line in LinesWithEndings::from(code) {
-        lines.push(Line::from(highlight_code_spans(
+    let total_lines = code.lines().count().max(1);
+    let line_number_width = total_lines.to_string().len().max(2);
+    for (idx, line) in LinesWithEndings::from(code).enumerate() {
+        let mut spans = vec![Span::styled(
+            format!("{:>width$} ", idx + 1, width = line_number_width),
+            Style::default().fg(Color::DarkGray),
+        )];
+        spans.extend(highlight_code_spans(
             line.trim_end_matches('\n'),
             &mut highlighter,
             theme_mode,
-        )));
+        ));
+        lines.push(Line::from(spans));
     }
     Text::from(lines)
 }

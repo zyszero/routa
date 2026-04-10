@@ -105,7 +105,7 @@ impl AppCache {
                         self.preview_cache.insert(entry.key.clone(), entry);
                         self.pending_preview_key = None;
                     }
-                    DetailMode::Summary | DetailMode::Diff => {
+                    DetailMode::Diff => {
                         self.diff_cache.insert(entry.key.clone(), entry);
                         self.pending_diff_key = None;
                     }
@@ -235,9 +235,7 @@ impl AppCache {
                 .preview_cache
                 .get(&key)
                 .map(|entry| entry.text.as_str()),
-            DetailMode::Summary | DetailMode::Diff => {
-                self.diff_cache.get(&key).map(|entry| entry.text.as_str())
-            }
+            DetailMode::Diff => self.diff_cache.get(&key).map(|entry| entry.text.as_str()),
         }
     }
 
@@ -378,7 +376,7 @@ fn background_worker(rx: Receiver<BackgroundCommand>, tx: Sender<BackgroundResul
                         .ok()
                         .flatten()
                         .unwrap_or_else(|| "<no file content available>".to_string()),
-                    DetailMode::Summary | DetailMode::Diff => {
+                    DetailMode::Diff => {
                         load_diff_text(&repo_root, rel_path.as_str(), state_code.as_str())
                             .ok()
                             .flatten()

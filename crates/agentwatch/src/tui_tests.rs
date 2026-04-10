@@ -112,7 +112,7 @@ fn sample_state() -> RuntimeState {
     state.event_log = event_log;
     state.follow_mode = true;
     state.focus = FocusPane::Files;
-    state.detail_mode = DetailMode::Summary;
+    state.detail_mode = DetailMode::File;
     state.selected_session = 0;
     state.selected_file = 0;
     state.last_refresh_at_ms = now - 120_000;
@@ -349,6 +349,7 @@ fn file_preview_highlight_uses_extension_fallback_for_typescript() {
         has_colored_span,
         "expected syntax-colored span for TypeScript"
     );
+    assert_eq!(text.lines[0].spans[0].content.as_ref().trim(), "1");
 }
 
 #[test]

@@ -1,29 +1,29 @@
 ---
 source: crates/agentwatch/src/tui_tests.rs
-assertion_line: 419
+assertion_line: 420
 expression: "render_snapshot(&state, &cache, 120, 24)"
 ---
  AgentWatch   repo:routa-js  branch:main    SESSION VIEW · FOLLOW ON  rpc:socket  dirty:1  unknown:0  synced 2m ago
-┌Sessions────────────────────────┐┌Files─────────────────────────────────────────┐┌Details─────────────────────────────┐
-│> impl-buddy  ACTIVE            ││ BY SESSION    GLOBAL    REVIEW UNKNOWN       ││tui.rs                              │
-│gpt-5.4  pane %12  3m ago       ││1 files  M:1 D:0  E:1 I:0 U:0                 ││crates/agentwatch/src               │
-│1 files  E:1 I:0 U:0            ││──────────────────────────────────────────────││Last by: impl-buddy                 │
-│  test-master  IDLE             ││> tui.rs                                      ││Modified: <ts> (4m)             │
-│gpt-5.4-mini  pane %18  1h ago  ││  crates/agentwatch/src                       ││State: dirty  Confidence: high      │
-│1 files  E:0 I:0 U:0            ││M  +38 -5     4m  EXACT                       ││Lines: 0  Size: 0 B                 │
-│  Unknown / review  UNKNOWN     ││                                              ││Created: untracked  Git changes: 0  │
-│watch-only owner  pane ?  2m ago││                                              ││Why                                 │
-│1 files  E:0 I:0 U:1            ││                                              ││- matched a hook event with concrete│
-│                                ││                                              │└────────────────────────────────────┘
-│                                ││                                              │┌File Preview────────────────────────┐
-│                                ││                                              ││fn render(frame: &mut Frame) {      │
-│                                ││                                              ││    // preview                      │
-│                                ││                                              ││}                                   │
-│                                ││                                              ││                                    │
-└────────────────────────────────┘└──────────────────────────────────────────────┘└────────────────────────────────────┘
+┌Sessions────────────────────────┐┌Files─────────────────────────────────┐┌File Preview────────────────────────────────┐
+│> impl-buddy  ACTIVE            ││ BY SESSION    GLOBAL    REVIEW UNKNOW││ 1 fn render(frame: &mut Frame) {           │
+│gpt-5.4  pane %12  3m ago       ││1 files  M:1 D:0  E:1 I:0 U:0         ││ 2     // preview                           │
+│1 files  E:1 I:0 U:0            ││──────────────────────────────────────││ 3 }                                        │
+│  test-master  IDLE             ││> tui.rs                              ││                                            │
+│gpt-5.4-mini  pane %18  1h ago  ││  crates/agentwatch/src               ││                                            │
+│1 files  E:0 I:0 U:0            ││M  +38 -5     4m  EXACT               ││                                            │
+│  Unknown / review  UNKNOWN     ││                                      ││                                            │
+│watch-only owner  pane ?  2m ago││                                      ││                                            │
+│1 files  E:0 I:0 U:1            ││                                      ││                                            │
+│                                │└──────────────────────────────────────┘│                                            │
+│                                │┌Details───────────────────────────────┐│                                            │
+│                                ││tui.rs                                ││                                            │
+│                                ││crates/agentwatch/src                 ││                                            │
+│                                ││Last by: impl-buddy                   ││                                            │
+│                                ││Modified: <ts> (4m)               ││                                            │
+└────────────────────────────────┘└──────────────────────────────────────┘└────────────────────────────────────────────┘
 ┌Event Stream (all)────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │<ts>  WATCH  modify   crates/agentwatch/src/tui.rs                                                                │
 │<ts>  HOOK   live-hook-check Edit Write                                                                           │
 │<ts>  GIT    post-commit main                                                                                     │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-Tab focus  ↑↓ select  Enter inspect  / search  u unknown  a assign  o open  g git diff  PgUp/PgDn scroll  f follow:on  T
+Tab focus  ↑↓ select  Enter preview  D diff  / search  u unknown  a assign  o open  g git diff  PgUp/PgDn scroll  f foll
