@@ -15,10 +15,13 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::stdout;
 use std::path::Path;
 use std::process::Command;
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::LazyLock;
+use std::thread;
 use std::time::{Duration, Instant};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style as SyntectStyle, Theme, ThemeSet};
@@ -61,6 +64,195 @@ struct UiPalette {
     accent: Color,
     selection_focus: Color,
     selection_blur: Color,
+}
+
+#[derive(Clone, Debug, Default)]
+struct DiffStatSummary {
+    status: String,
+    additions: Option<usize>,
+    deletions: Option<usize>,
+}
+
+#[derive(Clone, Debug)]
+struct DetailCacheEntry {
+    key: String,
+    text: String,
+}
+
+#[derive(Debug)]
+enum BackgroundCommand {
+    RefreshStats {
+        repo_root: String,
+        files: Vec<(String, String, i64)>,
+    },
+    LoadDetail {
+        repo_root: String,
+        rel_path: String,
+        state_code: String,
+        version: i64,
+        mode: DetailMode,
+    },
+}
+
+#[derive(Debug)]
+enum BackgroundResult {
+    Stats {
+        entries: Vec<(String, DiffStatSummary)>,
+    },
+    Detail {
+        entry: DetailCacheEntry,
+        mode: DetailMode,
+    },
+}
+
+struct AppCache {
+    diff_stats: BTreeMap<String, DiffStatSummary>,
+    preview_cache: BTreeMap<String, DetailCacheEntry>,
+    diff_cache: BTreeMap<String, DetailCacheEntry>,
+    pending_stats_signature: Option<String>,
+    pending_preview_key: Option<String>,
+    pending_diff_key: Option<String>,
+    worker_tx: Sender<BackgroundCommand>,
+    worker_rx: Receiver<BackgroundResult>,
+}
+
+impl AppCache {
+    fn new() -> Self {
+        let (worker_tx, worker_rx_cmd) = mpsc::channel();
+        let (result_tx, worker_rx) = mpsc::channel();
+        thread::spawn(move || background_worker(worker_rx_cmd, result_tx));
+        Self {
+            diff_stats: BTreeMap::new(),
+            preview_cache: BTreeMap::new(),
+            diff_cache: BTreeMap::new(),
+            pending_stats_signature: None,
+            pending_preview_key: None,
+            pending_diff_key: None,
+            worker_tx,
+            worker_rx,
+        }
+    }
+
+    fn sync_results(&mut self) {
+        while let Ok(result) = self.worker_rx.try_recv() {
+            match result {
+                BackgroundResult::Stats { entries } => {
+                    self.diff_stats.extend(entries);
+                    self.pending_stats_signature = None;
+                }
+                BackgroundResult::Detail { entry, mode } => match mode {
+                    DetailMode::File => {
+                        self.preview_cache.insert(entry.key.clone(), entry);
+                        self.pending_preview_key = None;
+                    }
+                    DetailMode::Summary | DetailMode::Diff => {
+                        self.diff_cache.insert(entry.key.clone(), entry);
+                        self.pending_diff_key = None;
+                    }
+                },
+            }
+        }
+    }
+
+    fn warm_visible_files(&mut self, state: &RuntimeState) {
+        let files: Vec<(String, String, i64)> = state
+            .file_items()
+            .iter()
+            .take(24)
+            .map(|file| {
+                (
+                    file.rel_path.clone(),
+                    file.state_code.clone(),
+                    file.last_modified_at_ms,
+                )
+            })
+            .collect();
+        if files.is_empty() {
+            self.pending_stats_signature = None;
+            return;
+        }
+        let signature = files
+            .iter()
+            .map(|(path, code, version)| format!("{path}:{code}:{version}"))
+            .collect::<Vec<_>>()
+            .join("|");
+        if self.pending_stats_signature.as_deref() == Some(signature.as_str()) {
+            return;
+        }
+        let _ = self.worker_tx.send(BackgroundCommand::RefreshStats {
+            repo_root: state.repo_root.clone(),
+            files,
+        });
+        self.pending_stats_signature = Some(signature);
+    }
+
+    fn warm_selected_detail(&mut self, state: &RuntimeState) {
+        let Some(file) = state.selected_file() else {
+            self.pending_preview_key = None;
+            self.pending_diff_key = None;
+            return;
+        };
+        let preview_key = detail_cache_key(
+            &file.rel_path,
+            &file.state_code,
+            file.last_modified_at_ms,
+            DetailMode::File,
+        );
+        if !self.preview_cache.contains_key(&preview_key)
+            && self.pending_preview_key.as_deref() != Some(preview_key.as_str())
+        {
+            let _ = self.worker_tx.send(BackgroundCommand::LoadDetail {
+                repo_root: state.repo_root.clone(),
+                rel_path: file.rel_path.clone(),
+                state_code: file.state_code.clone(),
+                version: file.last_modified_at_ms,
+                mode: DetailMode::File,
+            });
+            self.pending_preview_key = Some(preview_key);
+        }
+
+        let diff_key = detail_cache_key(
+            &file.rel_path,
+            &file.state_code,
+            file.last_modified_at_ms,
+            DetailMode::Diff,
+        );
+        if !self.diff_cache.contains_key(&diff_key)
+            && self.pending_diff_key.as_deref() != Some(diff_key.as_str())
+        {
+            let _ = self.worker_tx.send(BackgroundCommand::LoadDetail {
+                repo_root: state.repo_root.clone(),
+                rel_path: file.rel_path.clone(),
+                state_code: file.state_code.clone(),
+                version: file.last_modified_at_ms,
+                mode: DetailMode::Diff,
+            });
+            self.pending_diff_key = Some(diff_key);
+        }
+    }
+
+    fn diff_stat<'a>(&'a self, file: &crate::models::FileView) -> Option<&'a DiffStatSummary> {
+        self.diff_stats.get(&diff_stat_key(
+            &file.rel_path,
+            &file.state_code,
+            file.last_modified_at_ms,
+        ))
+    }
+
+    fn detail_text(&self, file: &crate::models::FileView, mode: DetailMode) -> Option<&str> {
+        let key = detail_cache_key(
+            &file.rel_path,
+            &file.state_code,
+            file.last_modified_at_ms,
+            mode,
+        );
+        match mode {
+            DetailMode::File => self.preview_cache.get(&key).map(|entry| entry.text.as_str()),
+            DetailMode::Summary | DetailMode::Diff => {
+                self.diff_cache.get(&key).map(|entry| entry.text.as_str())
+            }
+        }
+    }
 }
 
 fn palette(theme_mode: ThemeMode) -> UiPalette {
@@ -118,6 +310,7 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
         .unwrap_or_else(|| repo_root.clone());
     let branch = current_branch(&ctx).unwrap_or_else(|_| "-".to_string());
     let mut state = RuntimeState::new(repo_root, repo_name, branch);
+    let mut cache = AppCache::new();
     let bootstrap_cutoff = chrono::Utc::now().timestamp_millis() - DEFAULT_INFERENCE_WINDOW_MS;
     for message in feed.read_recent_since(bootstrap_cutoff)? {
         state.apply_message(message);
@@ -152,7 +345,11 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
             last_poll = Instant::now();
         }
 
-        terminal.draw(|frame| render(frame, &state, &feed))?;
+        cache.sync_results();
+        cache.warm_visible_files(&state);
+        cache.warm_selected_detail(&state);
+
+        terminal.draw(|frame| render(frame, &state, &feed, &cache))?;
 
         if event::poll(Duration::from_millis(100)).context("poll terminal events")?
             && handle_event(&mut state, &ctx)?
@@ -204,7 +401,7 @@ fn handle_event(state: &mut RuntimeState, ctx: &RepoContext) -> Result<bool> {
     Ok(false)
 }
 
-fn render(frame: &mut Frame, state: &RuntimeState, feed: &RuntimeFeed) {
+fn render(frame: &mut Frame, state: &RuntimeState, feed: &RuntimeFeed, cache: &AppCache) {
     let colors = palette(state.theme_mode);
     frame.render_widget(
         Block::default().style(Style::default().bg(colors.bg).fg(colors.text)),
@@ -231,8 +428,8 @@ fn render(frame: &mut Frame, state: &RuntimeState, feed: &RuntimeFeed) {
 
     render_title_bar(frame, outer[0], state);
     render_sessions(frame, columns[0], state);
-    render_files(frame, columns[1], state);
-    render_detail(frame, columns[2], state, feed);
+    render_files(frame, columns[1], state, cache);
+    render_detail(frame, columns[2], state, feed, cache);
     render_log(frame, outer[2], state);
     render_footer(frame, outer[3], state);
 }
@@ -300,7 +497,12 @@ fn render_sessions(frame: &mut Frame, area: ratatui::layout::Rect, state: &Runti
     frame.render_widget(list, area);
 }
 
-fn render_files(frame: &mut Frame, area: ratatui::layout::Rect, state: &RuntimeState) {
+fn render_files(
+    frame: &mut Frame,
+    area: ratatui::layout::Rect,
+    state: &RuntimeState,
+    cache: &AppCache,
+) {
     let colors = palette(state.theme_mode);
     let outer_block = panel_block("Files", state.focus == FocusPane::Files, colors);
     let inner = outer_block.inner(area);
@@ -320,7 +522,11 @@ fn render_files(frame: &mut Frame, area: ratatui::layout::Rect, state: &RuntimeS
         .enumerate()
         .map(|(idx, file)| {
             let selected = idx == state.selected_file;
-            let diff_stat = file_diff_stat(&state.repo_root, &file.rel_path, &file.state_code);
+            let diff_stat = cache.diff_stat(file).cloned().unwrap_or_else(|| DiffStatSummary {
+                status: short_state_code(&file.state_code).to_string(),
+                additions: None,
+                deletions: None,
+            });
             let primary = Line::from(vec![
                 Span::styled(
                     shorten_path(&file.rel_path, 38),
@@ -357,6 +563,7 @@ fn render_detail(
     area: ratatui::layout::Rect,
     state: &RuntimeState,
     _feed: &RuntimeFeed,
+    cache: &AppCache,
 ) {
     match state.detail_mode {
         DetailMode::File => {
@@ -365,7 +572,7 @@ fn render_detail(
                 .constraints([Constraint::Length(8), Constraint::Min(12)])
                 .split(area);
             render_detail_summary(frame, sections[0], state);
-            render_detail_body(frame, sections[1], state);
+            render_detail_body(frame, sections[1], state, cache);
         }
         DetailMode::Diff => {
             let sections = Layout::default()
@@ -373,7 +580,7 @@ fn render_detail(
                 .constraints([Constraint::Length(8), Constraint::Min(10)])
                 .split(area);
             render_detail_summary(frame, sections[0], state);
-            render_detail_body(frame, sections[1], state);
+            render_detail_body(frame, sections[1], state, cache);
         }
         DetailMode::Summary => {
             let sections = Layout::default()
@@ -381,7 +588,7 @@ fn render_detail(
                 .constraints([Constraint::Length(8), Constraint::Min(8)])
                 .split(area);
             render_detail_summary(frame, sections[0], state);
-            render_detail_body(frame, sections[1], state);
+            render_detail_body(frame, sections[1], state, cache);
         }
     }
 }
@@ -467,7 +674,7 @@ fn render_detail_summary(frame: &mut Frame, area: Rect, state: &RuntimeState) {
     );
 }
 
-fn render_detail_body(frame: &mut Frame, area: Rect, state: &RuntimeState) {
+fn render_detail_body(frame: &mut Frame, area: Rect, state: &RuntimeState, cache: &AppCache) {
     let colors = palette(state.theme_mode);
     let title = match state.detail_mode {
         DetailMode::Summary => "Diff Summary",
@@ -477,24 +684,12 @@ fn render_detail_body(frame: &mut Frame, area: Rect, state: &RuntimeState) {
     let file_text = match state.detail_mode {
         DetailMode::File => state
             .selected_file()
-            .map(|file| load_file_preview(&state.repo_root, file.rel_path.as_str()))
-            .transpose()
-            .unwrap_or_else(|err| Some(Some(format!("file preview failed: {err}"))))
-            .flatten()
-            .unwrap_or_else(|| "<no file content available>".to_string()),
+            .and_then(|file| cache.detail_text(file, DetailMode::File).map(str::to_string))
+            .unwrap_or_else(|| "<loading file preview...>".to_string()),
         DetailMode::Summary | DetailMode::Diff => state
             .selected_file()
-            .map(|file| {
-                load_diff_text(
-                    &state.repo_root,
-                    file.rel_path.as_str(),
-                    file.state_code.as_str(),
-                )
-            })
-            .transpose()
-            .unwrap_or_else(|err| Some(Some(format!("diff load failed: {err}"))))
-            .flatten()
-            .unwrap_or_else(|| "<no diff available>".to_string()),
+            .and_then(|file| cache.detail_text(file, DetailMode::Diff).map(str::to_string))
+            .unwrap_or_else(|| "<loading diff...>".to_string()),
     };
     let file_path = state.selected_file().map(|file| file.rel_path.as_str());
     let content = match state.detail_mode {
@@ -767,7 +962,7 @@ fn format_bytes(bytes: u64) -> String {
 
 fn render_file_secondary_line(
     file: &crate::models::FileView,
-    diff_stat: &str,
+    diff_stat: &DiffStatSummary,
     colors: UiPalette,
 ) -> Line<'static> {
     let age = pad_left(&time_ago(file.last_modified_at_ms), 5);
@@ -781,13 +976,12 @@ fn render_file_secondary_line(
         ),
         14,
     );
-    Line::from(vec![
-        Span::styled(pad_right(diff_stat, 8), Style::default().fg(change_color(&file.state_code))),
-        Span::raw(" "),
-        Span::styled(age, Style::default().fg(colors.muted)),
-        Span::raw("  "),
-        Span::styled(owner, Style::default().fg(colors.accent)),
-    ])
+    let mut spans = render_diff_stat_spans(diff_stat);
+    spans.push(Span::raw(" "));
+    spans.push(Span::styled(age, Style::default().fg(colors.muted)));
+    spans.push(Span::raw("  "));
+    spans.push(Span::styled(owner, Style::default().fg(colors.accent)));
+    Line::from(spans)
 }
 
 fn pad_right(value: &str, width: usize) -> String {
@@ -798,13 +992,58 @@ fn pad_left(value: &str, width: usize) -> String {
     format!("{value:>width$}")
 }
 
-fn file_diff_stat(repo_root: &str, rel_path: &str, state_code: &str) -> String {
-    let status = match state_code {
+fn render_diff_stat_spans(diff_stat: &DiffStatSummary) -> Vec<Span<'static>> {
+    let mut spans = vec![Span::styled(
+        pad_right(&diff_stat.status, 2),
+        Style::default()
+            .fg(change_color_from_status(diff_stat.status.as_str()))
+            .add_modifier(Modifier::BOLD),
+    )];
+    if let Some(add) = diff_stat.additions {
+        spans.push(Span::raw(" "));
+        spans.push(Span::styled(format!("+{add}"), Style::default().fg(ACTIVE)));
+    }
+    if let Some(del) = diff_stat.deletions {
+        spans.push(Span::raw(" "));
+        spans.push(Span::styled(format!("-{del}"), Style::default().fg(STOPPED)));
+    }
+    spans.push(Span::styled(
+        pad_right("", 9usize.saturating_sub(diff_stat_display_width(diff_stat))),
+        Style::default(),
+    ));
+    spans
+}
+
+fn diff_stat_display_width(diff_stat: &DiffStatSummary) -> usize {
+    let mut width = diff_stat.status.len();
+    if let Some(add) = diff_stat.additions {
+        width += 1 + format!("+{add}").len();
+    }
+    if let Some(del) = diff_stat.deletions {
+        width += 1 + format!("-{del}").len();
+    }
+    width
+}
+
+fn diff_stat_key(rel_path: &str, state_code: &str, version: i64) -> String {
+    format!("{rel_path}:{state_code}:{version}")
+}
+
+fn detail_cache_key(rel_path: &str, state_code: &str, version: i64, mode: DetailMode) -> String {
+    format!("{rel_path}:{state_code}:{version}:{mode:?}")
+}
+
+fn short_state_code(state_code: &str) -> &'static str {
+    match state_code {
         "delete" => "D",
         "add" | "untracked" => "A",
         "rename" => "R",
         _ => "M",
-    };
+    }
+}
+
+fn compute_diff_stat(repo_root: &str, rel_path: &str, state_code: &str) -> DiffStatSummary {
+    let status = short_state_code(state_code).to_string();
 
     if state_code == "untracked" || state_code == "add" {
         let path = Path::new(repo_root).join(rel_path);
@@ -812,7 +1051,11 @@ fn file_diff_stat(repo_root: &str, rel_path: &str, state_code: &str) -> String {
             .ok()
             .map(|text| text.lines().count())
             .unwrap_or(0);
-        return format!("{status} +{added}");
+        return DiffStatSummary {
+            status,
+            additions: Some(added),
+            deletions: None,
+        };
     }
 
     let output = Command::new("git")
@@ -832,15 +1075,35 @@ fn file_diff_stat(repo_root: &str, rel_path: &str, state_code: &str) -> String {
                         let add = cols[0];
                         let del = cols[1];
                         if add == "-" || del == "-" {
-                            return status.to_string();
+                            return DiffStatSummary {
+                                status,
+                                additions: None,
+                                deletions: None,
+                            };
                         }
                         let add_num = add.parse::<usize>().unwrap_or(0);
                         let del_num = del.parse::<usize>().unwrap_or(0);
                         return match (add_num, del_num) {
-                            (0, 0) => status.to_string(),
-                            (0, d) => format!("{status} -{d}"),
-                            (a, 0) => format!("{status} +{a}"),
-                            (a, d) => format!("{status} +{a} -{d}"),
+                            (0, 0) => DiffStatSummary {
+                                status,
+                                additions: None,
+                                deletions: None,
+                            },
+                            (0, d) => DiffStatSummary {
+                                status,
+                                additions: None,
+                                deletions: Some(d),
+                            },
+                            (a, 0) => DiffStatSummary {
+                                status,
+                                additions: Some(a),
+                                deletions: None,
+                            },
+                            (a, d) => DiffStatSummary {
+                                status,
+                                additions: Some(a),
+                                deletions: Some(d),
+                            },
                         };
                     }
                 }
@@ -848,13 +1111,65 @@ fn file_diff_stat(repo_root: &str, rel_path: &str, state_code: &str) -> String {
         }
     }
 
-    status.to_string()
+    DiffStatSummary {
+        status,
+        additions: None,
+        deletions: None,
+    }
 }
 
-fn change_color(state_code: &str) -> Color {
-    match state_code {
-        "delete" => STOPPED,
-        "add" | "untracked" => ACTIVE,
+fn background_worker(rx: Receiver<BackgroundCommand>, tx: Sender<BackgroundResult>) {
+    while let Ok(command) = rx.recv() {
+        match command {
+            BackgroundCommand::RefreshStats { repo_root, files } => {
+                let mut seen = BTreeSet::new();
+                let entries = files
+                    .into_iter()
+                    .filter_map(|(rel_path, state_code, version)| {
+                        let key = diff_stat_key(&rel_path, &state_code, version);
+                        if !seen.insert(key.clone()) {
+                            return None;
+                        }
+                        Some((key, compute_diff_stat(&repo_root, &rel_path, &state_code)))
+                    })
+                    .collect::<Vec<_>>();
+                let _ = tx.send(BackgroundResult::Stats { entries });
+            }
+            BackgroundCommand::LoadDetail {
+                repo_root,
+                rel_path,
+                state_code,
+                version,
+                mode,
+            } => {
+                let text = match mode {
+                    DetailMode::File => load_file_preview(&repo_root, rel_path.as_str())
+                        .ok()
+                        .flatten()
+                        .unwrap_or_else(|| "<no file content available>".to_string()),
+                    DetailMode::Summary | DetailMode::Diff => {
+                        load_diff_text(&repo_root, rel_path.as_str(), state_code.as_str())
+                            .ok()
+                            .flatten()
+                            .unwrap_or_else(|| "<no diff available>".to_string())
+                    }
+                };
+                let _ = tx.send(BackgroundResult::Detail {
+                    entry: DetailCacheEntry {
+                        key: detail_cache_key(&rel_path, &state_code, version, mode),
+                        text,
+                    },
+                    mode,
+                });
+            }
+        }
+    }
+}
+
+fn change_color_from_status(status: &str) -> Color {
+    match status {
+        "D" => STOPPED,
+        "A" => ACTIVE,
         _ => INFERRED,
     }
 }
