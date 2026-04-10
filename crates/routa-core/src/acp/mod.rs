@@ -106,6 +106,7 @@ pub struct SessionLaunchOptions {
     pub allowed_native_tools: Option<Vec<String>>,
     pub initialize_timeout_ms: Option<u64>,
     pub provider_args: Option<Vec<String>>,
+    pub acp_mcp_servers: Option<Vec<serde_json::Value>>,
 }
 
 // ─── Managed Process ────────────────────────────────────────────────────
@@ -370,6 +371,18 @@ impl AcpManager {
     ) -> Result<(String, String), String> {
         validate_session_cwd(&cwd)?;
         let provider_name = provider.as_deref().unwrap_or("opencode");
+        let acp_mcp_servers = if matches!(provider_name, "codex" | "codex-acp") {
+            options.acp_mcp_servers.clone().unwrap_or_else(|| {
+                mcp_setup::build_acp_http_mcp_servers(
+                    &workspace_id,
+                    &session_id,
+                    tool_mode.as_deref(),
+                    mcp_profile.as_deref(),
+                )
+            })
+        } else {
+            Vec::new()
+        };
 
         if provider_name == "claude" {
             return Err("Native session/load is not supported for Claude".to_string());
@@ -426,7 +439,7 @@ impl AcpManager {
         let resolved_provider_session_id =
             provider_session_id.unwrap_or_else(|| session_id.clone());
         let acp_session_id = process
-            .load_session(&resolved_provider_session_id, &cwd)
+            .load_session(&resolved_provider_session_id, &cwd, &acp_mcp_servers)
             .await?;
 
         self.register_managed_session(
@@ -617,7 +630,9 @@ impl AcpManager {
             .initialize_with_timeout(options.initialize_timeout_ms)
             .await?;
 
-        let acp_session_id = process.new_session(&cwd).await?;
+        let acp_session_id = process
+            .new_session(&cwd, options.acp_mcp_servers.as_deref().unwrap_or(&[]))
+            .await?;
         self.register_managed_session(
             session_id.clone(),
             cwd.clone(),
@@ -678,7 +693,11 @@ impl AcpManager {
         let resolved_provider_session_id =
             provider_session_id.unwrap_or_else(|| session_id.clone());
         let acp_session_id = process
-            .load_session(&resolved_provider_session_id, &cwd)
+            .load_session(
+                &resolved_provider_session_id,
+                &cwd,
+                options.acp_mcp_servers.as_deref().unwrap_or(&[]),
+            )
             .await?;
 
         self.register_managed_session(
@@ -722,6 +741,18 @@ impl AcpManager {
     ) -> Result<(String, String), String> {
         validate_session_cwd(&cwd)?;
         let provider_name = provider.as_deref().unwrap_or("opencode");
+        let acp_mcp_servers = if matches!(provider_name, "codex" | "codex-acp") {
+            options.acp_mcp_servers.clone().unwrap_or_else(|| {
+                mcp_setup::build_acp_http_mcp_servers(
+                    &workspace_id,
+                    &session_id,
+                    tool_mode.as_deref(),
+                    mcp_profile.as_deref(),
+                )
+            })
+        } else {
+            Vec::new()
+        };
 
         // Create the notification broadcast channel for this session
         let (ntx, _) = broadcast::channel::<serde_json::Value>(256);
@@ -812,7 +843,7 @@ impl AcpManager {
                 .await?;
 
             // Create the agent session
-            let agent_session_id = process.new_session(&cwd).await?;
+            let agent_session_id = process.new_session(&cwd, &acp_mcp_servers).await?;
 
             (AgentProcessType::Acp(Arc::new(process)), agent_session_id)
         };

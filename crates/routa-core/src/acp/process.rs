@@ -675,13 +675,17 @@ impl AcpProcess {
     }
 
     /// Create a new ACP session. Returns the agent's session ID.
-    pub async fn new_session(&self, cwd: &str) -> Result<String, String> {
+    pub async fn new_session(
+        &self,
+        cwd: &str,
+        mcp_servers: &[serde_json::Value],
+    ) -> Result<String, String> {
         let result = self
             .send_request(
                 "session/new",
                 serde_json::json!({
                     "cwd": cwd,
-                    "mcpServers": []
+                    "mcpServers": mcp_servers
                 }),
                 None,
             )
@@ -701,14 +705,19 @@ impl AcpProcess {
     }
 
     /// Load a persisted ACP session. Returns the agent's resumed session ID.
-    pub async fn load_session(&self, session_id: &str, cwd: &str) -> Result<String, String> {
+    pub async fn load_session(
+        &self,
+        session_id: &str,
+        cwd: &str,
+        mcp_servers: &[serde_json::Value],
+    ) -> Result<String, String> {
         let result = self
             .send_request(
                 "session/load",
                 serde_json::json!({
                     "sessionId": session_id,
                     "cwd": cwd,
-                    "mcpServers": [],
+                    "mcpServers": mcp_servers,
                 }),
                 None,
             )

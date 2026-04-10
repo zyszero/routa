@@ -53,7 +53,13 @@ At launch time, Routa reads its private overlay file and expands it into Codex C
 - `mcp_servers.routa-coordination.url="..."`
 - `mcp_servers.routa-coordination.enabled=true`
 
-This preserves Codex's highest-precedence `-c/--config` behavior without mutating the user's shared Codex configuration.
+In addition, Routa now injects the same MCP server directly into `codex-acp` via ACP `session/new` / `session/load` `mcpServers` payloads, using the standard Streamable HTTP shape:
+
+- `type: "http"`
+- `name: "routa-coordination"`
+- `url: "http://127.0.0.1:3210/api/mcp?..."`
+
+This preserves Codex's highest-precedence `-c/--config` behavior without mutating the user's shared Codex configuration, while also avoiding reliance on Codex discovering config files later in the startup chain.
 
 ## Relevant Files
 
@@ -64,3 +70,4 @@ This preserves Codex's highest-precedence `-c/--config` behavior without mutatin
 
 - `cargo test -p routa-core codex_cli_overrides_include_trust_and_mcp_server`
 - `cargo test -p routa-core codex_provider_writes_private_overlay_config`
+- `cargo test -p routa-core acp_http_mcp_servers_use_streamable_http_shape`

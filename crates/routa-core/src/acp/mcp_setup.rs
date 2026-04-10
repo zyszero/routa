@@ -55,6 +55,20 @@ pub fn build_claude_mcp_config(
     .to_string()
 }
 
+pub fn build_acp_http_mcp_servers(
+    workspace_id: &str,
+    session_id: &str,
+    tool_mode: Option<&str>,
+    mcp_profile: Option<&str>,
+) -> Vec<serde_json::Value> {
+    vec![serde_json::json!({
+        "type": "http",
+        "name": "routa-coordination",
+        "url": build_mcp_endpoint(workspace_id, session_id, tool_mode, mcp_profile),
+        "headers": []
+    })]
+}
+
 async fn ensure_mcp_for_opencode(
     workspace_id: &str,
     session_id: &str,
@@ -265,9 +279,9 @@ pub async fn ensure_mcp_for_provider(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_claude_mcp_config, build_codex_mcp_config_contents, build_mcp_endpoint,
-        codex_cli_overrides, codex_private_config_path, codex_project_trust_override,
-        ensure_mcp_for_provider, upsert_codex_mcp_section,
+        build_acp_http_mcp_servers, build_claude_mcp_config, build_codex_mcp_config_contents,
+        build_mcp_endpoint, codex_cli_overrides, codex_private_config_path,
+        codex_project_trust_override, ensure_mcp_for_provider, upsert_codex_mcp_section,
     };
     use std::ffi::OsString;
     use std::path::Path;
@@ -340,6 +354,24 @@ mod tests {
         assert!(config.contains("\"routa-coordination\""));
         assert!(config.contains("\"type\":\"http\""));
         assert!(config.contains("mcpProfile=team-coordination"));
+    }
+
+    #[test]
+    fn acp_http_mcp_servers_use_streamable_http_shape() {
+        let servers = build_acp_http_mcp_servers(
+            "default",
+            "session-123",
+            Some("full"),
+            Some("kanban-planning"),
+        );
+
+        assert_eq!(servers.len(), 1);
+        assert_eq!(servers[0]["type"], "http");
+        assert_eq!(servers[0]["name"], "routa-coordination");
+        assert_eq!(servers[0]["headers"], serde_json::json!([]));
+        assert!(servers[0]["url"]
+            .as_str()
+            .is_some_and(|url| url.contains("mcpProfile=kanban-planning")));
     }
 
     #[test]
