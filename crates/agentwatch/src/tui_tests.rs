@@ -176,6 +176,32 @@ fn sample_cache(state: &RuntimeState) -> AppCache {
             text: "@@ -1,2 +1,3 @@\n-use old\n+use new\n+use cache".to_string(),
         },
     );
+    cache.facts_cache.insert(
+        facts_cache_key(&file.rel_path, file.last_modified_at_ms),
+        FileFactsEntry {
+            key: facts_cache_key(&file.rel_path, file.last_modified_at_ms),
+            line_count: 0,
+            byte_size: 0,
+            created_at: "untracked".to_string(),
+            git_change_count: 0,
+        },
+    );
+    cache.facts_cache.insert(
+        facts_cache_key(
+            "src/app/api/a2a/card/route.ts",
+            state.files["src/app/api/a2a/card/route.ts"].last_modified_at_ms,
+        ),
+        FileFactsEntry {
+            key: facts_cache_key(
+                "src/app/api/a2a/card/route.ts",
+                state.files["src/app/api/a2a/card/route.ts"].last_modified_at_ms,
+            ),
+            line_count: 0,
+            byte_size: 0,
+            created_at: "untracked".to_string(),
+            git_change_count: 0,
+        },
+    );
     cache
 }
 

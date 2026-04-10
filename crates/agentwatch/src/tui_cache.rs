@@ -18,6 +18,15 @@ pub(super) struct DetailCacheEntry {
     pub(super) text: String,
 }
 
+#[derive(Clone, Debug)]
+pub(super) struct FileFactsEntry {
+    pub(super) key: String,
+    pub(super) line_count: usize,
+    pub(super) byte_size: u64,
+    pub(super) created_at: String,
+    pub(super) git_change_count: usize,
+}
+
 #[derive(Debug)]
 enum BackgroundCommand {
     RefreshStats {
@@ -31,6 +40,11 @@ enum BackgroundCommand {
         version: i64,
         mode: DetailMode,
     },
+    LoadFacts {
+        repo_root: String,
+        rel_path: String,
+        version: i64,
+    },
 }
 
 #[derive(Debug)]
@@ -42,15 +56,20 @@ enum BackgroundResult {
         entry: DetailCacheEntry,
         mode: DetailMode,
     },
+    Facts {
+        entry: FileFactsEntry,
+    },
 }
 
 pub(super) struct AppCache {
     pub(super) diff_stats: BTreeMap<String, DiffStatSummary>,
     pub(super) preview_cache: BTreeMap<String, DetailCacheEntry>,
     pub(super) diff_cache: BTreeMap<String, DetailCacheEntry>,
+    pub(super) facts_cache: BTreeMap<String, FileFactsEntry>,
     pending_stats_signature: Option<String>,
     pending_preview_key: Option<String>,
     pending_diff_key: Option<String>,
+    pending_facts_key: Option<String>,
     worker_tx: Sender<BackgroundCommand>,
     worker_rx: Receiver<BackgroundResult>,
 }
@@ -64,9 +83,11 @@ impl AppCache {
             diff_stats: BTreeMap::new(),
             preview_cache: BTreeMap::new(),
             diff_cache: BTreeMap::new(),
+            facts_cache: BTreeMap::new(),
             pending_stats_signature: None,
             pending_preview_key: None,
             pending_diff_key: None,
+            pending_facts_key: None,
             worker_tx,
             worker_rx,
         }
@@ -89,6 +110,10 @@ impl AppCache {
                         self.pending_diff_key = None;
                     }
                 },
+                BackgroundResult::Facts { entry } => {
+                    self.facts_cache.insert(entry.key.clone(), entry);
+                    self.pending_facts_key = None;
+                }
             }
         }
     }
@@ -129,6 +154,7 @@ impl AppCache {
         let Some(file) = state.selected_file() else {
             self.pending_preview_key = None;
             self.pending_diff_key = None;
+            self.pending_facts_key = None;
             return;
         };
         let preview_key = detail_cache_key(
@@ -168,6 +194,18 @@ impl AppCache {
             });
             self.pending_diff_key = Some(diff_key);
         }
+
+        let facts_key = facts_cache_key(&file.rel_path, file.last_modified_at_ms);
+        if !self.facts_cache.contains_key(&facts_key)
+            && self.pending_facts_key.as_deref() != Some(facts_key.as_str())
+        {
+            let _ = self.worker_tx.send(BackgroundCommand::LoadFacts {
+                repo_root: state.repo_root.clone(),
+                rel_path: file.rel_path.clone(),
+                version: file.last_modified_at_ms,
+            });
+            self.pending_facts_key = Some(facts_key);
+        }
     }
 
     pub(super) fn diff_stat<'a>(
@@ -193,11 +231,19 @@ impl AppCache {
             mode,
         );
         match mode {
-            DetailMode::File => self.preview_cache.get(&key).map(|entry| entry.text.as_str()),
+            DetailMode::File => self
+                .preview_cache
+                .get(&key)
+                .map(|entry| entry.text.as_str()),
             DetailMode::Summary | DetailMode::Diff => {
                 self.diff_cache.get(&key).map(|entry| entry.text.as_str())
             }
         }
+    }
+
+    pub(super) fn file_facts(&self, file: &crate::models::FileView) -> Option<&FileFactsEntry> {
+        self.facts_cache
+            .get(&facts_cache_key(&file.rel_path, file.last_modified_at_ms))
     }
 }
 
@@ -212,6 +258,10 @@ pub(super) fn detail_cache_key(
     mode: DetailMode,
 ) -> String {
     format!("{rel_path}:{state_code}:{version}:{mode:?}")
+}
+
+pub(super) fn facts_cache_key(rel_path: &str, version: i64) -> String {
+    format!("{rel_path}:{version}:facts")
 }
 
 pub(super) fn short_state_code(state_code: &str) -> &'static str {
@@ -343,8 +393,53 @@ fn background_worker(rx: Receiver<BackgroundCommand>, tx: Sender<BackgroundResul
                     mode,
                 });
             }
+            BackgroundCommand::LoadFacts {
+                repo_root,
+                rel_path,
+                version,
+            } => {
+                let entry = load_file_facts(&repo_root, &rel_path, version);
+                let _ = tx.send(BackgroundResult::Facts { entry });
+            }
         }
     }
+}
+
+fn load_file_facts(repo_root: &str, rel_path: &str, version: i64) -> FileFactsEntry {
+    let path = Path::new(repo_root).join(rel_path);
+    let content = std::fs::read_to_string(&path).ok();
+    let line_count = content.as_ref().map(|text| text.lines().count()).unwrap_or(0);
+    let byte_size = std::fs::metadata(&path).map(|meta| meta.len()).unwrap_or(0);
+    let (created_at, git_change_count) =
+        git_file_history(repo_root, rel_path).unwrap_or_else(|| ("untracked".to_string(), 0));
+    FileFactsEntry {
+        key: facts_cache_key(rel_path, version),
+        line_count,
+        byte_size,
+        created_at,
+        git_change_count,
+    }
+}
+
+fn git_file_history(repo_root: &str, rel_path: &str) -> Option<(String, usize)> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .arg("log")
+        .arg("--follow")
+        .arg("--format=%ad")
+        .arg("--date=short")
+        .arg("--")
+        .arg(rel_path)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    let lines: Vec<&str> = stdout.lines().filter(|line| !line.trim().is_empty()).collect();
+    let created_at = lines.last().copied().unwrap_or("untracked").to_string();
+    Some((created_at, lines.len()))
 }
 
 pub(super) fn load_diff_text(

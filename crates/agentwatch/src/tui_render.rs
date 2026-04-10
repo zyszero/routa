@@ -18,13 +18,6 @@ pub(super) struct UiPalette {
     selection_blur: Color,
 }
 
-struct FileFacts {
-    line_count: usize,
-    byte_size: u64,
-    created_at: String,
-    git_change_count: usize,
-}
-
 pub(super) fn palette(theme_mode: ThemeMode) -> UiPalette {
     match theme_mode {
         ThemeMode::Dark => UiPalette {
@@ -245,15 +238,15 @@ fn render_detail(frame: &mut Frame, area: Rect, state: &RuntimeState, cache: &Ap
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(11), Constraint::Min(6)])
         .split(area);
-    render_detail_summary(frame, sections[0], state);
+    render_detail_summary(frame, sections[0], state, cache);
     render_detail_body(frame, sections[1], state, cache);
 }
 
-fn render_detail_summary(frame: &mut Frame, area: Rect, state: &RuntimeState) {
+fn render_detail_summary(frame: &mut Frame, area: Rect, state: &RuntimeState, cache: &AppCache) {
     let colors = palette(state.theme_mode);
     let mut lines = Vec::new();
     if let Some(file) = state.selected_file() {
-        let facts = collect_file_facts(&state.repo_root, &file.rel_path);
+        let facts = cache.file_facts(file);
         let (file_name, parent_dir) = split_display_path(&file.rel_path);
         let owner = file
             .last_session_id
@@ -298,23 +291,34 @@ fn render_detail_summary(frame: &mut Frame, area: Rect, state: &RuntimeState) {
         lines.push(Line::from(vec![
             Span::styled("Lines: ", Style::default().fg(colors.muted)),
             Span::styled(
-                facts.line_count.to_string(),
+                facts
+                    .map(|facts| facts.line_count.to_string())
+                    .unwrap_or_else(|| "...".to_string()),
                 Style::default().fg(colors.text),
             ),
             Span::raw("  "),
             Span::styled("Size: ", Style::default().fg(colors.muted)),
             Span::styled(
-                format_bytes(facts.byte_size),
+                facts
+                    .map(|facts| format_bytes(facts.byte_size))
+                    .unwrap_or_else(|| "...".to_string()),
                 Style::default().fg(colors.text),
             ),
         ]));
         lines.push(Line::from(vec![
             Span::styled("Created: ", Style::default().fg(colors.muted)),
-            Span::styled(facts.created_at, Style::default().fg(colors.text)),
+            Span::styled(
+                facts
+                    .map(|facts| facts.created_at.clone())
+                    .unwrap_or_else(|| "loading".to_string()),
+                Style::default().fg(colors.text),
+            ),
             Span::raw("  "),
             Span::styled("Git changes: ", Style::default().fg(colors.muted)),
             Span::styled(
-                facts.git_change_count.to_string(),
+                facts
+                    .map(|facts| facts.git_change_count.to_string())
+                    .unwrap_or_else(|| "...".to_string()),
                 Style::default().fg(colors.text),
             ),
         ]));
@@ -646,48 +650,6 @@ pub(super) fn time_ago(timestamp_ms: i64) -> String {
 
 fn time_label(timestamp_ms: i64) -> String {
     format!("{} ({})", format_ts(timestamp_ms), time_ago(timestamp_ms))
-}
-
-fn collect_file_facts(repo_root: &str, rel_path: &str) -> FileFacts {
-    let path = Path::new(repo_root).join(rel_path);
-    let content = std::fs::read_to_string(&path).ok();
-    let line_count = content
-        .as_ref()
-        .map(|text| text.lines().count())
-        .unwrap_or(0);
-    let byte_size = std::fs::metadata(&path).map(|meta| meta.len()).unwrap_or(0);
-    let (created_at, git_change_count) =
-        git_file_history(repo_root, rel_path).unwrap_or_else(|| ("untracked".to_string(), 0));
-    FileFacts {
-        line_count,
-        byte_size,
-        created_at,
-        git_change_count,
-    }
-}
-
-fn git_file_history(repo_root: &str, rel_path: &str) -> Option<(String, usize)> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_root)
-        .arg("log")
-        .arg("--follow")
-        .arg("--format=%ad")
-        .arg("--date=short")
-        .arg("--")
-        .arg(rel_path)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let stdout = String::from_utf8(output.stdout).ok()?;
-    let lines: Vec<&str> = stdout
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .collect();
-    let created_at = lines.last().copied().unwrap_or("untracked").to_string();
-    Some((created_at, lines.len()))
 }
 
 fn format_bytes(bytes: u64) -> String {
