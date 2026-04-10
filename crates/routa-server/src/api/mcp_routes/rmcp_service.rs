@@ -54,7 +54,7 @@ impl RequestScope {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_string)
-            .or_else(|| query.ws_id)
+            .or(query.ws_id)
             .unwrap_or_else(|| "default".to_string());
 
         Self {

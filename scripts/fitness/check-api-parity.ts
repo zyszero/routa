@@ -194,7 +194,9 @@ function readRustApiModuleContent(apiDir: string, moduleName: string): string {
 function extractNestCalls(
   content: string
 ): { basePath: string; modulePath: string; functionName: string }[] {
-  const nestRegex = /\.nest\("([^"]+)",\s*([\w:]+)::(\w+)\(\)\)/g;
+  // Accept both zero-arg routers (`module::router()`) and stateful routers
+  // such as `module::router(state)`.
+  const nestRegex = /\.nest\("([^"]+)",\s*([\w:]+)::(\w+)\([^)]*\)\)/g;
   const results: { basePath: string; modulePath: string; functionName: string }[] = [];
   let match;
   while ((match = nestRegex.exec(content)) !== null) {
