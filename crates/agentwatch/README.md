@@ -138,6 +138,31 @@ Git hooks (`.git/hooks/post-commit`, etc) should call:
 agentwatch git-hook post-commit
 ```
 
+## One-click install
+
+Use the installer script in this crate:
+
+```bash
+cd /Users/phodal/ai/routa-js
+cargo build -p agentwatch
+AGENTWATCH_BIN=$PWD/target/debug/agentwatch ./crates/agentwatch/scripts/install-hooks.sh
+```
+
+Templates written by the installer:
+
+- `$HOME/.codex/hooks.json`
+- `.git/hooks/post-commit`
+- `.git/hooks/post-merge`
+- `.git/hooks/post-checkout`
+
+For a repo-local override, export a custom binary path before running:
+
+```bash
+AGENTWATCH_BIN=/absolute/path/to/agentwatch ./crates/agentwatch/scripts/install-hooks.sh
+```
+
+All installed hook scripts read `AGENTWATCH_BIN`, and if not set they fall back to `agentwatch` in `PATH`.
+
 ## File attribution behavior
 
 Attribution is written in three levels:

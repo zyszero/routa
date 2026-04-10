@@ -1,0 +1,24 @@
+{
+  "hooks": [
+    {
+      "event": "SessionStart",
+      "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex SessionStart'"
+    },
+    {
+      "event": "PreToolUse",
+      "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex PreToolUse'"
+    },
+    {
+      "event": "PostToolUse",
+      "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex PostToolUse'"
+    },
+    {
+      "event": "UserPromptSubmit",
+      "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex UserPromptSubmit'"
+    },
+    {
+      "event": "Stop",
+      "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex Stop'"
+    }
+  ]
+}
