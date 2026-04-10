@@ -438,14 +438,12 @@ function ThoughtBubble({content}: { content: string }) {
                         {t.messageBubble.thinking}
                     </span>
                 </div>
-                <div
-                    className={`px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-700 whitespace-pre-wrap transition-all duration-150 dark:border-slate-800/50 dark:bg-slate-900/10 dark:text-slate-300 ${
-                        expanded ? "max-h-60 overflow-y-auto" : "max-h-[2.8em] overflow-hidden"
-                    }`}
-                >
+            </button>
+            {expanded ? (
+                <div className="mt-0.5 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-700 whitespace-pre-wrap dark:border-slate-800/50 dark:bg-slate-900/10 dark:text-slate-300">
                     {displayContent}
                 </div>
-            </button>
+            ) : null}
         </div>
     );
 }
