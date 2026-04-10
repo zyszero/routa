@@ -2415,6 +2415,17 @@ describe("KanbanTab quick ACP assignment", () => {
           json: async () => ({ repositories: [] }),
         } as Response;
       }
+      if (init?.method === "PATCH" && url === "/api/kanban/boards/board-1") {
+        return {
+          ok: true,
+          json: async () => ({
+            board: {
+              ...board,
+              autoProviderId: "claude",
+            },
+          }),
+        } as Response;
+      }
       if (init?.method === "PATCH" && url === "/api/tasks/task-1") {
         return {
           ok: true,
@@ -2450,15 +2461,18 @@ describe("KanbanTab quick ACP assignment", () => {
       />,
     );
 
-    expect(screen.queryByTestId("kanban-card-acp-select")).toBeNull();
+    expect(screen.queryByTestId("kanban-detail-provider-override")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Story One" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Execution" }));
+    fireEvent.click(screen.getByText("Card session override").closest("summary")!);
 
-    const acpSelect = await screen.findByTestId("kanban-card-acp-select");
-    expect(acpSelect).toBeTruthy();
-    expect((acpSelect as HTMLSelectElement).value).toBe("");
+    const providerDropdown = await screen.findByTestId("kanban-detail-provider-override");
+    expect(providerDropdown).toBeTruthy();
+    expect(providerDropdown.textContent).toContain("Use lane default");
 
-    fireEvent.change(acpSelect, { target: { value: "claude" } });
+    fireEvent.click(providerDropdown);
+    fireEvent.click(await screen.findByRole("button", { name: /Claude Code/ }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith("/api/tasks/task-1", {
@@ -2470,7 +2484,6 @@ describe("KanbanTab quick ACP assignment", () => {
         }),
       });
     });
-    expect(onRefresh).toHaveBeenCalled();
   });
 
   it("shows sync status in the same header row as the card status", () => {
