@@ -1,8 +1,9 @@
 "use client";
 
 import { DockerStatusIndicator } from "./docker-status-indicator";
-import { SettingsPopupMenu } from "./settings-popup-menu";
+import { LanguageSwitcher } from "./language-switcher";
 import { McpStatusIndicator } from "./mcp-status-indicator";
+import { ThemeSwitcher } from "./theme-switcher";
 
 
 interface ShellHeaderControlsProps {
@@ -25,12 +26,10 @@ export function ShellHeaderControls({
         <McpStatusIndicator compact={compactStatus} />
       </div>
       {showPreferencesMenu ? (
-        <SettingsPopupMenu
-          position="topbar"
-          showSettingsLink={false}
-          showLabel={false}
-          buttonClassName="h-8 w-8 justify-center px-0"
-        />
+        <div className="flex items-center gap-2">
+          <LanguageSwitcher />
+          <ThemeSwitcher compact />
+        </div>
       ) : null}
     </div>
   );
