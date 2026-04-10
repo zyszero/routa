@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { KanbanTab } from "../kanban-tab";
@@ -5,8 +6,65 @@ import { KanbanCardDetail } from "../kanban-card-detail";
 import type { KanbanBoardInfo, TaskInfo } from "../../types";
 import type { UseAcpActions, UseAcpState } from "@/client/hooks/use-acp";
 
-const { desktopAwareFetch } = vi.hoisted(() => ({
+const { desktopAwareFetch, dndKitHarness } = vi.hoisted(() => ({
   desktopAwareFetch: vi.fn(),
+  dndKitHarness: {
+    onDragEnd: null as null | ((event: {
+      active: { id: string; data?: { current?: Record<string, unknown> } };
+      over: { id: string } | null;
+    }) => void),
+    onDragStart: null as null | ((event: { active: { id: string } }) => void),
+    onDragCancel: null as null | (() => void),
+    emitDragEnd(event: {
+      active: { id: string; data?: { current?: Record<string, unknown> } };
+      over: { id: string } | null;
+    }) {
+      this.onDragEnd?.(event);
+    },
+    reset() {
+      this.onDragEnd = null;
+      this.onDragStart = null;
+      this.onDragCancel = null;
+    },
+  },
+}));
+
+vi.mock("@dnd-kit/core", () => ({
+  DndContext: ({
+    children,
+    onDragCancel,
+    onDragEnd,
+    onDragStart,
+  }: {
+    children: ReactNode;
+    onDragCancel?: () => void;
+    onDragEnd?: (event: {
+      active: { id: string; data?: { current?: Record<string, unknown> } };
+      over: { id: string } | null;
+    }) => void;
+    onDragStart?: (event: { active: { id: string } }) => void;
+  }) => {
+    dndKitHarness.onDragStart = onDragStart ?? null;
+    dndKitHarness.onDragEnd = onDragEnd ?? null;
+    dndKitHarness.onDragCancel = onDragCancel ?? null;
+    return <>{children}</>;
+  },
+  MouseSensor: class {},
+  TouchSensor: class {},
+  closestCorners: vi.fn(),
+  useDroppable: () => ({
+    isOver: false,
+    setNodeRef: vi.fn(),
+  }),
+  useDraggable: () => ({
+    attributes: {},
+    isDragging: false,
+    listeners: {},
+    setNodeRef: vi.fn(),
+    transform: null,
+  }),
+  useSensor: vi.fn(),
+  useSensors: vi.fn(() => []),
 }));
 
 vi.mock("@/client/utils/diagnostics", async () => {
@@ -58,6 +116,7 @@ function createTask(id: string, title: string, overrides: Partial<TaskInfo> = {}
 
 afterEach(() => {
   desktopAwareFetch.mockReset();
+  dndKitHarness.reset();
 });
 
 describe("KanbanTab delete flow", () => {
@@ -155,7 +214,7 @@ describe("KanbanTab drag and drop", () => {
     vi.unstubAllGlobals();
   });
 
-  it("falls back to dataTransfer payloads when drop fires without synced drag state", async () => {
+  it("moves a card across columns when the dnd sensor completes over a lane", async () => {
     const dragBoard: KanbanBoardInfo = {
       ...board,
       columns: [
@@ -195,10 +254,12 @@ describe("KanbanTab drag and drop", () => {
       />,
     );
 
-    fireEvent.drop(screen.getAllByTestId("kanban-column")[1]!, {
-      dataTransfer: {
-        getData: vi.fn(() => "task-1"),
+    dndKitHarness.emitDragEnd({
+      active: {
+        id: "task-1",
+        data: { current: { columnId: "backlog" } },
       },
+      over: { id: "column:todo" },
     });
 
     await waitFor(() => {
@@ -1772,13 +1833,13 @@ describe.skip("KanbanTab card detail manual runs", () => {
       />,
     );
 
-    const dataTransfer = {
-      setData: vi.fn(),
-      effectAllowed: "move",
-    };
-
-    fireEvent.dragStart(screen.getByTestId("kanban-card"), { dataTransfer });
-    fireEvent.drop(screen.getAllByTestId("kanban-column")[1]!);
+    dndKitHarness.emitDragEnd({
+      active: {
+        id: "task-1",
+        data: { current: { columnId: "dev" } },
+      },
+      over: { id: "column:review" },
+    });
 
     expect(await screen.findByText("Cannot Move Card")).toBeTruthy();
     expect(screen.getByText(/missing required artifacts: screenshot/i)).toBeTruthy();
@@ -1836,13 +1897,13 @@ describe.skip("KanbanTab card detail manual runs", () => {
       />,
     );
 
-    const dataTransfer = {
-      setData: vi.fn(),
-      effectAllowed: "move",
-    };
-
-    fireEvent.dragStart(screen.getByTestId("kanban-card"), { dataTransfer });
-    fireEvent.drop(screen.getAllByTestId("kanban-column")[1]!);
+    dndKitHarness.emitDragEnd({
+      active: {
+        id: "task-1",
+        data: { current: { columnId: "review" } },
+      },
+      over: { id: "column:done" },
+    });
 
     expect(await screen.findByText("Cannot Move Card")).toBeTruthy();
     expect(screen.getByText(/QA Frontend is still active and Review Guard must run next in the same lane/i)).toBeTruthy();

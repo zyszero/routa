@@ -1,6 +1,7 @@
 "use client";
 
-import type { DragEvent } from "react";
+import { useDraggable } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "@/i18n";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
@@ -10,7 +11,7 @@ import { formatArtifactLabel, resolveKanbanTransitionArtifacts } from "@/core/ka
 import type { KanbanColumnInfo, SessionInfo, TaskInfo, WorktreeInfo } from "../types";
 import { type KanbanSpecialistLanguage } from "./kanban-specialist-language";
 import { createKanbanSpecialistResolver } from "./kanban-card-session-utils";
-import { Trash2 } from "lucide-react";
+import { GripVertical, Trash2 } from "lucide-react";
 
 
 interface SpecialistOption {
@@ -34,8 +35,6 @@ export interface KanbanCardProps {
   worktreeCache: Record<string, WorktreeInfo>;
   autoProviderId?: string;
   queuePosition?: number;
-  onDragStart: () => void;
-  onDragEnd: () => void;
   onOpenDetail: () => void;
   onDelete: () => void;
   onPatchTask: (taskId: string, payload: Record<string, unknown>) => Promise<TaskInfo>;
@@ -211,8 +210,6 @@ export function KanbanCard({
   worktreeCache,
   autoProviderId,
   queuePosition,
-  onDragStart,
-  onDragEnd,
   onOpenDetail,
   onDelete,
   onPatchTask,
@@ -284,6 +281,23 @@ export function KanbanCard({
     : task.verificationVerdict === "APPROVED"
       ? "border-emerald-200/80 bg-emerald-50/80 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-900/15 dark:text-emerald-200"
       : "border-amber-200/80 bg-amber-50/80 text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/15 dark:text-amber-200";
+  const {
+    attributes,
+    isDragging,
+    listeners,
+    setNodeRef,
+    transform,
+  } = useDraggable({
+    id: task.id,
+    data: {
+      taskId: task.id,
+      columnId: task.columnId,
+    },
+  });
+  const style = {
+    opacity: isDragging ? 0.4 : undefined,
+    transform: transform ? CSS.Translate.toString(transform) : undefined,
+  };
 
   void availableProviders;
   void specialistLanguage;
@@ -294,17 +308,10 @@ export function KanbanCard({
     event.stopPropagation();
   };
 
-  const handleDragStart = (event: DragEvent<HTMLDivElement>) => {
-    event.dataTransfer.setData("text/plain", task.id);
-    event.dataTransfer.effectAllowed = "move";
-    onDragStart();
-  };
-
   return (
     <div
-      draggable
-      onDragStart={handleDragStart}
-      onDragEnd={onDragEnd}
+      ref={setNodeRef}
+      style={style}
       onClick={onOpenDetail}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -315,9 +322,22 @@ export function KanbanCard({
       role="button"
       tabIndex={0}
       aria-label={`${t.kanban.openCard} ${task.title}`}
-      className="group relative flex cursor-grab flex-col gap-2 border border-slate-200/80 bg-white/90 p-2.5 transition duration-150 hover:border-slate-300 hover:bg-white active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-amber-400/50 dark:border-[#262938] dark:bg-[#0d1018] dark:hover:border-[#34384a]"
+      className={`group relative flex flex-col gap-2 border border-slate-200/80 bg-white/90 p-2.5 transition duration-150 hover:border-slate-300 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400/50 dark:border-[#262938] dark:bg-[#0d1018] dark:hover:border-[#34384a] ${isDragging ? "z-20 shadow-2xl ring-2 ring-amber-300/60" : ""}`}
       data-testid="kanban-card"
     >
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        onClickCapture={stopCardInteraction}
+        className="absolute left-2.5 top-2.5 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-400/50 dark:text-slate-500 dark:hover:bg-[#191c28] dark:hover:text-slate-300"
+        aria-label={`${t.kanban.dragCard} ${task.title}`}
+        title={t.kanban.dragCard}
+        style={{ touchAction: "none" }}
+        data-testid="kanban-card-drag-handle"
+      >
+        <GripVertical className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" />
+      </button>
       <button
         onClick={(event) => {
           event.stopPropagation();
@@ -330,7 +350,7 @@ export function KanbanCard({
         <Trash2 className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"/>
       </button>
 
-      <div className="flex items-start justify-between gap-3 pr-6">
+      <div className="flex items-start justify-between gap-3 pl-7 pr-6">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1">
             {task.githubNumber ? (

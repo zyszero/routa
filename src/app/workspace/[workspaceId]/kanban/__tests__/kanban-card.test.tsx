@@ -3,6 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 import type { KanbanColumnInfo, TaskInfo } from "../../types";
 import { KanbanCard } from "../kanban-card";
 
+vi.mock("@dnd-kit/core", () => ({
+  useDraggable: () => ({
+    attributes: {},
+    isDragging: false,
+    listeners: {},
+    setNodeRef: vi.fn(),
+    transform: null,
+  }),
+}));
+
 const boardColumns: KanbanColumnInfo[] = [
   { id: "backlog", name: "Backlog", position: 0, stage: "backlog" },
   { id: "todo", name: "Todo", position: 1, stage: "todo" },
@@ -51,8 +61,6 @@ describe("KanbanCard artifact gate status", () => {
         codebases={[]}
         allCodebaseIds={[]}
         worktreeCache={{}}
-        onDragStart={vi.fn()}
-        onDragEnd={vi.fn()}
         onOpenDetail={vi.fn()}
         onDelete={vi.fn()}
         onPatchTask={vi.fn()}
@@ -83,8 +91,6 @@ describe("KanbanCard artifact gate status", () => {
         codebases={[]}
         allCodebaseIds={[]}
         worktreeCache={{}}
-        onDragStart={vi.fn()}
-        onDragEnd={vi.fn()}
         onOpenDetail={vi.fn()}
         onDelete={vi.fn()}
         onPatchTask={vi.fn()}
@@ -109,8 +115,6 @@ describe("KanbanCard artifact gate status", () => {
         codebases={[]}
         allCodebaseIds={[]}
         worktreeCache={{}}
-        onDragStart={vi.fn()}
-        onDragEnd={vi.fn()}
         onOpenDetail={vi.fn()}
         onDelete={vi.fn()}
         onPatchTask={vi.fn()}
@@ -138,8 +142,6 @@ describe("KanbanCard artifact gate status", () => {
         codebases={[]}
         allCodebaseIds={[]}
         worktreeCache={{}}
-        onDragStart={vi.fn()}
-        onDragEnd={vi.fn()}
         onOpenDetail={vi.fn()}
         onDelete={vi.fn()}
         onPatchTask={vi.fn()}
@@ -167,8 +169,6 @@ describe("KanbanCard artifact gate status", () => {
         codebases={[]}
         allCodebaseIds={[]}
         worktreeCache={{}}
-        onDragStart={vi.fn()}
-        onDragEnd={vi.fn()}
         onOpenDetail={vi.fn()}
         onDelete={vi.fn()}
         onPatchTask={vi.fn()}
@@ -205,8 +205,6 @@ describe("KanbanCard artifact gate status", () => {
         allCodebaseIds={[]}
         worktreeCache={{}}
         autoProviderId="codex"
-        onDragStart={vi.fn()}
-        onDragEnd={vi.fn()}
         onOpenDetail={vi.fn()}
         onDelete={vi.fn()}
         onPatchTask={vi.fn()}
@@ -275,8 +273,6 @@ story:
         codebases={[]}
         allCodebaseIds={[]}
         worktreeCache={{}}
-        onDragStart={vi.fn()}
-        onDragEnd={vi.fn()}
         onOpenDetail={vi.fn()}
         onDelete={vi.fn()}
         onPatchTask={vi.fn()}

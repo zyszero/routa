@@ -1,4 +1,15 @@
-import { useMemo, useState, type Dispatch, type SetStateAction, type RefObject } from "react";
+import {
+  DndContext,
+  MouseSensor,
+  TouchSensor,
+  closestCorners,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { useMemo, useState, type Dispatch, type SetStateAction, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "@/i18n";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
@@ -150,6 +161,37 @@ interface SpecialistOption {
   defaultProvider?: string;
 }
 
+function KanbanDropColumn({
+  children,
+  columnId,
+  hasActiveDrag,
+  widthClass,
+}: {
+  children: ReactNode;
+  columnId: string;
+  hasActiveDrag: boolean;
+  widthClass: string;
+}) {
+  const { isOver, setNodeRef } = useDroppable({
+    id: `column:${columnId}`,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex h-full min-h-26.25 shrink-0 flex-col border bg-white p-3 transition dark:bg-[#12141c] ${widthClass} ${isOver
+        ? "border-amber-300 ring-2 ring-amber-300/50 dark:border-amber-700 dark:ring-amber-700/40"
+        : hasActiveDrag
+          ? "border-slate-300/80 dark:border-[#2a2f43]"
+          : "border-slate-200/70 dark:border-[#1c1f2e]"
+        }`}
+      data-testid="kanban-column"
+    >
+      {children}
+    </div>
+  );
+}
+
 export function KanbanBoardSurface({
   moveError,
   onDismissMoveError,
@@ -181,8 +223,6 @@ export function KanbanBoardSurface({
   allCodebaseIds,
   worktreeCache,
   queuedPositions,
-  dragTaskId,
-  setDragTaskId,
   moveTask,
   confirmDeleteTask,
   patchTask,
@@ -228,8 +268,6 @@ export function KanbanBoardSurface({
   allCodebaseIds: string[];
   worktreeCache: Record<string, WorktreeInfo>;
   queuedPositions: Record<string, number | undefined>;
-  dragTaskId: string | null;
-  setDragTaskId: Dispatch<SetStateAction<string | null>>;
   moveTask: (taskId: string, targetColumnId: string) => Promise<void>;
   confirmDeleteTask: (task: TaskInfo) => void;
   patchTask: (taskId: string, payload: Record<string, unknown>) => Promise<TaskInfo>;
@@ -254,6 +292,15 @@ export function KanbanBoardSurface({
   const [localFileChangesOpen, setLocalFileChangesOpen] = useState(false);
   const [localGitLogOpen, setLocalGitLogOpen] = useState(false);
   const [gitLogRepoPath, setGitLogRepoPath] = useState<string | null>(null);
+  const [activeDragTaskId, setActiveDragTaskId] = useState<string | null>(null);
+  const sensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: { distance: 4 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 120, tolerance: 8 },
+    }),
+  );
 
   // Use external state if provided, otherwise use local state
   const fileChangesOpenValue = fileChangesOpen ?? localFileChangesOpen;
@@ -273,6 +320,29 @@ export function KanbanBoardSurface({
     }
     return defaultCodebase?.repoPath ?? codebases[0]?.repoPath ?? null;
   }, [codebases, defaultCodebase?.repoPath, gitLogRepoPath]);
+
+  const handleDragStart = ({ active }: DragStartEvent) => {
+    setActiveDragTaskId(String(active.id));
+  };
+
+  const handleDragEnd = async ({ active, over }: DragEndEvent) => {
+    setActiveDragTaskId(null);
+    if (!over) return;
+
+    const targetId = String(over.id);
+    if (!targetId.startsWith("column:")) return;
+
+    const taskId = String(active.id);
+    const sourceColumnId = active.data.current?.columnId;
+    const targetColumnId = targetId.slice("column:".length);
+    if (!targetColumnId) return;
+    if (sourceColumnId === targetColumnId) return;
+    await moveTask(taskId, targetColumnId);
+  };
+
+  const handleDragCancel = () => {
+    setActiveDragTaskId(null);
+  };
 
   return (
     <>
@@ -312,91 +382,87 @@ export function KanbanBoardSurface({
             </div>
           )}
           <div className="flex-1 min-h-0 overflow-auto pb-2" data-testid="kanban-board-content">
-            <div className="flex min-h-full min-w-max items-start gap-3 pr-4">
-              {board.columns
-                .slice()
-                .sort((left, right) => left.position - right.position)
-                .filter((column) => visibleColumns.includes(column.id))
-                .map((column) => {
-                  const columnTasks = boardTasks.filter((task) => (task.columnId ?? "backlog") === column.id);
-                  const laneAutomation = columnAutomation[column.id] ?? column.automation;
-                  const widthClass = column.width === "compact" ? "w-[14rem]" : column.width === "wide" ? "w-[24rem]" : "w-[18rem]";
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCorners}
+              onDragStart={handleDragStart}
+              onDragEnd={(event) => {
+                void handleDragEnd(event);
+              }}
+              onDragCancel={handleDragCancel}
+            >
+              <div className="flex min-h-full min-w-max items-start gap-3 pr-4">
+                {board.columns
+                  .slice()
+                  .sort((left, right) => left.position - right.position)
+                  .filter((column) => visibleColumns.includes(column.id))
+                  .map((column) => {
+                    const columnTasks = boardTasks.filter((task) => (task.columnId ?? "backlog") === column.id);
+                    const laneAutomation = columnAutomation[column.id] ?? column.automation;
+                    const widthClass = column.width === "compact" ? "w-[14rem]" : column.width === "wide" ? "w-[24rem]" : "w-[18rem]";
 
-                  return (
-                    <div
-                      key={column.id}
-                      onDragOver={(event) => {
-                        event.preventDefault();
-                        if (event.dataTransfer) {
-                          event.dataTransfer.dropEffect = "move";
-                        }
-                      }}
-                      onDrop={async (event) => {
-                        event.preventDefault();
-                        const droppedTaskId = dragTaskId || event.dataTransfer?.getData("text/plain");
-                        if (!droppedTaskId) return;
-                        await moveTask(droppedTaskId, column.id);
-                        setDragTaskId(null);
-                      }}
-                      className={`flex h-full min-h-26.25 shrink-0 flex-col border border-slate-200/70 bg-white p-3 dark:border-[#1c1f2e] dark:bg-[#12141c] ${widthClass}`}
-                      data-testid="kanban-column"
-                    >
-                      <div className="mb-3 space-y-1.5">
-                        <div className="flex items-baseline justify-between gap-3">
-                          <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{column.name}</div>
-                          <div className="shrink-0 text-[10px] text-slate-400 dark:text-slate-500">
-                            {columnTasks.length} {t.kanbanBoard.cards}
+                    return (
+                      <KanbanDropColumn
+                        key={column.id}
+                        columnId={column.id}
+                        hasActiveDrag={activeDragTaskId !== null}
+                        widthClass={widthClass}
+                      >
+                        <div className="mb-3 space-y-1.5">
+                          <div className="flex items-baseline justify-between gap-3">
+                            <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{column.name}</div>
+                            <div className="shrink-0 text-[10px] text-slate-400 dark:text-slate-500">
+                              {columnTasks.length} {t.kanbanBoard.cards}
+                            </div>
                           </div>
-                        </div>
-                        <div
-                          className="truncate text-[10px] leading-4 text-slate-500 dark:text-slate-400"
-                          data-testid={`kanban-column-automation-${column.id}`}
-                          title={laneAutomation?.enabled ? formatLaneAutomationSummary(laneAutomation, providers, specialists, {
-                            autoProviderId: boardAutoProviderId,
-                            autoLabel: t.common.auto,
-                          }) : column.stage === "blocked" ? t.kanbanBoard.manualLaneOnly : t.kanbanBoard.manualLane}
-                        >
-                          {laneAutomation?.enabled
-                            ? formatLaneAutomationCompactLabel(laneAutomation, providers, specialists, {
+                          <div
+                            className="truncate text-[10px] leading-4 text-slate-500 dark:text-slate-400"
+                            data-testid={`kanban-column-automation-${column.id}`}
+                            title={laneAutomation?.enabled ? formatLaneAutomationSummary(laneAutomation, providers, specialists, {
                               autoProviderId: boardAutoProviderId,
                               autoLabel: t.common.auto,
-                            })
-                            : column.stage === "blocked"
-                              ? t.kanbanBoard.manualLaneOnly
-                              : t.kanbanBoard.manualLane}
+                            }) : column.stage === "blocked" ? t.kanbanBoard.manualLaneOnly : t.kanbanBoard.manualLane}
+                          >
+                            {laneAutomation?.enabled
+                              ? formatLaneAutomationCompactLabel(laneAutomation, providers, specialists, {
+                                autoProviderId: boardAutoProviderId,
+                                autoLabel: t.common.auto,
+                              })
+                              : column.stage === "blocked"
+                                ? t.kanbanBoard.manualLaneOnly
+                                : t.kanbanBoard.manualLane}
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="flex-1 min-h-0 space-y-2 overflow-y-auto pr-1">
-                        {columnTasks.map((task) => (
-                          <KanbanCard
-                            key={task.id}
-                            task={task}
-                            boardColumns={board.columns}
-                            linkedSession={task.triggerSessionId ? sessionMap.get(task.triggerSessionId) : undefined}
-                            liveMessageTail={task.triggerSessionId ? liveSessionTails[task.triggerSessionId] : undefined}
-                            availableProviders={availableProviders}
-                            specialists={specialists}
-                            specialistLanguage={specialistLanguage}
-                            codebases={codebases}
-                            allCodebaseIds={allCodebaseIds}
-                            worktreeCache={worktreeCache}
-                            autoProviderId={resolveKanbanBoardAutoProviderId(board, boardAutoProviderId)}
-                            queuePosition={queuedPositions[task.id]}
-                            onDragStart={() => setDragTaskId(task.id)}
-                            onDragEnd={() => setDragTaskId(null)}
-                            onOpenDetail={() => openTaskDetail(task)}
-                            onDelete={() => confirmDeleteTask(task)}
-                            onPatchTask={patchTask}
-                            onRetryTrigger={retryTaskTrigger}
-                            onRefresh={onRefresh}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
+                        <div className="flex-1 min-h-0 space-y-2 overflow-y-auto pr-1">
+                          {columnTasks.map((task) => (
+                            <KanbanCard
+                              key={task.id}
+                              task={task}
+                              boardColumns={board.columns}
+                              linkedSession={task.triggerSessionId ? sessionMap.get(task.triggerSessionId) : undefined}
+                              liveMessageTail={task.triggerSessionId ? liveSessionTails[task.triggerSessionId] : undefined}
+                              availableProviders={availableProviders}
+                              specialists={specialists}
+                              specialistLanguage={specialistLanguage}
+                              codebases={codebases}
+                              allCodebaseIds={allCodebaseIds}
+                              worktreeCache={worktreeCache}
+                              autoProviderId={resolveKanbanBoardAutoProviderId(board, boardAutoProviderId)}
+                              queuePosition={queuedPositions[task.id]}
+                              onOpenDetail={() => openTaskDetail(task)}
+                              onDelete={() => confirmDeleteTask(task)}
+                              onPatchTask={patchTask}
+                              onRetryTrigger={retryTaskTrigger}
+                              onRefresh={onRefresh}
+                            />
+                          ))}
+                        </div>
+                      </KanbanDropColumn>
+                    );
+                  })}
+              </div>
+            </DndContext>
           </div>
         </div>
 

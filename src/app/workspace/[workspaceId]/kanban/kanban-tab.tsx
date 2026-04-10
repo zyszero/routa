@@ -133,7 +133,6 @@ export function KanbanTab({
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(defaultBoardId);
   const [localTasks, setLocalTasks] = useState<TaskInfo[]>(tasks);
   const autoPatchedTasksRef = useRef(new Set<string>());
-  const [dragTaskId, setDragTaskId] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showGitHubImportModal, setShowGitHubImportModal] = useState(false);
   const [draft, setDraft] = useState<TaskDraft>({
@@ -1593,8 +1592,6 @@ export function KanbanTab({
     allCodebaseIds,
     worktreeCache,
     queuedPositions,
-    dragTaskId,
-    setDragTaskId,
     moveTask,
     confirmDeleteTask,
     patchTask,
