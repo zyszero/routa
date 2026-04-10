@@ -44,14 +44,33 @@ impl EventLogFilter {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileListMode {
+    BySession,
+    Global,
+    UnknownConflict,
+}
+
+impl FileListMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            FileListMode::BySession => "BY SESSION",
+            FileListMode::Global => "GLOBAL",
+            FileListMode::UnknownConflict => "UNKNOWN-CONFLICT",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct RuntimeState {
     pub repo_root: String,
+    pub repo_name: String,
+    pub branch: String,
     pub sessions: BTreeMap<String, SessionView>,
     pub files: BTreeMap<String, FileView>,
     pub event_log: VecDeque<EventLogEntry>,
     pub follow_mode: bool,
-    pub group_by_session: bool,
+    pub file_list_mode: FileListMode,
     pub focus: FocusPane,
     pub detail_mode: DetailMode,
     pub theme_mode: ThemeMode,
@@ -64,14 +83,16 @@ pub struct RuntimeState {
 }
 
 impl RuntimeState {
-    pub fn new(repo_root: String) -> Self {
+    pub fn new(repo_root: String, repo_name: String, branch: String) -> Self {
         Self {
             repo_root,
+            repo_name,
+            branch,
             sessions: BTreeMap::new(),
             files: BTreeMap::new(),
             event_log: VecDeque::new(),
             follow_mode: true,
-            group_by_session: true,
+            file_list_mode: FileListMode::BySession,
             focus: FocusPane::Sessions,
             detail_mode: DetailMode::Summary,
             theme_mode: ThemeMode::Dark,
@@ -162,13 +183,21 @@ impl RuntimeState {
 
     pub fn file_items(&self) -> Vec<&FileView> {
         let mut items: Vec<_> = self.files.values().collect();
-        let selected = if self.group_by_session {
-            self.selected_session_id()
-        } else {
-            None
-        };
-        if let Some(session_id) = selected {
-            items.retain(|file| file.touched_by.contains(&session_id));
+        match self.file_list_mode {
+            FileListMode::BySession => {
+                if let Some(session_id) = self.selected_session_id() {
+                    items.retain(|file| file.touched_by.contains(&session_id));
+                }
+            }
+            FileListMode::Global => {}
+            FileListMode::UnknownConflict => {
+                items.retain(|file| {
+                    file.conflicted
+                        || matches!(file.confidence, AttributionConfidence::Unknown)
+                        || file.touched_by.len() > 1
+                        || file.last_session_id.is_none()
+                });
+            }
         }
         items.sort_by(|a, b| {
             b.last_modified_at_ms
@@ -249,8 +278,12 @@ impl RuntimeState {
         self.event_log_filter = filter;
     }
 
-    pub fn toggle_group_mode(&mut self) {
-        self.group_by_session = !self.group_by_session;
+    pub fn cycle_file_list_mode(&mut self) {
+        self.file_list_mode = match self.file_list_mode {
+            FileListMode::BySession => FileListMode::Global,
+            FileListMode::Global => FileListMode::UnknownConflict,
+            FileListMode::UnknownConflict => FileListMode::BySession,
+        };
         self.selected_file = 0;
         self.restore_detail_scroll_for_selection();
     }
