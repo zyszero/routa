@@ -19,6 +19,12 @@ pub enum DetailMode {
     Diff,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThemeMode {
+    Dark,
+    Light,
+}
+
 #[derive(Debug)]
 pub struct RuntimeState {
     pub repo_root: String,
@@ -29,6 +35,7 @@ pub struct RuntimeState {
     pub group_by_session: bool,
     pub focus: FocusPane,
     pub detail_mode: DetailMode,
+    pub theme_mode: ThemeMode,
     pub detail_scroll: u16,
     pub detail_scroll_cache: BTreeMap<String, u16>,
     pub selected_session: usize,
@@ -47,6 +54,7 @@ impl RuntimeState {
             group_by_session: true,
             focus: FocusPane::Sessions,
             detail_mode: DetailMode::Summary,
+            theme_mode: ThemeMode::Dark,
             detail_scroll: 0,
             detail_scroll_cache: BTreeMap::new(),
             selected_session: 0,
@@ -138,6 +146,15 @@ impl RuntimeState {
         items.get(self.selected_file).copied()
     }
 
+    pub fn selected_file_position(&self) -> Option<(usize, usize)> {
+        let len = self.file_items().len();
+        if len == 0 {
+            None
+        } else {
+            Some((self.selected_file.min(len - 1), len))
+        }
+    }
+
     pub fn cycle_focus(&mut self) {
         self.focus = match self.focus {
             FocusPane::Sessions => FocusPane::Files,
@@ -184,6 +201,13 @@ impl RuntimeState {
         self.follow_mode = !self.follow_mode;
     }
 
+    pub fn toggle_theme_mode(&mut self) {
+        self.theme_mode = match self.theme_mode {
+            ThemeMode::Dark => ThemeMode::Light,
+            ThemeMode::Light => ThemeMode::Dark,
+        };
+    }
+
     pub fn toggle_group_mode(&mut self) {
         self.group_by_session = !self.group_by_session;
         self.selected_file = 0;
@@ -205,6 +229,24 @@ impl RuntimeState {
             DetailMode::File => DetailMode::Diff,
             DetailMode::Diff => DetailMode::Summary,
         };
+        self.restore_detail_scroll_for_selection();
+    }
+
+    pub fn select_prev_file(&mut self) {
+        let len = self.file_items().len();
+        if len == 0 {
+            return;
+        }
+        self.selected_file = self.selected_file.saturating_sub(1);
+        self.restore_detail_scroll_for_selection();
+    }
+
+    pub fn select_next_file(&mut self) {
+        let len = self.file_items().len();
+        if len == 0 {
+            return;
+        }
+        self.selected_file = (self.selected_file + 1).min(len - 1);
         self.restore_detail_scroll_for_selection();
     }
 
