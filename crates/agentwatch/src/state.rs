@@ -9,7 +9,6 @@ use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FocusPane {
-    Sessions,
     Files,
     Detail,
 }
@@ -49,7 +48,6 @@ impl EventLogFilter {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileListMode {
-    BySession,
     Global,
     UnknownConflict,
 }
@@ -58,6 +56,7 @@ pub const UNKNOWN_SESSION_ID: &str = "__unknown__";
 const PAGE_STEP: usize = 10;
 const DETAIL_PAGE_STEP: u16 = 12;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct SessionListItem {
     pub session_id: String,
@@ -113,9 +112,9 @@ impl RuntimeState {
             files: BTreeMap::new(),
             event_log: VecDeque::new(),
             follow_mode: true,
-            file_list_mode: FileListMode::BySession,
-            focus: FocusPane::Sessions,
-            detail_mode: DetailMode::File,
+            file_list_mode: FileListMode::Global,
+            focus: FocusPane::Files,
+            detail_mode: DetailMode::Diff,
             theme_mode: ThemeMode::Dark,
             event_log_filter: EventLogFilter::All,
             detail_scroll: 0,
@@ -232,6 +231,7 @@ impl RuntimeState {
         self.clamp_selection();
     }
 
+    #[cfg(test)]
     pub fn session_items(&self) -> &[SessionListItem] {
         &self.cached_session_items
     }
@@ -299,12 +299,14 @@ impl RuntimeState {
         items
     }
 
+    #[cfg(test)]
     pub fn selected_session_id(&self) -> Option<String> {
         self.cached_session_items
             .get(self.selected_session)
             .map(|session| session.session_id.clone())
     }
 
+    #[cfg(test)]
     pub fn unmatched_agents(&self) -> Vec<&DetectedAgent> {
         self.cached_unmatched_agent_keys
             .iter()
@@ -320,20 +322,6 @@ impl RuntimeState {
             .filter(|file| self.matches_file_search(file))
             .collect();
         match self.file_list_mode {
-            FileListMode::BySession => {
-                if let Some(session_id) = self.selected_session_id() {
-                    if session_id == UNKNOWN_SESSION_ID {
-                        items.retain(|file| {
-                            file.conflicted
-                                || matches!(file.confidence, AttributionConfidence::Unknown)
-                                || file.last_session_id.is_none()
-                                || file.touched_by.is_empty()
-                        });
-                    } else {
-                        items.retain(|file| file.touched_by.contains(&session_id));
-                    }
-                }
-            }
             FileListMode::Global => {}
             FileListMode::UnknownConflict => {
                 items.retain(|file| {
@@ -380,17 +368,13 @@ impl RuntimeState {
 
     pub fn cycle_focus(&mut self) {
         self.focus = match self.focus {
-            FocusPane::Sessions => FocusPane::Files,
             FocusPane::Files => FocusPane::Detail,
-            FocusPane::Detail => FocusPane::Sessions,
+            FocusPane::Detail => FocusPane::Files,
         };
     }
 
     pub fn move_selection_up(&mut self) {
         match self.focus {
-            FocusPane::Sessions => {
-                self.selected_session = self.selected_session.saturating_sub(1);
-            }
             FocusPane::Files => {
                 self.selected_file = self.selected_file.saturating_sub(1);
             }
@@ -402,12 +386,6 @@ impl RuntimeState {
 
     pub fn move_selection_down(&mut self) {
         match self.focus {
-            FocusPane::Sessions => {
-                let len = self.cached_session_items.len();
-                if len > 0 {
-                    self.selected_session = (self.selected_session + 1).min(len - 1);
-                }
-            }
             FocusPane::Files => {
                 let len = self.cached_file_item_keys.len();
                 if len > 0 {
@@ -422,9 +400,6 @@ impl RuntimeState {
 
     pub fn page_up(&mut self) {
         match self.focus {
-            FocusPane::Sessions => {
-                self.selected_session = self.selected_session.saturating_sub(PAGE_STEP);
-            }
             FocusPane::Files => {
                 self.selected_file = self.selected_file.saturating_sub(PAGE_STEP);
                 self.restore_detail_scroll_for_selection();
@@ -437,12 +412,6 @@ impl RuntimeState {
 
     pub fn page_down(&mut self) {
         match self.focus {
-            FocusPane::Sessions => {
-                let len = self.cached_session_items.len();
-                if len > 0 {
-                    self.selected_session = (self.selected_session + PAGE_STEP).min(len - 1);
-                }
-            }
             FocusPane::Files => {
                 let len = self.cached_file_item_keys.len();
                 if len > 0 {
@@ -481,10 +450,6 @@ impl RuntimeState {
         self.event_log_filter = filter;
     }
 
-    pub fn begin_search(&mut self) {
-        self.search_active = true;
-    }
-
     pub fn cancel_search(&mut self) {
         self.search_active = false;
     }
@@ -508,17 +473,11 @@ impl RuntimeState {
 
     pub fn cycle_file_list_mode(&mut self) {
         self.file_list_mode = match self.file_list_mode {
-            FileListMode::BySession => FileListMode::Global,
             FileListMode::Global => FileListMode::UnknownConflict,
-            FileListMode::UnknownConflict => FileListMode::BySession,
+            FileListMode::UnknownConflict => FileListMode::Global,
         };
         self.rebuild_views();
         self.selected_file = 0;
-        self.restore_detail_scroll_for_selection();
-    }
-
-    pub fn toggle_file_view(&mut self) {
-        self.detail_mode = DetailMode::File;
         self.restore_detail_scroll_for_selection();
     }
 
@@ -548,6 +507,7 @@ impl RuntimeState {
         self.restore_detail_scroll_for_selection();
     }
 
+    #[cfg(test)]
     pub fn selected_file_assignment_message(&self) -> Option<RuntimeMessage> {
         let session_id = self.selected_session_id()?;
         if session_id == UNKNOWN_SESSION_ID {
@@ -959,7 +919,7 @@ impl RuntimeState {
                         .entry(session_id.to_string())
                         .or_default()
                         .candidate_vendors
-                        .entry(agent.vendor.clone())
+                        .entry(agent.name.to_ascii_lowercase())
                         .or_insert(0) += 1;
                 }
             }
@@ -1058,7 +1018,14 @@ fn is_stop_event(event_name: &str) -> bool {
 fn session_agent_match_score(session: &SessionView, agent: &DetectedAgent) -> usize {
     let mut score = 0;
 
-    if session.client.eq_ignore_ascii_case(&agent.vendor) {
+    let session_client = session.client.to_ascii_lowercase();
+    let agent_vendor = agent.vendor.to_ascii_lowercase();
+    let agent_name = agent.name.to_ascii_lowercase();
+    if session_client == agent_vendor
+        || session_client == agent_name
+        || (session_client == "codex" && (agent_vendor == "openai" || agent_name == "codex"))
+        || (session_client == "claude" && (agent_vendor == "anthropic" || agent_name == "claude"))
+    {
         score += 3;
     }
 
@@ -1109,5 +1076,5 @@ fn path_contains(base: &str, candidate: &str) -> bool {
 }
 
 fn agent_label(agent: &DetectedAgent) -> String {
-    format!("{}#{}", agent.vendor, agent.pid)
+    format!("{}#{}", agent.name.to_ascii_lowercase(), agent.pid)
 }

@@ -195,6 +195,10 @@ impl AppCache {
             self.pending_diff_key = Some(diff_key);
         }
 
+        if !matches!(state.focus, FocusPane::Detail) {
+            return;
+        }
+
         let facts_key = facts_cache_key(&file.rel_path, file.last_modified_at_ms);
         if !self.facts_cache.contains_key(&facts_key)
             && self.pending_facts_key.as_deref() != Some(facts_key.as_str())

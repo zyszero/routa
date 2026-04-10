@@ -109,7 +109,7 @@ pub struct FileStateRow {
 }
 
 pub const DEFAULT_INFERENCE_WINDOW_MS: i64 = 15 * 60 * 1000;
-pub const DEFAULT_TUI_POLL_MS: u64 = 800;
+pub const DEFAULT_TUI_POLL_MS: u64 = 300;
 pub const EVENT_LOG_LIMIT: usize = 200;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -230,12 +230,17 @@ pub struct RuntimeServiceInfo {
 #[derive(Debug, Clone)]
 pub struct DetectedAgent {
     pub key: String,
+    pub name: String,
     pub vendor: String,
+    pub icon: String,
     pub pid: u32,
     pub cwd: Option<String>,
     pub cpu_percent: f32,
     pub mem_mb: f32,
     pub uptime_seconds: u64,
+    pub status: String,
+    pub confidence: u8,
+    pub project: String,
     pub command: String,
 }
 

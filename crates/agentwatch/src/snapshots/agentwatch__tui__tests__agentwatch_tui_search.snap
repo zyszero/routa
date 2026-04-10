@@ -1,29 +1,29 @@
 ---
 source: crates/agentwatch/src/tui_tests.rs
-assertion_line: 430
+assertion_line: 440
 expression: "render_snapshot(&state, &cache, 120, 24)"
 ---
- AgentWatch   repo:routa-js  branch:main    GLOBAL VIEW · FOLLOW ON  rpc:socket  ag:2 act:1  dirty:1  unknown:1  synced
-┌Sessions────────────────────────┐┌Files─────────────────────────────────┐┌File Preview────────────────────────────────┐
-│> Unknown / review  UNKNOWN     ││ BY SESSION    GLOBAL    REVIEW UNKNOW││ 1 fn render(frame: &mut Frame) {           │
-│watch-only owner  pane ?  2m ago││1 files  M:0 D:1  E:0 I:0 U:1         ││ 2     // preview                           │
-│1 files  E:0 I:0 U:1            ││──────────────────────────────────────││ 3 }                                        │
-│                                ││> route.ts                            ││                                            │
-│                                ││  src/app/api/a2a/card                ││                                            │
-│                                ││D  -12        5m  UNKNOWN             ││                                            │
-│                                ││                                      ││                                            │
-│                                ││                                      ││                                            │
-│                                ││                                      ││                                            │
-│────────────────────────────────│└──────────────────────────────────────┘│                                            │
-│Agents                          │┌Details───────────────────────────────┐│                                            │
-│2 total  1 active  1 idle  2.6% ││route.ts                              ││                                            │
-│cpu  224MB  claude:1 codex:1    ││src/app/api/a2a/card                  ││                                            │
-│CODEX #4211  2.5%cpu 128MB 1m   ││Last by: unknown                      ││                                            │
-│project codex                   ││Modified: <ts> (5m)               ││                                            │
-└────────────────────────────────┘└──────────────────────────────────────┘└────────────────────────────────────────────┘
+ AgentWatch   repo:routa-js  branch:main    FILES VIEW · FOLLOW ON  rpc:socket  ag:2 act:1  dirty:1  unknown:1  synced 2
+┌Agents──────────────────────┐┌Files───────────────────────────────────────────┐┌Diff Preview──────────────────────────┐
+│2 total  1 active  1 idle  2││ ALL FILES    REVIEW UNKNOWN                    ││@@ -1,2 +1,3 @@                       │
+│                            ││1 files  M:0 D:1  E:0 I:0 U:1                   ││-use old                              │
+│4211 ◈ Codex  ACTIVE        ││────────────────────────────────────────────────││+use new                              │
+│cpu  2.5%  mem 128MB  up    ││> route.ts                                      ││+use cache                            │
+│01:35                       ││  src/app/api/a2a/card                          ││                                      │
+│proj project  conf 80%      ││D  -12        5m  UNKNOWN                       ││                                      │
+│                            ││                                                ││                                      │
+│9001 ◆ Claude  IDLE         ││                                                ││                                      │
+│cpu  0.1%  mem 96MB  up     ││                                                ││                                      │
+│<ts>                    ││                                                ││                                      │
+│proj elsewhere  conf 80%    │└────────────────────────────────────────────────┘│                                      │
+│                            │┌Details─────────────────────────────────────────┐│                                      │
+│                            ││route.ts                                        ││                                      │
+│                            ││src/app/api/a2a/card                            ││                                      │
+│                            ││Last by: unknown                                ││                                      │
+└────────────────────────────┘└────────────────────────────────────────────────┘└──────────────────────────────────────┘
 ┌Event Stream (all)────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │<ts>  WATCH  modify   crates/agentwatch/src/tui.rs                                                                │
 │<ts>  HOOK   live-hook-check Edit Write                                                                           │
 │<ts>  GIT    post-commit main                                                                                     │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-Tab focus  ↑↓ select  Enter preview  D diff  / search:on  u unknown  a assign  o open  g git diff  PgUp/PgDn scroll  f f
+Tab focus  ↑↓ select  u unknown  d preview/diff  Pg scroll  f follow:on  T theme  Esc clear  q quit

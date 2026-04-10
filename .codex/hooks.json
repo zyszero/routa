@@ -13,11 +13,29 @@
             "command": "bash ./crates/agentwatch/scripts/run-codex-hook.sh PreToolUse"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|Read|Grep|Glob|Search|LS",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ./crates/agentwatch/scripts/run-codex-hook.sh PreToolUse"
+          }
+        ]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ./crates/agentwatch/scripts/run-codex-hook.sh PostToolUse"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|Read|Grep|Glob|Search|LS",
         "hooks": [
           {
             "type": "command",

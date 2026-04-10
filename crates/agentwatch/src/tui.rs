@@ -1,8 +1,8 @@
 use crate::ipc::RuntimeFeed;
-use crate::models::{RuntimeMessage, DEFAULT_TUI_POLL_MS};
+use crate::models::DEFAULT_TUI_POLL_MS;
 use crate::observe;
 use crate::repo::RepoContext;
-use crate::state::{DetailMode, EventLogFilter, RuntimeState, ThemeMode};
+use crate::state::{DetailMode, EventLogFilter, FocusPane, RuntimeState, ThemeMode};
 use anyhow::{Context, Result};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use crossterm::execute;
@@ -46,7 +46,7 @@ const STOPPED: Color = Color::Rgb(201, 96, 87);
 const IDLE: Color = Color::Rgb(122, 132, 143);
 const SESSION_BOOTSTRAP_WINDOW_MS: i64 = 24 * 60 * 60 * 1000;
 const TRANSPORT_REFRESH_MS: u64 = 1200;
-const AGENT_SCAN_REFRESH_MS: u64 = 4000;
+const AGENT_SCAN_REFRESH_MS: u64 = 1500;
 
 pub fn run(ctx: RepoContext, poll_interval_ms: u64) -> Result<()> {
     enable_raw_mode().context("enable raw mode")?;
@@ -117,7 +117,7 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
         terminal.draw(|frame| render(frame, &state, &feed, &cache))?;
 
         if event::poll(Duration::from_millis(100)).context("poll terminal events")?
-            && handle_event(&mut state, &ctx)?
+            && handle_event(&mut state)?
         {
             break;
         }
@@ -125,7 +125,7 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
     Ok(())
 }
 
-fn handle_event(state: &mut RuntimeState, ctx: &RepoContext) -> Result<bool> {
+fn handle_event(state: &mut RuntimeState) -> Result<bool> {
     match event::read().context("read terminal event")? {
         Event::Key(key) => {
             if state.search_active {
@@ -150,8 +150,6 @@ fn handle_event(state: &mut RuntimeState, ctx: &RepoContext) -> Result<bool> {
                 KeyCode::Char('k') | KeyCode::Up => state.move_selection_up(),
                 KeyCode::Char('h') | KeyCode::Left => state.select_prev_file(),
                 KeyCode::Char('l') | KeyCode::Right => state.select_next_file(),
-                KeyCode::Enter => state.toggle_file_view(),
-                KeyCode::Char('/') => state.begin_search(),
                 KeyCode::Esc => state.clear_search(),
                 KeyCode::Char('r') | KeyCode::Char('f') => state.toggle_follow_mode(),
                 KeyCode::Char('s') => state.cycle_file_list_mode(),
@@ -165,16 +163,11 @@ fn handle_event(state: &mut RuntimeState, ctx: &RepoContext) -> Result<bool> {
                 }
                 KeyCode::Char('d') | KeyCode::Char('D') => state.toggle_detail_mode(),
                 KeyCode::Char('t') | KeyCode::Char('T') => state.toggle_theme_mode(),
-                KeyCode::Char('a') => assign_selected_file(state, ctx)?,
-                KeyCode::Char('o') => open_selected_file_in_editor(state, ctx)?,
-                KeyCode::Char('g') => open_selected_file_git_diff(state, ctx)?,
                 KeyCode::Char('1') => state.set_event_log_filter(EventLogFilter::All),
                 KeyCode::Char('2') => state.set_event_log_filter(EventLogFilter::Hook),
                 KeyCode::Char('3') => state.set_event_log_filter(EventLogFilter::Git),
                 KeyCode::Char('4') => state.set_event_log_filter(EventLogFilter::Watch),
                 KeyCode::Char('5') => state.set_event_log_filter(EventLogFilter::Attribution),
-                KeyCode::Char('[') => jump_diff_hunk(state, ctx, false)?,
-                KeyCode::Char(']') => jump_diff_hunk(state, ctx, true)?,
                 KeyCode::PageDown => state.page_down(),
                 KeyCode::PageUp => state.page_up(),
                 KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -187,102 +180,6 @@ fn handle_event(state: &mut RuntimeState, ctx: &RepoContext) -> Result<bool> {
         _ => {}
     }
     Ok(false)
-}
-
-fn open_selected_file_in_editor(state: &RuntimeState, ctx: &RepoContext) -> Result<()> {
-    let Some(file) = state.selected_file() else {
-        return Ok(());
-    };
-    let editor = env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
-    let file_path = ctx.repo_root.join(&file.rel_path);
-    suspend_tui_command(Command::new(editor).arg(file_path))
-}
-
-fn assign_selected_file(state: &mut RuntimeState, ctx: &RepoContext) -> Result<()> {
-    let Some(message) = state.selected_file_assignment_message() else {
-        return Ok(());
-    };
-    send_runtime_message(ctx, &message)?;
-    state.apply_message(message);
-    Ok(())
-}
-
-fn open_selected_file_git_diff(state: &RuntimeState, ctx: &RepoContext) -> Result<()> {
-    let Some(file) = state.selected_file() else {
-        return Ok(());
-    };
-    let pager = env::var("PAGER").unwrap_or_else(|_| "less".to_string());
-    let mut command = Command::new("sh");
-    command.arg("-lc").arg(format!(
-        "git -C {} diff -- {} | {}",
-        shell_escape_path(&ctx.repo_root.to_string_lossy()),
-        shell_escape_path(&file.rel_path),
-        pager
-    ));
-    suspend_tui_command(&mut command)
-}
-
-fn suspend_tui_command(command: &mut Command) -> Result<()> {
-    let _ = execute!(stdout(), LeaveAlternateScreen);
-    let _ = disable_raw_mode();
-    let status = command.status().context("run external command from tui")?;
-    execute!(stdout(), EnterAlternateScreen).context("re-enter alternate screen")?;
-    enable_raw_mode().context("re-enable raw mode")?;
-    let _ = status;
-    Ok(())
-}
-
-fn shell_escape_path(path: &str) -> String {
-    format!("'{}'", path.replace('\'', "'\\''"))
-}
-
-fn send_runtime_message(ctx: &RepoContext, message: &RuntimeMessage) -> Result<()> {
-    crate::ipc::send_socket_message(&ctx.runtime_socket_path, message)
-        .or_else(|_| crate::ipc::send_tcp_message(&ctx.runtime_tcp_addr, message))
-        .or_else(|_| crate::ipc::send_message(&ctx.runtime_event_path, message))
-}
-
-fn jump_diff_hunk(state: &mut RuntimeState, ctx: &RepoContext, forward: bool) -> Result<()> {
-    let Some((rel_path, state_code)) = state
-        .selected_file()
-        .map(|file| (file.rel_path.clone(), file.state_code.clone()))
-    else {
-        return Ok(());
-    };
-    let diff_text = load_diff_text(&ctx.repo_root.to_string_lossy(), &rel_path, &state_code)?
-        .unwrap_or_default();
-    let hunks = diff_hunk_offsets(&diff_text);
-    if hunks.is_empty() {
-        return Ok(());
-    }
-    let current = state.detail_scroll as usize;
-    let target = if forward {
-        hunks
-            .iter()
-            .copied()
-            .find(|offset| *offset > current)
-            .unwrap_or(hunks[0])
-    } else {
-        hunks
-            .iter()
-            .copied()
-            .rev()
-            .find(|offset| *offset < current)
-            .unwrap_or(*hunks.last().unwrap_or(&0))
-    };
-    state.detail_scroll = target.min(u16::MAX as usize) as u16;
-    state
-        .detail_scroll_cache
-        .insert(rel_path, state.detail_scroll);
-    Ok(())
-}
-
-fn diff_hunk_offsets(diff_text: &str) -> Vec<usize> {
-    diff_text
-        .lines()
-        .enumerate()
-        .filter_map(|(idx, line)| line.starts_with("@@").then_some(idx))
-        .collect()
 }
 
 fn current_branch(ctx: &RepoContext) -> Result<String> {

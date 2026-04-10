@@ -112,7 +112,7 @@ fn sample_state() -> RuntimeState {
     state.event_log = event_log;
     state.follow_mode = true;
     state.focus = FocusPane::Files;
-    state.detail_mode = DetailMode::File;
+    state.detail_mode = DetailMode::Diff;
     state.selected_session = 0;
     state.selected_file = 0;
     state.last_refresh_at_ms = now - 120_000;
@@ -120,22 +120,32 @@ fn sample_state() -> RuntimeState {
     state.set_detected_agents(vec![
         DetectedAgent {
             key: "codex:4211".to_string(),
-            vendor: "codex".to_string(),
+            name: "Codex".to_string(),
+            vendor: "OpenAI".to_string(),
+            icon: "◈".to_string(),
             pid: 4211,
             cwd: Some("/tmp/project".to_string()),
             cpu_percent: 2.5,
             mem_mb: 128.0,
             uptime_seconds: 95,
+            status: "ACTIVE".to_string(),
+            confidence: 80,
+            project: "project".to_string(),
             command: "codex --cwd /tmp/project".to_string(),
         },
         DetectedAgent {
             key: "claude:9001".to_string(),
-            vendor: "claude".to_string(),
+            name: "Claude".to_string(),
+            vendor: "Anthropic".to_string(),
+            icon: "◆".to_string(),
             pid: 9001,
             cwd: Some("/tmp/elsewhere".to_string()),
             cpu_percent: 0.1,
             mem_mb: 96.0,
             uptime_seconds: 4100,
+            status: "IDLE".to_string(),
+            confidence: 80,
+            project: "elsewhere".to_string(),
             command: "claude --cwd /tmp/elsewhere".to_string(),
         },
     ]);
@@ -506,7 +516,7 @@ fn detected_agents_attach_to_session_when_match_is_unique() {
 
     assert_eq!(session.agent_summary.as_deref(), Some("agent codex#4211"));
     assert_eq!(state.unmatched_agents().len(), 1);
-    assert_eq!(state.unmatched_agents()[0].vendor, "claude");
+    assert_eq!(state.unmatched_agents()[0].name, "Claude");
 }
 
 #[test]
@@ -515,22 +525,32 @@ fn ambiguous_agents_become_candidates_instead_of_false_matches() {
     state.set_detected_agents(vec![
         DetectedAgent {
             key: "codex:4211".to_string(),
-            vendor: "codex".to_string(),
+            name: "Codex".to_string(),
+            vendor: "OpenAI".to_string(),
+            icon: "◈".to_string(),
             pid: 4211,
             cwd: Some("/tmp/project".to_string()),
             cpu_percent: 2.5,
             mem_mb: 128.0,
             uptime_seconds: 95,
+            status: "ACTIVE".to_string(),
+            confidence: 80,
+            project: "project".to_string(),
             command: "codex --cwd /tmp/project".to_string(),
         },
         DetectedAgent {
             key: "codex:4212".to_string(),
-            vendor: "codex".to_string(),
+            name: "Codex".to_string(),
+            vendor: "OpenAI".to_string(),
+            icon: "◈".to_string(),
             pid: 4212,
             cwd: Some("/tmp/project".to_string()),
             cpu_percent: 0.4,
             mem_mb: 64.0,
             uptime_seconds: 120,
+            status: "IDLE".to_string(),
+            confidence: 80,
+            project: "project".to_string(),
             command: "codex --cwd /tmp/project".to_string(),
         },
     ]);
@@ -560,5 +580,5 @@ fn detected_agent_stats_are_stored_on_runtime_state() {
     assert_eq!(state.agent_stats.active, 1);
     assert_eq!(state.agent_stats.idle, 1);
     assert!((state.agent_stats.total_mem_mb - 224.0).abs() < f32::EPSILON);
-    assert_eq!(state.agent_stats.by_vendor.get("codex"), Some(&1));
+    assert_eq!(state.agent_stats.by_vendor.get("OpenAI"), Some(&1));
 }

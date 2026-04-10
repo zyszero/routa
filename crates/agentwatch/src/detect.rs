@@ -8,7 +8,7 @@ const ACTIVE_CPU_THRESHOLD: f32 = 1.0;
 
 pub fn scan_agents(repo_root: &str) -> Result<Vec<DetectedAgent>> {
     let output = Command::new("ps")
-        .args(["-axo", "pid=,ppid=,%cpu=,rss=,etime=,command="])
+        .args(["-axo", "pid=,ppid=,%cpu=,rss=,etime=,comm=,args="])
         .output()
         .context("run ps for agent detection")?;
     if !output.status.success() {
@@ -25,7 +25,19 @@ pub fn scan_agents(repo_root: &str) -> Result<Vec<DetectedAgent>> {
         by_key.entry(agent.key.clone()).or_insert(agent);
     }
 
-    Ok(by_key.into_values().take(MAX_AGENTS).collect())
+    let mut agents: Vec<_> = by_key.into_values().collect();
+    agents.sort_by(|a, b| {
+        agent_rank(b, repo_root)
+            .cmp(&agent_rank(a, repo_root))
+            .then_with(|| {
+                b.cpu_percent
+            .partial_cmp(&a.cpu_percent)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .then_with(|| a.pid.cmp(&b.pid))
+    });
+    agents.truncate(MAX_AGENTS);
+    Ok(agents)
 }
 
 pub fn calculate_stats(agents: &[DetectedAgent]) -> AgentStats {
@@ -53,53 +65,93 @@ pub fn calculate_stats(agents: &[DetectedAgent]) -> AgentStats {
     }
 }
 
-fn parse_agent_line(line: &str, repo_root: &str) -> Option<DetectedAgent> {
-    let mut parts = line.trim().splitn(6, char::is_whitespace);
+fn parse_agent_line(line: &str, _repo_root: &str) -> Option<DetectedAgent> {
+    let mut parts = line.trim().splitn(7, char::is_whitespace);
     let pid = parts.next()?.trim().parse::<u32>().ok()?;
     let _ppid = parts.next()?;
     let cpu_percent = parts.next()?.trim().parse::<f32>().ok()?;
     let rss_kb = parts.next()?.trim().parse::<f32>().ok()?;
     let etime = parts.next()?.trim();
-    let command = parts.next()?.trim().to_string();
-    let vendor = classify_vendor(&command)?;
+    let comm = parts.next()?.trim();
+    let args = parts.next().unwrap_or(comm).trim();
+    let command = args.to_string();
+    let (name, vendor, icon) = classify_vendor(comm, args)?;
 
-    let cwd = detect_cwd(pid);
-    let relevant = command.contains(repo_root)
-        || cwd
-            .as_deref()
-            .is_some_and(|path| path == repo_root || path.starts_with(&format!("{repo_root}/")));
-    if !relevant {
-        return None;
-    }
+    let cwd = detect_cwd(pid).or_else(|| detect_cwd_from_command(&command));
+
+    let project = cwd
+        .as_deref()
+        .map(extract_project)
+        .unwrap_or_else(|| "-".to_string());
 
     Some(DetectedAgent {
         key: format!("{vendor}:{pid}"),
+        name: name.to_string(),
         vendor: vendor.to_string(),
+        icon: icon.to_string(),
         pid,
         cwd,
         cpu_percent,
         mem_mb: rss_kb / 1024.0,
         uptime_seconds: parse_etime_seconds(etime)?,
+        status: if cpu_percent >= ACTIVE_CPU_THRESHOLD {
+            "ACTIVE".to_string()
+        } else {
+            "IDLE".to_string()
+        },
+        confidence: 80,
+        project,
         command,
     })
 }
 
-fn classify_vendor(command: &str) -> Option<&'static str> {
-    let lower = command.to_ascii_lowercase();
+fn agent_rank(agent: &DetectedAgent, repo_root: &str) -> (u8, u8) {
+    let local = agent
+        .cwd
+        .as_deref()
+        .is_some_and(|cwd| cwd == repo_root || cwd.starts_with(&format!("{repo_root}/")));
+    let same_project = agent.project == extract_project(repo_root);
+    (u8::from(local), u8::from(same_project))
+}
+
+fn classify_vendor(comm: &str, command: &str) -> Option<(&'static str, &'static str, &'static str)> {
+    let lower = format!("{comm} {command}").to_ascii_lowercase();
     if lower.contains("codex") {
-        Some("codex")
+        Some(("Codex", "OpenAI", "◈"))
     } else if lower.contains("claude") {
-        Some("claude")
+        Some(("Claude", "Anthropic", "◆"))
     } else if lower.contains("cursor") {
-        Some("cursor")
+        Some(("Cursor", "Cursor", "⌘"))
     } else if lower.contains("copilot") {
-        Some("copilot")
+        Some(("Copilot", "GitHub", "⬡"))
     } else if lower.contains("gemini") {
-        Some("gemini")
+        Some(("Gemini", "Google", "✦"))
     } else if lower.contains("aider") {
-        Some("aider")
+        Some(("Aider", "Aider", "⚡"))
     } else {
         None
+    }
+}
+
+pub fn extract_project(cwd: &str) -> String {
+    cwd.split('/')
+        .rfind(|segment| !segment.is_empty())
+        .unwrap_or("-")
+        .to_string()
+}
+
+pub fn format_uptime(secs: u64) -> String {
+    let days = secs / 86_400;
+    let hours = (secs % 86_400) / 3600;
+    let minutes = (secs % 3600) / 60;
+    let seconds = secs % 60;
+
+    if days > 0 {
+        format!("{days}d {hours:02}:{minutes:02}:{seconds:02}")
+    } else if hours > 0 {
+        format!("{hours:02}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{minutes:02}:{seconds:02}")
     }
 }
 
@@ -115,6 +167,17 @@ fn detect_cwd(pid: u32) -> Option<String> {
     stdout
         .lines()
         .find_map(|line| line.strip_prefix('n').map(|value| value.to_string()))
+}
+
+fn detect_cwd_from_command(command: &str) -> Option<String> {
+    let tokens: Vec<_> = command.split_whitespace().collect();
+    for window in tokens.windows(2) {
+        match window {
+            ["--cwd", path] | ["-C", path] => return Some(path.trim_matches('"').to_string()),
+            _ => {}
+        }
+    }
+    None
 }
 
 fn parse_etime_seconds(value: &str) -> Option<u64> {
@@ -146,16 +209,39 @@ mod tests {
     fn classify_known_agent_vendor() {
         assert_eq!(
             parse_agent_line(
-                "123 1 12.5 204800 01:23 /usr/local/bin/codex --cwd /Users/phodal/ai/routa-js",
+                "123 1 12.5 204800 01:23 codex-aarch64-apple-darwin /usr/local/bin/codex-aarch64-apple-darwin --cwd /Users/phodal/ai/routa-js",
                 "/Users/phodal/ai/routa-js"
             )
             .map(|agent| (
+                agent.name,
                 agent.vendor,
+                agent.project,
                 agent.cpu_percent,
                 agent.mem_mb as u32,
-                agent.uptime_seconds
+                agent.uptime_seconds,
+                agent.status
             )),
-            Some(("codex".to_string(), 12.5, 200, 83))
+            Some((
+                "Codex".to_string(),
+                "OpenAI".to_string(),
+                "routa-js".to_string(),
+                12.5,
+                200,
+                83,
+                "ACTIVE".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn classify_binary_name_variants_as_codex() {
+        assert_eq!(
+            parse_agent_line(
+                "321 1 0.0 1024 00:03 codex-aarch64-apple-darwin codex-aarch64-apple-darwin",
+                "/tmp/project"
+            )
+            .map(|agent| (agent.name, agent.vendor)),
+            Some(("Codex".to_string(), "OpenAI".to_string()))
         );
     }
 
@@ -176,22 +262,32 @@ mod tests {
         let stats = calculate_stats(&[
             DetectedAgent {
                 key: "codex:1".to_string(),
-                vendor: "codex".to_string(),
+                name: "Codex".to_string(),
+                vendor: "OpenAI".to_string(),
+                icon: "◈".to_string(),
                 pid: 1,
                 cwd: None,
                 cpu_percent: 3.5,
                 mem_mb: 120.0,
                 uptime_seconds: 10,
+                status: "ACTIVE".to_string(),
+                confidence: 80,
+                project: "-".to_string(),
                 command: "codex".to_string(),
             },
             DetectedAgent {
                 key: "claude:2".to_string(),
-                vendor: "claude".to_string(),
+                name: "Claude".to_string(),
+                vendor: "Anthropic".to_string(),
+                icon: "◆".to_string(),
                 pid: 2,
                 cwd: None,
                 cpu_percent: 0.2,
                 mem_mb: 80.0,
                 uptime_seconds: 20,
+                status: "IDLE".to_string(),
+                confidence: 80,
+                project: "-".to_string(),
                 command: "claude".to_string(),
             },
         ]);
@@ -201,6 +297,13 @@ mod tests {
         assert_eq!(stats.idle, 1);
         assert!((stats.total_cpu - 3.7).abs() < f32::EPSILON);
         assert!((stats.total_mem_mb - 200.0).abs() < f32::EPSILON);
-        assert_eq!(stats.by_vendor.get("codex"), Some(&1));
+        assert_eq!(stats.by_vendor.get("OpenAI"), Some(&1));
+    }
+
+    #[test]
+    fn format_uptime_matches_agentwatch_style() {
+        assert_eq!(format_uptime(30), "00:30");
+        assert_eq!(format_uptime(3661), "01:01:01");
+        assert_eq!(format_uptime(90_061), "1d 01:01:01");
     }
 }

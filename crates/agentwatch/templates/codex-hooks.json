@@ -30,11 +30,29 @@
             "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex PreToolUse'"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|Read|Grep|Glob|Search|LS",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex PreToolUse'"
+          }
+        ]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex PostToolUse'"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|Read|Grep|Glob|Search|LS",
         "hooks": [
           {
             "type": "command",

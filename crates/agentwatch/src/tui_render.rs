@@ -2,7 +2,7 @@ use super::*;
 use crate::state::{FileListMode, FocusPane};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
-use ratatui::text::{Line, Span};
+use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap};
 use std::path::Path;
 
@@ -67,18 +67,18 @@ pub(super) fn render(
     let columns = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(28),
-            Constraint::Percentage(34),
-            Constraint::Percentage(38),
+            Constraint::Percentage(25),
+            Constraint::Percentage(42),
+            Constraint::Percentage(33),
         ])
         .split(outer[1]);
     let center = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(62), Constraint::Percentage(38)])
+        .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
         .split(columns[1]);
 
     render_title_bar(frame, outer[0], state);
-    render_sessions(frame, columns[0], state);
+    render_agents_panel(frame, columns[0], state);
     render_files(frame, center[0], state, cache);
     render_details_panel(frame, center[1], state, cache);
     render_preview_panel(frame, columns[2], state, cache);
@@ -86,109 +86,23 @@ pub(super) fn render(
     render_footer(frame, outer[3], state);
 }
 
-fn render_sessions(frame: &mut Frame, area: ratatui::layout::Rect, state: &RuntimeState) {
+fn render_agents_panel(frame: &mut Frame, area: ratatui::layout::Rect, state: &RuntimeState) {
     let colors = palette(state.theme_mode);
-    let outer_block = panel_block("Sessions", state.focus == FocusPane::Sessions, colors);
+    let outer_block = panel_block("Agents", false, colors);
     let inner = outer_block.inner(area);
     frame.render_widget(outer_block, area);
     let split = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(6), Constraint::Length(5)])
+        .constraints([Constraint::Length(2), Constraint::Min(6)])
         .split(inner);
-    let items: Vec<ListItem> = state
-        .session_items()
-        .iter()
-        .enumerate()
-        .map(|(idx, session)| {
-            let selected = idx == state.selected_session;
-            let pane = session
-                .tmux_pane
-                .clone()
-                .unwrap_or_else(|| if session.is_unknown_bucket { "?" } else { "-" }.to_string());
-            let marker = if selected { ">" } else { " " };
-            let primary = Line::from(vec![
-                Span::styled(
-                    format!("{marker} {}", shorten_path(&session.display_name, 22)),
-                    row_style(selected, state.focus == FocusPane::Sessions, colors)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(" "),
-                status_badge(&session.status),
-            ]);
-            let secondary = Line::from(vec![
-                Span::styled(
-                    if session.is_unknown_bucket {
-                        "watch-only owner".to_string()
-                    } else {
-                        shorten_path(session.model.as_deref().unwrap_or("-"), 12)
-                    },
-                    Style::default().fg(colors.accent),
-                ),
-                Span::raw("  "),
-                Span::styled(format!("pane {pane}"), Style::default().fg(colors.muted)),
-                Span::raw("  "),
-                Span::styled(
-                    format!("{} ago", time_ago(session.last_seen_at_ms)),
-                    Style::default().fg(colors.muted),
-                ),
-            ]);
-            let tertiary = Line::from(vec![
-                Span::styled(
-                    format!("{} files", session.touched_files_count),
-                    Style::default().fg(colors.text),
-                ),
-                Span::raw("  "),
-                Span::styled(
-                    format!(
-                        "E:{} I:{} U:{}",
-                        session.exact_count, session.inferred_count, session.unknown_count
-                    ),
-                    Style::default().fg(if session.unknown_count > 0 {
-                        INFERRED
-                    } else {
-                        colors.muted
-                    }),
-                ),
-            ]);
-            let mut lines = vec![primary, secondary, tertiary];
-            if let Some(agent_summary) = session.agent_summary.as_deref() {
-                lines.push(Line::from(vec![
-                    Span::styled("  ", Style::default()),
-                    Span::styled(
-                        agent_summary.to_string(),
-                        Style::default().fg(colors.accent),
-                    ),
-                ]));
-            }
-            let mut item = ListItem::new(lines);
-            if selected {
-                item = item.style(row_style(
-                    selected,
-                    state.focus == FocusPane::Sessions,
-                    colors,
-                ));
-            }
-            item
-        })
-        .collect();
-
-    let list = List::new(items).block(
-        Block::default()
-            .borders(Borders::BOTTOM)
-            .border_style(Style::default().fg(colors.border))
-            .style(Style::default().bg(colors.surface)),
+    frame.render_widget(
+        Paragraph::new(render_agent_stats_line(state, colors))
+            .style(Style::default().bg(colors.surface).fg(colors.text)),
+        split[0],
     );
-    frame.render_widget(list, split[0]);
-
-    let agent_lines = render_agent_lines(state, colors);
+    let agent_lines = render_agent_rows(state, colors);
     frame.render_widget(
         Paragraph::new(agent_lines)
-            .block(
-                Block::default()
-                    .title("Agents")
-                    .borders(Borders::NONE)
-                    .style(Style::default().bg(colors.surface).fg(colors.text)),
-            )
             .style(Style::default().bg(colors.surface).fg(colors.text))
             .wrap(Wrap { trim: true }),
         split[1],
@@ -223,12 +137,17 @@ fn render_files(
             .style(Style::default().bg(colors.surface).fg(colors.muted)),
         split[1],
     );
-    let items: Vec<ListItem> = state
-        .file_items()
+    let visible_rows = split[2].height.saturating_sub(1) as usize;
+    let items_per_page = (visible_rows / 3).max(1);
+    let all_files = state.file_items();
+    let start = file_window_start(all_files.len(), state.selected_file, items_per_page);
+    let end = (start + items_per_page).min(all_files.len());
+    let items: Vec<ListItem> = all_files[start..end]
         .iter()
         .enumerate()
         .map(|(idx, file)| {
-            let selected = idx == state.selected_file;
+            let absolute_idx = start + idx;
+            let selected = absolute_idx == state.selected_file;
             let diff_stat = cache
                 .diff_stat(file)
                 .cloned()
@@ -349,30 +268,17 @@ fn render_details_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
                 Style::default().fg(colors.text),
             ),
         ]));
-        lines.push(Line::from(Span::styled(
-            "Why",
-            Style::default()
-                .fg(colors.accent)
-                .add_modifier(Modifier::BOLD),
-        )));
-        for reason in attribution_reason_lines(state, file).into_iter().take(3) {
-            lines.push(Line::from(vec![
-                Span::styled("- ", Style::default().fg(colors.muted)),
-                Span::styled(reason, Style::default().fg(colors.text)),
-            ]));
-        }
-        let candidates = attribution_candidate_lines(state, file);
-        if !candidates.is_empty() {
+        if !file.recent_events.is_empty() {
             lines.push(Line::from(Span::styled(
-                "Candidates",
+                "Recent",
                 Style::default()
                     .fg(colors.accent)
                     .add_modifier(Modifier::BOLD),
             )));
-            for candidate in candidates.into_iter().take(3) {
+            for event in file.recent_events.iter().take(3) {
                 lines.push(Line::from(vec![
                     Span::styled("- ", Style::default().fg(colors.muted)),
-                    Span::styled(candidate, Style::default().fg(colors.text)),
+                    Span::styled(event.clone(), Style::default().fg(colors.text)),
                 ]));
             }
         }
@@ -381,12 +287,6 @@ fn render_details_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
             "No file selected",
             Style::default().fg(colors.muted),
         )));
-        if let Some(session_id) = state.selected_session_id() {
-            lines.push(Line::from(vec![
-                Span::styled("Session: ", Style::default().fg(colors.muted)),
-                Span::styled(session_id, Style::default().fg(colors.accent)),
-            ]));
-        }
     }
 
     let block = panel_block("Details", false, colors);
@@ -405,32 +305,40 @@ fn render_preview_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
         DetailMode::File => "File Preview",
         DetailMode::Diff => "Diff Preview",
     };
-    let file_text = match state.detail_mode {
-        DetailMode::File => state
-            .selected_file()
-            .and_then(|file| {
-                cache
-                    .detail_text(file, DetailMode::File)
-                    .map(str::to_string)
-            })
-            .unwrap_or_else(|| "<loading file preview...>".to_string()),
-        DetailMode::Diff => state
-            .selected_file()
-            .and_then(|file| {
-                cache
-                    .detail_text(file, DetailMode::Diff)
-                    .map(str::to_string)
-            })
-            .unwrap_or_else(|| "<loading diff...>".to_string()),
+    let block = panel_block(title, state.focus == FocusPane::Detail, colors);
+    let text = if let Some(file) = state.selected_file() {
+        match cache.detail_text(file, state.detail_mode) {
+            Some(content) if !content.trim().is_empty() => match state.detail_mode {
+                DetailMode::File => highlight_code_text(
+                    Some(&file.rel_path),
+                    content,
+                    state.theme_mode,
+                ),
+                DetailMode::Diff => highlight_diff_text(
+                    Some(&file.rel_path),
+                    content,
+                    state.theme_mode,
+                ),
+            },
+            Some(_) => Text::from(Line::from(Span::styled(
+                "<empty>",
+                Style::default().fg(colors.muted),
+            ))),
+            None => Text::from(Line::from(Span::styled(
+                "loading preview...",
+                Style::default().fg(colors.muted),
+            ))),
+        }
+    } else {
+        Text::from(Line::from(Span::styled(
+            "No file selected",
+            Style::default().fg(colors.muted),
+        )))
     };
-    let file_path = state.selected_file().map(|file| file.rel_path.as_str());
-    let content = match state.detail_mode {
-        DetailMode::File => highlight_code_text(file_path, &file_text, state.theme_mode),
-        DetailMode::Diff => highlight_diff_text(file_path, &file_text, state.theme_mode),
-    };
+
     frame.render_widget(
-        Paragraph::new(content)
-            .block(panel_block(title, state.focus == FocusPane::Detail, colors))
+        Paragraph::new(text)
+            .block(block)
             .style(Style::default().bg(colors.surface).fg(colors.text))
             .wrap(Wrap { trim: false })
             .scroll((state.detail_scroll, 0)),
@@ -458,11 +366,7 @@ fn render_log(frame: &mut Frame, area: ratatui::layout::Rect, state: &RuntimeSta
 
 fn render_file_mode_tabs(state: &RuntimeState, width: u16) -> Line<'static> {
     let colors = palette(state.theme_mode);
-    let modes = [
-        FileListMode::BySession,
-        FileListMode::Global,
-        FileListMode::UnknownConflict,
-    ];
+    let modes = [FileListMode::Global, FileListMode::UnknownConflict];
     let mut spans = Vec::new();
     let compact = width < 34;
     for (idx, mode) in modes.iter().enumerate() {
@@ -470,9 +374,8 @@ fn render_file_mode_tabs(state: &RuntimeState, width: u16) -> Line<'static> {
             spans.push(Span::raw("  "));
         }
         let label = match (mode, compact) {
-            (FileListMode::BySession, false) => " BY SESSION ",
-            (FileListMode::BySession, true) => " SESSION ",
-            (FileListMode::Global, _) => " GLOBAL ",
+            (FileListMode::Global, false) => " ALL FILES ",
+            (FileListMode::Global, true) => " FILES ",
             (FileListMode::UnknownConflict, false) => " REVIEW UNKNOWN ",
             (FileListMode::UnknownConflict, true) => " UNKNOWN ",
         };
@@ -496,28 +399,11 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, state: &Runtime
         Span::styled(" focus  ", Style::default().fg(colors.muted)),
         Span::styled("↑↓", Style::default().fg(colors.accent)),
         Span::styled(" select  ", Style::default().fg(colors.muted)),
-        Span::styled("Enter", Style::default().fg(colors.accent)),
-        Span::styled(" preview  ", Style::default().fg(colors.muted)),
-        Span::styled("D", Style::default().fg(colors.accent)),
-        Span::styled(" diff  ", Style::default().fg(colors.muted)),
-        Span::styled("/", Style::default().fg(colors.accent)),
-        Span::styled(
-            if state.search_query.is_empty() {
-                " search  "
-            } else {
-                " search:on  "
-            },
-            Style::default().fg(colors.muted),
-        ),
         Span::styled("u", Style::default().fg(colors.accent)),
         Span::styled(" unknown  ", Style::default().fg(colors.muted)),
-        Span::styled("a", Style::default().fg(colors.accent)),
-        Span::styled(" assign  ", Style::default().fg(colors.muted)),
-        Span::styled("o", Style::default().fg(colors.accent)),
-        Span::styled(" open  ", Style::default().fg(colors.muted)),
-        Span::styled("g", Style::default().fg(colors.accent)),
-        Span::styled(" git diff  ", Style::default().fg(colors.muted)),
-        Span::styled("PgUp/PgDn", Style::default().fg(colors.accent)),
+        Span::styled("d", Style::default().fg(colors.accent)),
+        Span::styled(" preview/diff  ", Style::default().fg(colors.muted)),
+        Span::styled("Pg", Style::default().fg(colors.accent)),
         Span::styled(" scroll  ", Style::default().fg(colors.muted)),
         Span::styled("f", Style::default().fg(colors.accent)),
         Span::styled(
@@ -539,71 +425,6 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, state: &Runtime
         Paragraph::new(line).style(Style::default().bg(colors.bg).fg(colors.text)),
         area,
     );
-}
-
-fn render_agent_lines(state: &RuntimeState, colors: UiPalette) -> Vec<Line<'static>> {
-    let summary = render_agent_stats_line(state, colors);
-    let unmatched = state.unmatched_agents();
-    if unmatched.is_empty() {
-        if state.detected_agents.is_empty() {
-            return vec![
-                summary,
-                Line::from(Span::styled(
-                    "no repo-local agents detected",
-                    Style::default().fg(colors.muted),
-                )),
-            ];
-        }
-        return vec![
-            summary,
-            Line::from(Span::styled(
-                "all repo-local agents matched to sessions",
-                Style::default().fg(colors.muted),
-            )),
-        ];
-    }
-
-    let mut lines = vec![summary];
-    lines.extend(unmatched.iter().take(3).map(|agent| {
-        let cwd = agent
-            .cwd
-            .as_deref()
-            .map(short_cwd_label)
-            .unwrap_or_else(|| "-".to_string());
-        let command_label = short_command_label(&agent.command);
-        Line::from(vec![
-            Span::styled(
-                agent.vendor.to_ascii_uppercase(),
-                Style::default().fg(colors.accent),
-            ),
-            Span::raw(" "),
-            Span::styled(format!("#{}", agent.pid), Style::default().fg(colors.text)),
-            Span::raw(" "),
-            Span::styled(
-                format!("{:>4.1}%cpu", agent.cpu_percent),
-                Style::default().fg(if agent.cpu_percent >= 1.0 {
-                    ACTIVE
-                } else {
-                    colors.muted
-                }),
-            ),
-            Span::raw(" "),
-            Span::styled(
-                format!("{:.0}MB", agent.mem_mb),
-                Style::default().fg(colors.text),
-            ),
-            Span::raw(" "),
-            Span::styled(
-                short_uptime(agent.uptime_seconds),
-                Style::default().fg(colors.muted),
-            ),
-            Span::raw(" "),
-            Span::styled(cwd, Style::default().fg(colors.muted)),
-            Span::raw(" "),
-            Span::styled(command_label, Style::default().fg(colors.muted)),
-        ])
-    }));
-    lines
 }
 
 fn render_agent_stats_line(state: &RuntimeState, colors: UiPalette) -> Line<'static> {
@@ -646,22 +467,70 @@ fn render_agent_stats_line(state: &RuntimeState, colors: UiPalette) -> Line<'sta
     ])
 }
 
-fn short_cwd_label(cwd: &str) -> String {
-    Path::new(cwd)
-        .file_name()
-        .map(|name| name.to_string_lossy().to_string())
-        .unwrap_or_else(|| cwd.to_string())
+fn render_agent_rows(state: &RuntimeState, colors: UiPalette) -> Vec<Line<'static>> {
+    if state.detected_agents.is_empty() {
+        return vec![Line::from(Span::styled(
+            "no repo-local agents detected",
+            Style::default().fg(colors.muted),
+        ))];
+    }
+
+    state
+        .detected_agents
+        .iter()
+        .flat_map(|agent| {
+            let status_color = if agent.status == "ACTIVE" {
+                ACTIVE
+            } else {
+                IDLE
+            };
+            [
+                Line::from(vec![
+                    Span::styled(
+                        pad_left(&agent.pid.to_string(), 5),
+                        Style::default().fg(colors.muted),
+                    ),
+                    Span::raw(" "),
+                    Span::styled(
+                        format!("{} {}", agent.icon, agent.name),
+                        Style::default()
+                            .fg(colors.accent)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw("  "),
+                    Span::styled(agent.status.clone(), Style::default().fg(status_color)),
+                ]),
+                Line::from(vec![
+                    Span::styled("cpu ", Style::default().fg(colors.muted)),
+                    Span::styled(format!("{:>4.1}%", agent.cpu_percent), Style::default().fg(status_color)),
+                    Span::raw("  "),
+                    Span::styled("mem ", Style::default().fg(colors.muted)),
+                    Span::styled(format!("{:.0}MB", agent.mem_mb), Style::default().fg(colors.text)),
+                    Span::raw("  "),
+                    Span::styled("up ", Style::default().fg(colors.muted)),
+                    Span::styled(
+                        crate::detect::format_uptime(agent.uptime_seconds),
+                        Style::default().fg(colors.text),
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::styled("proj ", Style::default().fg(colors.muted)),
+                    Span::styled(shorten_path(&agent.project, 10), Style::default().fg(colors.text)),
+                    Span::raw("  "),
+                    Span::styled("conf ", Style::default().fg(colors.muted)),
+                    Span::styled(
+                        format!("{}%", agent.confidence),
+                        Style::default().fg(INFERRED),
+                    ),
+                ]),
+                Line::from(""),
+            ]
+        })
+        .collect()
 }
 
 fn render_title_bar(frame: &mut Frame, area: Rect, state: &RuntimeState) {
     let colors = palette(state.theme_mode);
-    let search = if state.search_query.is_empty() {
-        String::new()
-    } else if state.search_active {
-        format!("  search:/{}_", state.search_query)
-    } else {
-        format!("  search:/{}", state.search_query)
-    };
     let dirty = state.file_items().len();
     let unknown = state
         .file_items()
@@ -721,7 +590,6 @@ fn render_title_bar(frame: &mut Frame, area: Rect, state: &RuntimeState) {
             format!("synced {} ago  ", time_ago(state.last_refresh_at_ms)),
             Style::default().fg(colors.muted).bg(colors.surface),
         ),
-        Span::styled(search, Style::default().fg(colors.muted).bg(colors.surface)),
     ]);
     frame.render_widget(
         Paragraph::new(line).style(Style::default().bg(colors.surface)),
@@ -903,10 +771,17 @@ fn split_event_message(message: &str) -> (String, String) {
 
 fn current_view_label(state: &RuntimeState) -> &'static str {
     match state.file_list_mode {
-        FileListMode::BySession => "SESSION VIEW",
-        FileListMode::Global => "GLOBAL VIEW",
+        FileListMode::Global => "FILES VIEW",
         FileListMode::UnknownConflict => "REVIEW UNKNOWN",
     }
+}
+
+fn file_window_start(total: usize, selected: usize, page_size: usize) -> usize {
+    if total <= page_size {
+        return 0;
+    }
+    let centered = selected.saturating_sub(page_size / 2);
+    centered.min(total.saturating_sub(page_size))
 }
 
 fn confidence_short_label(file: &crate::models::FileView) -> String {
@@ -929,90 +804,11 @@ fn confidence_summary_label(file: &crate::models::FileView) -> &'static str {
     }
 }
 
-fn attribution_reason_lines(state: &RuntimeState, file: &crate::models::FileView) -> Vec<String> {
-    if file.conflicted {
-        return vec![
-            "multiple sessions touched this file".to_string(),
-            format!("{} candidate owners observed", file.touched_by.len()),
-        ];
-    }
-    match file.confidence {
-        crate::models::AttributionConfidence::Exact => vec![
-            "matched a hook event with concrete file paths".to_string(),
-            "session and file write aligned directly".to_string(),
-        ],
-        crate::models::AttributionConfidence::Inferred => vec![
-            "watcher saw the change before a direct file hook".to_string(),
-            "single active session existed inside the inference window".to_string(),
-        ],
-        crate::models::AttributionConfidence::Unknown => {
-            let active_sessions = state
-                .sessions
-                .values()
-                .filter(|session| session.status == "active")
-                .count();
-            let mut lines = vec!["watcher detected the file change only".to_string()];
-            if active_sessions == 0 {
-                lines.push("no active session hook matched in the window".to_string());
-            } else if active_sessions > 1 {
-                lines.push(format!(
-                    "{active_sessions} active sessions overlapped the window"
-                ));
-            } else {
-                lines.push("no concrete file-level hook matched the change".to_string());
-            }
-            lines
-        }
-    }
-}
-
-fn attribution_candidate_lines(
-    state: &RuntimeState,
-    file: &crate::models::FileView,
-) -> Vec<String> {
-    let parent_dir = Path::new(&file.rel_path)
-        .parent()
-        .map(|parent| parent.to_string_lossy().to_string());
-    let mut candidates: Vec<_> = state
-        .sessions
-        .values()
-        .filter(|session| session.status != "stopped")
-        .map(|session| {
-            let same_dir_count = parent_dir
-                .as_deref()
-                .map(|dir| {
-                    session
-                        .touched_files
-                        .iter()
-                        .filter(|path| path.starts_with(dir))
-                        .count()
-                })
-                .unwrap_or(0);
-            ((same_dir_count, session.last_seen_at_ms), session)
-        })
-        .collect();
-    candidates.sort_by(|a, b| b.0.cmp(&a.0));
-    candidates
-        .into_iter()
-        .take(3)
-        .map(|((same_dir_count, _), session)| {
-            if same_dir_count > 0 {
-                format!(
-                    "{} · {} ago · {} same-dir",
-                    session_display_label(session),
-                    time_ago(session.last_seen_at_ms),
-                    same_dir_count
-                )
-            } else {
-                format!(
-                    "{} · {} ago · {} files",
-                    session_display_label(session),
-                    time_ago(session.last_seen_at_ms),
-                    session.touched_files.len()
-                )
-            }
-        })
-        .collect()
+fn session_display_label(session: &crate::models::SessionView) -> String {
+    session
+        .display_name
+        .clone()
+        .unwrap_or_else(|| shorten_path(&session.session_id, 14))
 }
 
 fn split_display_path(path: &str) -> (String, String) {
@@ -1033,13 +829,6 @@ fn split_display_path(path: &str) -> (String, String) {
         })
         .unwrap_or_else(|| "/".to_string());
     (file_name, parent)
-}
-
-fn session_display_label(session: &crate::models::SessionView) -> String {
-    session
-        .display_name
-        .clone()
-        .unwrap_or_else(|| shorten_path(&session.session_id, 14))
 }
 
 fn pad_right(value: &str, width: usize) -> String {
@@ -1105,23 +894,6 @@ fn confidence_text_color(label: &str) -> Color {
     }
 }
 
-fn status_badge(status: &str) -> Span<'static> {
-    let (label, color) = match status {
-        "active" => (" ACTIVE ", ACTIVE),
-        "stopped" => (" STOP ", STOPPED),
-        "unknown" => (" UNKNOWN ", IDLE),
-        "idle" => (" IDLE ", IDLE),
-        _ => (" IDLE ", IDLE),
-    };
-    Span::styled(
-        label,
-        Style::default()
-            .fg(Color::Rgb(18, 22, 28))
-            .bg(color)
-            .add_modifier(Modifier::BOLD),
-    )
-}
-
 fn source_color(source: crate::models::EventSource) -> Color {
     match source {
         crate::models::EventSource::Hook => Color::Rgb(126, 156, 181),
@@ -1137,24 +909,4 @@ fn shorten_path(path: &str, max_len: usize) -> String {
     }
     let keep = max_len.saturating_sub(3);
     format!("...{}", &path[path.len().saturating_sub(keep)..])
-}
-
-fn short_uptime(seconds: u64) -> String {
-    if seconds < 60 {
-        format!("{seconds}s")
-    } else if seconds < 3600 {
-        format!("{}m", seconds / 60)
-    } else if seconds < 86_400 {
-        format!("{}h", seconds / 3600)
-    } else {
-        format!("{}d", seconds / 86_400)
-    }
-}
-
-fn short_command_label(command: &str) -> String {
-    let token = command.split_whitespace().next().unwrap_or(command);
-    Path::new(token)
-        .file_name()
-        .map(|name| name.to_string_lossy().to_string())
-        .unwrap_or_else(|| shorten_path(token, 10))
 }
