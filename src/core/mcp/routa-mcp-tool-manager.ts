@@ -266,11 +266,11 @@ export class RoutaMcpToolManager {
   private registerUpdateTask(server: McpServer) {
     server.tool(
       "update_task",
-      "Atomically update task fields with optimistic locking. Provide expectedVersion from a prior read to detect conflicts.",
+      "Atomically update structured task fields with optimistic locking. Use this for story-readiness fields such as scope, acceptance criteria, verification commands, and test cases. agentId is optional for Kanban sessions.",
       {
         taskId: z.string().describe("ID of the task to update"),
         expectedVersion: z.number().optional().describe("Expected version for optimistic locking (from prior task read)"),
-        agentId: z.string().describe("ID of the agent performing the update"),
+        agentId: z.string().optional().describe("ID of the agent performing the update (optional in Kanban sessions)"),
         title: z.string().optional().describe("Update the task title"),
         objective: z.string().optional().describe("Update the task objective"),
         scope: z.string().optional().describe("Update the task scope"),
@@ -280,6 +280,7 @@ export class RoutaMcpToolManager {
         verificationReport: z.string().optional().describe("Set verification report"),
         assignedTo: z.string().optional().describe("Assign to agent ID"),
         acceptanceCriteria: z.array(z.string()).optional().describe("Update acceptance criteria"),
+        verificationCommands: z.array(z.string()).optional().describe("Update verification commands"),
         testCases: z.array(z.string()).optional().describe("Update test cases"),
       },
       async (params) => {
@@ -288,7 +289,7 @@ export class RoutaMcpToolManager {
           taskId,
           expectedVersion,
           updates,
-          agentId,
+          agentId: agentId ?? "system",
         });
         return this.toMcpResult(result);
       }
@@ -1030,7 +1031,7 @@ Note: taskId must be a UUID from create_task, not a task name.`,
   private registerUpdateCard(server: McpServer) {
     server.tool(
       "update_card",
-      "Update card fields (title, description, comment, priority, labels). From dev onward, prefer comment because description is frozen.",
+      "Update card fields (title, description, comment, priority, labels). From dev onward, prefer comment because description is frozen. For story-readiness fields such as scope, acceptance criteria, verification commands, or test cases, use update_task instead.",
       {
         cardId: z.string().describe("Card ID"),
         title: z.string().optional().describe("New title"),

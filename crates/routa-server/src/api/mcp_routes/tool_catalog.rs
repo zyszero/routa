@@ -25,6 +25,7 @@ pub(super) fn tool_allowed_for_profile(name: &str, profile: Option<&str>) -> boo
                 | "decompose_tasks"
                 | "search_cards"
                 | "list_cards_by_column"
+                | "update_task"
                 | "update_card"
                 | "move_card"
                 | "request_previous_lane_handoff"
@@ -103,6 +104,21 @@ fn build_tool_list_inner() -> Vec<serde_json::Value> {
                 "reason": { "type": "string", "description": "Reason for status change" }
             },
             "required": ["taskId", "status", "agentId"]
+        })),
+        tool_def("update_task", "Atomically update structured task fields. Use this for story-readiness fields such as scope, acceptance criteria, verification commands, and test cases. agentId is optional for Kanban sessions.", serde_json::json!({
+            "type": "object",
+            "properties": {
+                "taskId": { "type": "string", "description": "Task ID" },
+                "agentId": { "type": "string", "description": "Agent making the update (optional in Kanban sessions)" },
+                "title": { "type": "string", "description": "Updated task title" },
+                "objective": { "type": "string", "description": "Updated task objective" },
+                "scope": { "type": "string", "description": "Structured implementation scope" },
+                "acceptanceCriteria": { "type": "array", "items": { "type": "string" }, "description": "Structured acceptance criteria" },
+                "verificationCommands": { "type": "array", "items": { "type": "string" }, "description": "Runnable verification commands" },
+                "testCases": { "type": "array", "items": { "type": "string" }, "description": "Human-readable test cases" },
+                "status": { "type": "string", "enum": ["PENDING","IN_PROGRESS","REVIEW_REQUIRED","COMPLETED","NEEDS_FIX","BLOCKED","CANCELLED"] }
+            },
+            "required": ["taskId"]
         })),
         tool_def("get_my_task", "Get the task(s) assigned to the calling agent, including objective, scope, and acceptance criteria.", serde_json::json!({
             "type": "object",
@@ -293,7 +309,7 @@ fn build_tool_list_inner() -> Vec<serde_json::Value> {
             },
             "required": ["cardId", "targetColumnId"]
         })),
-        tool_def("update_card", "Update card fields (title, description, comment, priority, labels). From dev onward, use comment because description is frozen.", serde_json::json!({
+        tool_def("update_card", "Update card fields (title, description, comment, priority, labels). From dev onward, use comment because description is frozen. For story-readiness fields such as scope, acceptance criteria, verification commands, or test cases, use update_task instead.", serde_json::json!({
             "type": "object",
             "properties": {
                 "cardId": { "type": "string", "description": "Card ID" },
@@ -433,6 +449,7 @@ mod tests {
             "decompose_tasks",
             "search_cards",
             "list_cards_by_column",
+            "update_task",
             "update_card",
             "move_card",
             "request_previous_lane_handoff",

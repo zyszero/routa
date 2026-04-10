@@ -237,6 +237,7 @@ async fn api_mcp_kanban_profile_filters_tools_list() {
         "decompose_tasks",
         "search_cards",
         "list_cards_by_column",
+        "update_task",
         "update_card",
         "move_card",
         "request_previous_lane_handoff",
@@ -287,5 +288,86 @@ async fn api_mcp_kanban_profile_rejects_disallowed_tool_call() {
             .as_str()
             .is_some_and(|msg| msg.contains("Tool not allowed for MCP profile")),
         "expected MCP profile rejection message, got: {body}"
+    );
+}
+
+#[tokio::test]
+async fn api_mcp_kanban_profile_allows_update_task_for_story_readiness() {
+    let fixture = ApiFixture::new().await;
+
+    let create_response = fixture
+        .client
+        .post(fixture.endpoint("/api/tasks"))
+        .json(&json!({
+            "title": "Refine story contract",
+            "objective": "Clarify the card before dev",
+            "workspaceId": "default"
+        }))
+        .send()
+        .await
+        .expect("POST /api/tasks");
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+    let create_body = read_json(create_response, "create task response").await;
+    let task_id = create_body["task"]["id"]
+        .as_str()
+        .expect("created task should include id");
+
+    let (session_id, _) = fixture
+        .initialize_session(Some("mcpProfile=kanban-planning"))
+        .await;
+
+    let update_response = fixture
+        .client
+        .post(fixture.endpoint("/api/mcp"))
+        .header("mcp-session-id", &session_id)
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "id": "tools-call-update-task",
+            "method": "tools/call",
+            "params": {
+                "name": "update_task",
+                "arguments": {
+                    "taskId": task_id,
+                    "scope": "Touch only the kanban readiness path",
+                    "acceptanceCriteria": ["Gate lists missing structured fields"],
+                    "verificationCommands": ["npm run test -- kanban"],
+                    "testCases": ["Move to Dev is unblocked once fields exist"]
+                }
+            }
+        }))
+        .send()
+        .await
+        .expect("tools/call update_task");
+    assert_eq!(update_response.status(), StatusCode::OK);
+    let update_body = read_json(update_response, "update_task response").await;
+    let update_text = update_body["result"]["content"][0]["text"]
+        .as_str()
+        .expect("update_task should return text payload");
+    let update_json: Value = serde_json::from_str(update_text).expect("parse update_task payload");
+    assert_eq!(update_json["success"], json!(true));
+
+    let get_response = fixture
+        .client
+        .get(fixture.endpoint(&format!("/api/tasks/{task_id}")))
+        .send()
+        .await
+        .expect("GET /api/tasks/{id}");
+    assert_eq!(get_response.status(), StatusCode::OK);
+    let get_body = read_json(get_response, "get task after update_task").await;
+    assert_eq!(
+        get_body["task"]["scope"],
+        json!("Touch only the kanban readiness path")
+    );
+    assert_eq!(
+        get_body["task"]["acceptanceCriteria"],
+        json!(["Gate lists missing structured fields"])
+    );
+    assert_eq!(
+        get_body["task"]["verificationCommands"],
+        json!(["npm run test -- kanban"])
+    );
+    assert_eq!(
+        get_body["task"]["testCases"],
+        json!(["Move to Dev is unblocked once fields exist"])
     );
 }

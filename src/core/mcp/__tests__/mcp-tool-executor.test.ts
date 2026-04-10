@@ -92,6 +92,7 @@ describe("mcp-tool-executor artifact support", () => {
     expect(toolNames.has("decompose_tasks")).toBe(true);
     expect(toolNames.has("search_cards")).toBe(true);
     expect(toolNames.has("list_cards_by_column")).toBe(true);
+    expect(toolNames.has("update_task")).toBe(true);
     expect(toolNames.has("update_card")).toBe(true);
     expect(toolNames.has("move_card")).toBe(true);
     expect(toolNames.has("create_task")).toBe(false);

@@ -762,6 +762,7 @@ export class AgentTools {
       verificationReport?: string;
       assignedTo?: string;
       acceptanceCriteria?: string[];
+      verificationCommands?: string[];
       testCases?: string[];
     };
     agentId: string;
@@ -799,6 +800,7 @@ export class AgentTools {
     if (updates.verificationReport !== undefined) task.verificationReport = updates.verificationReport;
     if (updates.assignedTo !== undefined) task.assignedTo = updates.assignedTo;
     if (updates.acceptanceCriteria !== undefined) task.acceptanceCriteria = updates.acceptanceCriteria;
+    if (updates.verificationCommands !== undefined) task.verificationCommands = updates.verificationCommands;
     if (updates.testCases !== undefined) task.testCases = updates.testCases;
     task.updatedAt = new Date();
 

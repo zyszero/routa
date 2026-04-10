@@ -168,7 +168,7 @@ export async function executeMcpTool(
         await tools.updateTask({
           taskId: args.taskId as string,
           expectedVersion: args.expectedVersion as number | undefined,
-          agentId: args.agentId as string,
+          agentId: (args.agentId as string | undefined) ?? "system",
           updates: {
             title: args.title as string | undefined,
             objective: args.objective as string | undefined,
@@ -179,6 +179,7 @@ export async function executeMcpTool(
             verificationReport: args.verificationReport as string | undefined,
             assignedTo: args.assignedTo as string | undefined,
             acceptanceCriteria: args.acceptanceCriteria as string[] | undefined,
+            verificationCommands: args.verificationCommands as string[] | undefined,
             testCases: args.testCases as string[] | undefined,
           },
         })
@@ -939,13 +940,13 @@ export function getMcpToolDefinitions(
     },
     {
       name: "update_task",
-      description: "Atomically update task fields with optimistic locking. Provide expectedVersion to detect conflicts.",
+      description: "Atomically update structured task fields with optimistic locking. Use this for story-readiness fields such as scope, acceptance criteria, verification commands, and test cases. agentId is optional for Kanban sessions.",
       inputSchema: {
         type: "object",
         properties: {
           taskId: { type: "string", description: "Task ID" },
           expectedVersion: { type: "number", description: "Expected version for optimistic locking" },
-          agentId: { type: "string", description: "Agent performing the update" },
+          agentId: { type: "string", description: "Agent performing the update (optional in Kanban sessions)" },
           title: { type: "string" },
           objective: { type: "string" },
           scope: { type: "string" },
@@ -955,9 +956,10 @@ export function getMcpToolDefinitions(
           verificationReport: { type: "string" },
           assignedTo: { type: "string" },
           acceptanceCriteria: { type: "array", items: { type: "string" } },
+          verificationCommands: { type: "array", items: { type: "string" } },
           testCases: { type: "array", items: { type: "string" } },
         },
-        required: ["taskId", "agentId"],
+        required: ["taskId"],
       },
     },
     // ── Workspace tools ─────────────────────────────────────────────
@@ -1200,7 +1202,7 @@ export function getMcpToolDefinitions(
     },
     {
       name: "update_card",
-      description: "Update a Kanban card's title, description, comment, priority, or labels. From dev onward, use comment for progress notes because the story description is frozen.",
+      description: "Update a Kanban card's title, description, comment, priority, or labels. From dev onward, use comment for progress notes because the story description is frozen. For story-readiness fields such as scope, acceptance criteria, verification commands, or test cases, use update_task instead.",
       inputSchema: {
         type: "object",
         properties: {
