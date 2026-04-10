@@ -1336,7 +1336,9 @@ export function TeamRunPageClient() {
     [teamRuns, sessionId],
   );
   const isActiveSessionReady = session?.sessionId === sessionId;
-  const selectedTeamRunName = isActiveSessionReady ? session?.name : selectedTeamRun?.name ?? sessionId;
+  const selectedTeamRunName = isActiveSessionReady
+    ? (session?.name ?? sessionId)
+    : (selectedTeamRun?.name ?? sessionId);
   const showRunLoadingState = !isActiveSessionReady;
 
   const handleSwitchTeamRun = useCallback((nextSessionId: string) => {

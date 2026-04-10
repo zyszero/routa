@@ -12,12 +12,13 @@ import type {
   GitHubPRListItemInfo,
   KanbanAgentPromptHandler,
   KanbanBoardInfo,
+  KanbanDevSessionSupervisionInfo,
   SessionInfo,
   TaskInfo,
   WorktreeInfo,
 } from "../types";
 import { EMPTY_DRAFT, type TaskDraft } from "../kanban-create-modal";
-import { type ColumnAutomationConfig } from "./kanban-settings-modal";
+import { type ColumnAutomationConfig, type KanbanSettingsModalProps } from "./kanban-settings-modal";
 import { scheduleKanbanRefreshBurst } from "./kanban-agent-input";
 import {
   type KanbanSpecialistLanguage,
@@ -1501,7 +1502,7 @@ export function KanbanTab({
     openAgentPanel,
   };
 
-  const settingsModalProps = board ? {
+  const settingsModalProps: KanbanSettingsModalProps | undefined = board ? {
     board,
     columnAutomation,
     availableProviders,
@@ -1523,10 +1524,10 @@ export function KanbanTab({
       onRefresh();
     },
     onSave: async (
-      newColumns,
-      newColumnAutomation,
-      sessionConcurrencyLimit,
-      devSessionSupervision,
+      newColumns: KanbanBoardInfo["columns"],
+      newColumnAutomation: Record<string, ColumnAutomationConfig>,
+      sessionConcurrencyLimit: number,
+      devSessionSupervision: KanbanDevSessionSupervisionInfo,
     ) => {
       const updatedColumns = newColumns.map((col) => ({
         ...col,

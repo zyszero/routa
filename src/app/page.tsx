@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -72,7 +72,7 @@ function isTopLevelTeamRun(session: SessionInfo) {
   );
 }
 
-export default function HomePage() {
+function HomePageContent() {
   const router = useRouter();
   const workspacesHook = useWorkspaces();
   const acp = useAcp();
@@ -522,5 +522,20 @@ export default function HomePage() {
           onResetOnboarding={handleResetOnboarding}
         />
       </DesktopAppShell>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={(
+      <div className="desktop-theme flex h-screen items-center justify-center bg-desktop-bg-primary">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-desktop-accent border-t-transparent" />
+          <p className="text-sm text-desktop-text-secondary">Loading...</p>
+        </div>
+      </div>
+    )}>
+      <HomePageContent />
+    </Suspense>
   );
 }

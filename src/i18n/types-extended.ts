@@ -1075,6 +1075,7 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     noNotesOrDeliverablesYet: string;
     noSessionYet: string;
     noTaskNotesYet: string;
+    noObjective: string;
     objective: string;
     openSession: string;
     openThisThread: string;
@@ -1228,6 +1229,7 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     fork: string;
     forking: string;
     forkHint: string;
+    loadingSessions: string;
     statusActive: string;
     statusInterrupted: string;
     statusRestorable: string;
