@@ -51,6 +51,15 @@ impl HookClient {
     }
 }
 
+impl RuntimeMessage {
+    pub fn observed_at_ms(&self) -> i64 {
+        match self {
+            RuntimeMessage::Hook(event) => event.observed_at_ms,
+            RuntimeMessage::Git(event) => event.observed_at_ms,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SessionRecord {
     pub session_id: String,

@@ -15,6 +15,7 @@ pub enum FocusPane {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DetailMode {
     Summary,
+    File,
     Diff,
 }
 
@@ -29,6 +30,7 @@ pub struct RuntimeState {
     pub focus: FocusPane,
     pub detail_mode: DetailMode,
     pub detail_scroll: u16,
+    pub detail_scroll_cache: BTreeMap<String, u16>,
     pub selected_session: usize,
     pub selected_file: usize,
     pub last_refresh_at_ms: i64,
@@ -46,6 +48,7 @@ impl RuntimeState {
             focus: FocusPane::Sessions,
             detail_mode: DetailMode::Summary,
             detail_scroll: 0,
+            detail_scroll_cache: BTreeMap::new(),
             selected_session: 0,
             selected_file: 0,
             last_refresh_at_ms: Utc::now().timestamp_millis(),
@@ -152,7 +155,7 @@ impl RuntimeState {
                 self.selected_file = self.selected_file.saturating_sub(1);
             }
             FocusPane::Detail => {
-                self.detail_scroll = self.detail_scroll.saturating_sub(1);
+                self.set_detail_scroll(self.detail_scroll.saturating_sub(1));
             }
         }
     }
@@ -172,7 +175,7 @@ impl RuntimeState {
                 }
             }
             FocusPane::Detail => {
-                self.detail_scroll = self.detail_scroll.saturating_add(1);
+                self.set_detail_scroll(self.detail_scroll.saturating_add(1));
             }
         }
     }
@@ -184,15 +187,25 @@ impl RuntimeState {
     pub fn toggle_group_mode(&mut self) {
         self.group_by_session = !self.group_by_session;
         self.selected_file = 0;
-        self.detail_scroll = 0;
+        self.restore_detail_scroll_for_selection();
+    }
+
+    pub fn toggle_file_view(&mut self) {
+        self.detail_mode = match self.detail_mode {
+            DetailMode::Summary => DetailMode::File,
+            DetailMode::File => DetailMode::Summary,
+            DetailMode::Diff => DetailMode::File,
+        };
+        self.restore_detail_scroll_for_selection();
     }
 
     pub fn toggle_detail_mode(&mut self) {
         self.detail_mode = match self.detail_mode {
             DetailMode::Summary => DetailMode::Diff,
+            DetailMode::File => DetailMode::Diff,
             DetailMode::Diff => DetailMode::Summary,
         };
-        self.detail_scroll = 0;
+        self.restore_detail_scroll_for_selection();
     }
 
     fn apply_hook_event(&mut self, event: HookEvent) {
@@ -332,6 +345,31 @@ impl RuntimeState {
         } else {
             self.selected_file = self.selected_file.min(file_len - 1);
         }
+        self.restore_detail_scroll_for_selection();
+    }
+
+    fn set_detail_scroll(&mut self, value: u16) {
+        self.detail_scroll = value;
+        if matches!(self.detail_mode, DetailMode::File | DetailMode::Diff) {
+            if let Some(file) = self.selected_file() {
+                self.detail_scroll_cache
+                    .insert(file.rel_path.clone(), self.detail_scroll);
+            }
+        }
+    }
+
+    fn restore_detail_scroll_for_selection(&mut self) {
+        if matches!(self.detail_mode, DetailMode::File | DetailMode::Diff) {
+            if let Some(file) = self.selected_file() {
+                self.detail_scroll = self
+                    .detail_scroll_cache
+                    .get(&file.rel_path)
+                    .copied()
+                    .unwrap_or(0);
+                return;
+            }
+        }
+        self.detail_scroll = 0;
     }
 }
 

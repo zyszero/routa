@@ -1,5 +1,5 @@
 use crate::ipc::RuntimeFeed;
-use crate::models::DEFAULT_TUI_POLL_MS;
+use crate::models::{DEFAULT_INFERENCE_WINDOW_MS, DEFAULT_TUI_POLL_MS};
 use crate::observe;
 use crate::repo::RepoContext;
 use crate::state::{DetailMode, FocusPane, RuntimeState};
@@ -18,7 +18,23 @@ use ratatui::{DefaultTerminal, Frame};
 use std::io::stdout;
 use std::path::Path;
 use std::process::Command;
+use std::sync::LazyLock;
 use std::time::{Duration, Instant};
+use syntect::easy::HighlightLines;
+use syntect::highlighting::{Style as SyntectStyle, Theme, ThemeSet};
+use syntect::parsing::SyntaxSet;
+use syntect::util::LinesWithEndings;
+
+static SYNTAX_SET: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
+static SYNTAX_THEME: LazyLock<Theme> = LazyLock::new(|| {
+    let themes = ThemeSet::load_defaults();
+    themes
+        .themes
+        .get("InspiredGitHub")
+        .cloned()
+        .or_else(|| themes.themes.values().next().cloned())
+        .expect("at least one syntax theme")
+});
 
 pub fn run(ctx: RepoContext, poll_interval_ms: u64) -> Result<()> {
     enable_raw_mode().context("enable raw mode")?;
@@ -34,6 +50,10 @@ pub fn run(ctx: RepoContext, poll_interval_ms: u64) -> Result<()> {
 fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: u64) -> Result<()> {
     let mut feed = RuntimeFeed::open(&ctx.runtime_event_path)?;
     let mut state = RuntimeState::new(ctx.repo_root.to_string_lossy().to_string());
+    let bootstrap_cutoff = chrono::Utc::now().timestamp_millis() - DEFAULT_INFERENCE_WINDOW_MS;
+    for message in feed.read_recent_since(bootstrap_cutoff)? {
+        state.apply_message(message);
+    }
     let mut last_poll = Instant::now() - Duration::from_millis(poll_interval_ms);
 
     loop {
@@ -65,9 +85,20 @@ fn handle_event(state: &mut RuntimeState) -> Result<bool> {
             KeyCode::Tab => state.cycle_focus(),
             KeyCode::Char('j') | KeyCode::Down => state.move_selection_down(),
             KeyCode::Char('k') | KeyCode::Up => state.move_selection_up(),
+            KeyCode::Enter => state.toggle_file_view(),
             KeyCode::Char('r') => state.toggle_follow_mode(),
             KeyCode::Char('s') => state.toggle_group_mode(),
-            KeyCode::Char('d') => state.toggle_detail_mode(),
+            KeyCode::Char('d') | KeyCode::Char('D') => state.toggle_detail_mode(),
+            KeyCode::PageDown => {
+                for _ in 0..10 {
+                    state.move_selection_down();
+                }
+            }
+            KeyCode::PageUp => {
+                for _ in 0..10 {
+                    state.move_selection_up();
+                }
+            }
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 return Ok(true);
             }
@@ -82,7 +113,11 @@ fn handle_event(state: &mut RuntimeState) -> Result<bool> {
 fn render(frame: &mut Frame, state: &RuntimeState, feed: &RuntimeFeed) {
     let outer = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(8), Constraint::Length(8)])
+        .constraints([
+            Constraint::Min(8),
+            Constraint::Length(7),
+            Constraint::Length(1),
+        ])
         .split(frame.area());
 
     let columns = Layout::default()
@@ -98,6 +133,7 @@ fn render(frame: &mut Frame, state: &RuntimeState, feed: &RuntimeFeed) {
     render_files(frame, columns[1], state);
     render_detail(frame, columns[2], state, feed);
     render_log(frame, outer[1], state);
+    render_footer(frame, outer[2], state);
 }
 
 fn render_sessions(frame: &mut Frame, area: ratatui::layout::Rect, state: &RuntimeState) {
@@ -195,6 +231,7 @@ fn render_detail(
         },
         match state.detail_mode {
             DetailMode::Summary => "summary",
+            DetailMode::File => "file",
             DetailMode::Diff => "diff",
         },
     )));
@@ -202,6 +239,7 @@ fn render_detail(
 
     let title = match state.detail_mode {
         DetailMode::Summary => "Detail",
+        DetailMode::File => "File",
         DetailMode::Diff => "Diff",
     };
 
@@ -239,9 +277,7 @@ fn render_detail(
                 lines.push(Line::from("no file selected"));
             }
             lines.push(Line::from(""));
-            lines.push(Line::from(
-                "keys: Tab focus  j/k move  s group  d diff  r follow  q quit",
-            ));
+            lines.push(Line::from("Enter file  D diff  PgUp/PgDn scroll"));
             let detail = Paragraph::new(lines)
                 .block(
                     Block::default()
@@ -251,6 +287,26 @@ fn render_detail(
                 )
                 .wrap(Wrap { trim: true });
             frame.render_widget(detail, area);
+        }
+        DetailMode::File => {
+            let file_text = state
+                .selected_file()
+                .map(|file| load_file_preview(&state.repo_root, file.rel_path.as_str()))
+                .transpose()
+                .unwrap_or_else(|err| Some(Some(format!("file preview failed: {err}"))))
+                .flatten()
+                .unwrap_or_else(|| "<no file content available>".to_string());
+            let file_path = state.selected_file().map(|file| file.rel_path.as_str());
+            let preview = Paragraph::new(highlight_code_text(file_path, &file_text))
+                .block(
+                    Block::default()
+                        .title(title)
+                        .borders(Borders::ALL)
+                        .border_style(focus_style(state.focus == FocusPane::Detail)),
+                )
+                .wrap(Wrap { trim: false })
+                .scroll((state.detail_scroll, 0));
+            frame.render_widget(preview, area);
         }
         DetailMode::Diff => {
             let diff_text = state
@@ -266,8 +322,9 @@ fn render_detail(
                 .unwrap_or_else(|err| Some(Some(format!("diff load failed: {err}"))))
                 .flatten()
                 .unwrap_or_else(|| "<no diff available>".to_string());
+            let file_path = state.selected_file().map(|file| file.rel_path.as_str());
 
-            let diff = Paragraph::new(highlight_diff_text(&diff_text))
+            let diff = Paragraph::new(highlight_diff_text(file_path, &diff_text))
                 .block(
                     Block::default()
                         .title(title)
@@ -297,6 +354,36 @@ fn render_log(frame: &mut Frame, area: ratatui::layout::Rect, state: &RuntimeSta
     let list = List::new(items).block(Block::default().title("Event Log").borders(Borders::ALL));
     frame.render_widget(Clear, area);
     frame.render_widget(list, area);
+}
+
+fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, state: &RuntimeState) {
+    let line = Line::from(vec![
+        Span::styled("Tab", Style::default().fg(Color::Yellow)),
+        Span::raw(" focus  "),
+        Span::styled("j/k", Style::default().fg(Color::Yellow)),
+        Span::raw(" move  "),
+        Span::styled("Enter", Style::default().fg(Color::Yellow)),
+        Span::raw(" file  "),
+        Span::styled("D", Style::default().fg(Color::Yellow)),
+        Span::raw(" diff  "),
+        Span::styled("s", Style::default().fg(Color::Yellow)),
+        Span::raw(if state.group_by_session {
+            " global  "
+        } else {
+            " grouped  "
+        }),
+        Span::styled("r", Style::default().fg(Color::Yellow)),
+        Span::raw(if state.follow_mode {
+            " follow:on  "
+        } else {
+            " follow:off  "
+        }),
+        Span::styled("PgUp/PgDn", Style::default().fg(Color::Yellow)),
+        Span::raw(" scroll  "),
+        Span::styled("q", Style::default().fg(Color::Yellow)),
+        Span::raw(" quit"),
+    ]);
+    frame.render_widget(Paragraph::new(line), area);
 }
 
 fn focus_style(active: bool) -> Style {
@@ -351,7 +438,21 @@ fn load_diff_text(repo_root: &str, rel_path: &str, state_code: &str) -> Result<O
     }
 }
 
-fn highlight_diff_text(diff_text: &str) -> Text<'static> {
+fn load_file_preview(repo_root: &str, rel_path: &str) -> Result<Option<String>> {
+    let path = Path::new(repo_root).join(rel_path);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let content = std::fs::read_to_string(path).context("read file preview")?;
+    let truncated = content.lines().take(400).collect::<Vec<_>>().join("\n");
+    Ok(Some(truncated))
+}
+
+fn highlight_diff_text(file_path: Option<&str>, diff_text: &str) -> Text<'static> {
+    let syntax = file_path
+        .and_then(|path| SYNTAX_SET.find_syntax_for_file(path).ok().flatten())
+        .unwrap_or_else(|| SYNTAX_SET.find_syntax_plain_text());
+    let mut highlighter = HighlightLines::new(syntax, &SYNTAX_THEME);
     let mut lines = Vec::new();
     for raw in diff_text.lines() {
         let line = if raw.starts_with("+++") || raw.starts_with("---") {
@@ -365,15 +466,11 @@ fn highlight_diff_text(diff_text: &str) -> Text<'static> {
                 Style::default().fg(Color::Cyan),
             ))
         } else if raw.starts_with('+') {
-            Line::from(Span::styled(
-                raw.to_string(),
-                Style::default().fg(Color::Green),
-            ))
+            build_diff_code_line('+', &raw[1..], Color::Green, &mut highlighter)
         } else if raw.starts_with('-') {
-            Line::from(Span::styled(
-                raw.to_string(),
-                Style::default().fg(Color::Red),
-            ))
+            build_diff_code_line('-', &raw[1..], Color::Red, &mut highlighter)
+        } else if let Some(rest) = raw.strip_prefix(' ') {
+            build_diff_code_line(' ', rest, Color::DarkGray, &mut highlighter)
         } else if raw.starts_with("diff --git") || raw.starts_with("index ") {
             Line::from(Span::styled(
                 raw.to_string(),
@@ -385,6 +482,55 @@ fn highlight_diff_text(diff_text: &str) -> Text<'static> {
         lines.push(line);
     }
     Text::from(lines)
+}
+
+fn build_diff_code_line(
+    prefix: char,
+    code: &str,
+    prefix_color: Color,
+    highlighter: &mut HighlightLines<'_>,
+) -> Line<'static> {
+    let mut spans = vec![Span::styled(
+        prefix.to_string(),
+        Style::default()
+            .fg(prefix_color)
+            .add_modifier(Modifier::BOLD),
+    )];
+    spans.extend(highlight_code_spans(code, highlighter));
+    Line::from(spans)
+}
+
+fn highlight_code_text(file_path: Option<&str>, code: &str) -> Text<'static> {
+    let syntax = file_path
+        .and_then(|path| SYNTAX_SET.find_syntax_for_file(path).ok().flatten())
+        .unwrap_or_else(|| SYNTAX_SET.find_syntax_plain_text());
+    let mut highlighter = HighlightLines::new(syntax, &SYNTAX_THEME);
+    let mut lines = Vec::new();
+    for line in LinesWithEndings::from(code) {
+        lines.push(Line::from(highlight_code_spans(
+            line.trim_end_matches('\n'),
+            &mut highlighter,
+        )));
+    }
+    Text::from(lines)
+}
+
+fn highlight_code_spans(code: &str, highlighter: &mut HighlightLines<'_>) -> Vec<Span<'static>> {
+    match highlighter.highlight_line(code, &SYNTAX_SET) {
+        Ok(regions) => regions
+            .into_iter()
+            .map(|(style, text)| Span::styled(text.to_string(), syntect_to_ratatui(style)))
+            .collect(),
+        Err(_) => vec![Span::raw(code.to_string())],
+    }
+}
+
+fn syntect_to_ratatui(style: SyntectStyle) -> Style {
+    Style::default().fg(Color::Rgb(
+        style.foreground.r,
+        style.foreground.g,
+        style.foreground.b,
+    ))
 }
 
 #[allow(dead_code)]

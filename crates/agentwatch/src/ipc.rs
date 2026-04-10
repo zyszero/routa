@@ -60,6 +60,27 @@ impl RuntimeFeed {
         Ok(messages)
     }
 
+    pub fn read_recent_since(&self, cutoff_ms: i64) -> Result<Vec<RuntimeMessage>> {
+        let file = OpenOptions::new()
+            .read(true)
+            .open(&self.event_path)
+            .with_context(|| format!("open runtime feed {:?}", self.event_path))?;
+        let reader = BufReader::new(file);
+        let mut messages = Vec::new();
+        for line in reader.lines() {
+            let line = line.context("read runtime feed history line")?;
+            if line.trim().is_empty() {
+                continue;
+            }
+            let message: RuntimeMessage =
+                serde_json::from_str(line.trim_end()).context("decode runtime feed history")?;
+            if message.observed_at_ms() >= cutoff_ms {
+                messages.push(message);
+            }
+        }
+        Ok(messages)
+    }
+
     pub fn event_path(&self) -> &Path {
         &self.event_path
     }
