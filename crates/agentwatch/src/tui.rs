@@ -1,4 +1,4 @@
-use crate::ipc::{RuntimeFeed, RuntimeSocket};
+use crate::ipc::RuntimeFeed;
 use crate::models::{DEFAULT_INFERENCE_WINDOW_MS, DEFAULT_TUI_POLL_MS};
 use crate::observe;
 use crate::repo::RepoContext;
@@ -16,9 +16,10 @@ use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
 use std::collections::{BTreeMap, BTreeSet};
+use std::env;
 use std::io::stdout;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::LazyLock;
 use std::thread;
@@ -293,15 +294,7 @@ pub fn run(ctx: RepoContext, poll_interval_ms: u64) -> Result<()> {
 
 fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: u64) -> Result<()> {
     let mut feed = RuntimeFeed::open(&ctx.runtime_event_path)?;
-    let runtime_socket = match RuntimeSocket::bind(&ctx.runtime_socket_path) {
-        Ok(socket) => Some(socket),
-        Err(err) => {
-            eprintln!(
-                "agentwatch warning: runtime socket disabled, falling back to feed-only mode: {err}"
-            );
-            None
-        }
-    };
+    ensure_runtime_service(&ctx)?;
     let repo_root = ctx.repo_root.to_string_lossy().to_string();
     let repo_name = ctx
         .repo_root
@@ -310,6 +303,7 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
         .unwrap_or_else(|| repo_root.clone());
     let branch = current_branch(&ctx).unwrap_or_else(|_| "-".to_string());
     let mut state = RuntimeState::new(repo_root, repo_name, branch);
+    state.set_runtime_transport(read_runtime_transport(&ctx));
     let mut cache = AppCache::new();
     let bootstrap_cutoff = chrono::Utc::now().timestamp_millis() - DEFAULT_INFERENCE_WINDOW_MS;
     for message in feed.read_recent_since(bootstrap_cutoff)? {
@@ -331,20 +325,13 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
             }
             state.apply_message(message);
         }
-        if let Some(socket) = &runtime_socket {
-            for message in socket.read_pending()? {
-                if matches!(message, crate::models::RuntimeMessage::Git(_)) {
-                    force_scan = true;
-                }
-                state.apply_message(message);
-            }
-        }
         if force_scan {
             let dirty = observe::scan_repo(&ctx)?;
             state.sync_dirty_files(dirty);
             last_poll = Instant::now();
         }
 
+        state.set_runtime_transport(read_runtime_transport(&ctx));
         cache.sync_results();
         cache.warm_visible_files(&state);
         cache.warm_selected_detail(&state);
@@ -362,39 +349,58 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
 
 fn handle_event(state: &mut RuntimeState, ctx: &RepoContext) -> Result<bool> {
     match event::read().context("read terminal event")? {
-        Event::Key(key) => match key.code {
-            KeyCode::Char('q') => return Ok(true),
-            KeyCode::Tab => state.cycle_focus(),
-            KeyCode::Char('j') | KeyCode::Down => state.move_selection_down(),
-            KeyCode::Char('k') | KeyCode::Up => state.move_selection_up(),
-            KeyCode::Char('h') | KeyCode::Left => state.select_prev_file(),
-            KeyCode::Char('l') | KeyCode::Right => state.select_next_file(),
-            KeyCode::Enter => state.toggle_file_view(),
-            KeyCode::Char('r') => state.toggle_follow_mode(),
-            KeyCode::Char('s') => state.cycle_file_list_mode(),
-            KeyCode::Char('d') | KeyCode::Char('D') => state.toggle_detail_mode(),
-            KeyCode::Char('t') | KeyCode::Char('T') => state.toggle_theme_mode(),
-            KeyCode::Char('1') => state.set_event_log_filter(EventLogFilter::All),
-            KeyCode::Char('2') => state.set_event_log_filter(EventLogFilter::Hook),
-            KeyCode::Char('3') => state.set_event_log_filter(EventLogFilter::Git),
-            KeyCode::Char('4') => state.set_event_log_filter(EventLogFilter::Watch),
-            KeyCode::Char('[') => jump_diff_hunk(state, ctx, false)?,
-            KeyCode::Char(']') => jump_diff_hunk(state, ctx, true)?,
-            KeyCode::PageDown => {
-                for _ in 0..10 {
-                    state.move_selection_down();
+        Event::Key(key) => {
+            if state.search_active {
+                match key.code {
+                    KeyCode::Esc => state.cancel_search(),
+                    KeyCode::Enter => state.cancel_search(),
+                    KeyCode::Backspace => state.pop_search_char(),
+                    KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        state.clear_search()
+                    }
+                    KeyCode::Char(ch) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        state.push_search_char(ch)
+                    }
+                    _ => {}
                 }
+                return Ok(false);
             }
-            KeyCode::PageUp => {
-                for _ in 0..10 {
-                    state.move_selection_up();
+            match key.code {
+                KeyCode::Char('q') => return Ok(true),
+                KeyCode::Tab => state.cycle_focus(),
+                KeyCode::Char('j') | KeyCode::Down => state.move_selection_down(),
+                KeyCode::Char('k') | KeyCode::Up => state.move_selection_up(),
+                KeyCode::Char('h') | KeyCode::Left => state.select_prev_file(),
+                KeyCode::Char('l') | KeyCode::Right => state.select_next_file(),
+                KeyCode::Enter => state.toggle_file_view(),
+                KeyCode::Char('/') => state.begin_search(),
+                KeyCode::Esc => state.clear_search(),
+                KeyCode::Char('r') => state.toggle_follow_mode(),
+                KeyCode::Char('s') => state.cycle_file_list_mode(),
+                KeyCode::Char('d') | KeyCode::Char('D') => state.toggle_detail_mode(),
+                KeyCode::Char('t') | KeyCode::Char('T') => state.toggle_theme_mode(),
+                KeyCode::Char('1') => state.set_event_log_filter(EventLogFilter::All),
+                KeyCode::Char('2') => state.set_event_log_filter(EventLogFilter::Hook),
+                KeyCode::Char('3') => state.set_event_log_filter(EventLogFilter::Git),
+                KeyCode::Char('4') => state.set_event_log_filter(EventLogFilter::Watch),
+                KeyCode::Char('[') => jump_diff_hunk(state, ctx, false)?,
+                KeyCode::Char(']') => jump_diff_hunk(state, ctx, true)?,
+                KeyCode::PageDown => {
+                    for _ in 0..10 {
+                        state.move_selection_down();
+                    }
                 }
+                KeyCode::PageUp => {
+                    for _ in 0..10 {
+                        state.move_selection_up();
+                    }
+                }
+                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    return Ok(true);
+                }
+                _ => {}
             }
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                return Ok(true);
-            }
-            _ => {}
-        },
+        }
         Event::Resize(_, _) => {}
         _ => {}
     }
@@ -785,9 +791,18 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, state: &Runtime
         Span::styled("Enter", Style::default().fg(colors.accent)),
         Span::styled(" expand  ", Style::default().fg(colors.muted)),
         Span::styled("/", Style::default().fg(colors.accent)),
-        Span::styled(" search  ", Style::default().fg(colors.muted)),
+        Span::styled(
+            if state.search_query.is_empty() {
+                " search  "
+            } else {
+                " search:on  "
+            },
+            Style::default().fg(colors.muted),
+        ),
         Span::styled("T", Style::default().fg(colors.accent)),
         Span::styled(" theme  ", Style::default().fg(colors.muted)),
+        Span::styled("Esc", Style::default().fg(colors.accent)),
+        Span::styled(" clear  ", Style::default().fg(colors.muted)),
         Span::styled("r", Style::default().fg(colors.accent)),
         Span::styled(
             if state.follow_mode {
@@ -808,6 +823,13 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, state: &Runtime
 
 fn render_title_bar(frame: &mut Frame, area: Rect, state: &RuntimeState) {
     let colors = palette(state.theme_mode);
+    let search = if state.search_query.is_empty() {
+        String::new()
+    } else if state.search_active {
+        format!("  search:/{}_", state.search_query)
+    } else {
+        format!("  search:/{}", state.search_query)
+    };
     let line = Line::from(vec![
         Span::styled(
             " AgentWatch ",
@@ -819,6 +841,10 @@ fn render_title_bar(frame: &mut Frame, area: Rect, state: &RuntimeState) {
         Span::styled(
             format!("  repo:{}  branch:{}  ", state.repo_name, state.branch),
             Style::default().fg(colors.text).bg(colors.surface),
+        ),
+        Span::styled(
+            format!("rpc:{}  ", state.runtime_transport),
+            Style::default().fg(colors.accent).bg(colors.surface),
         ),
         Span::styled(
             if state.follow_mode { "WATCH" } else { "PAUSED" },
@@ -835,6 +861,7 @@ fn render_title_bar(frame: &mut Frame, area: Rect, state: &RuntimeState) {
             format!("  refreshed {} ago  ", time_ago(state.last_refresh_at_ms)),
             Style::default().fg(colors.muted).bg(colors.surface),
         ),
+        Span::styled(search, Style::default().fg(colors.muted).bg(colors.surface)),
     ]);
     frame.render_widget(
         Paragraph::new(line).style(Style::default().bg(colors.surface)),
@@ -1449,6 +1476,51 @@ fn shorten_path(path: &str, max_len: usize) -> String {
     }
     let keep = max_len.saturating_sub(3);
     format!("...{}", &path[path.len().saturating_sub(keep)..])
+}
+
+fn ensure_runtime_service(ctx: &RepoContext) -> Result<()> {
+    if runtime_service_is_fresh(ctx) {
+        return Ok(());
+    }
+
+    let current_exe = env::current_exe().context("resolve current agentwatch executable")?;
+    let mut command = Command::new(current_exe);
+    command
+        .arg("--repo")
+        .arg(&ctx.repo_root)
+        .arg("serve")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let _child = command.spawn().context("spawn agentwatch runtime service")?;
+
+    let deadline = Instant::now() + Duration::from_millis(1200);
+    while Instant::now() < deadline {
+        if runtime_service_is_fresh(ctx) {
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(60));
+    }
+
+    Ok(())
+}
+
+fn runtime_service_is_fresh(ctx: &RepoContext) -> bool {
+    crate::ipc::read_service_info(&ctx.runtime_info_path)
+        .ok()
+        .flatten()
+        .is_some_and(|info| chrono::Utc::now().timestamp_millis() - info.last_seen_at_ms < 2500)
+}
+
+fn read_runtime_transport(ctx: &RepoContext) -> String {
+    crate::ipc::read_service_info(&ctx.runtime_info_path)
+        .ok()
+        .flatten()
+        .and_then(|info| {
+            let age = chrono::Utc::now().timestamp_millis() - info.last_seen_at_ms;
+            (age < 2500).then_some(info.transport)
+        })
+        .unwrap_or_else(|| "feed".to_string())
 }
 
 #[allow(dead_code)]

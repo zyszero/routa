@@ -197,3 +197,11 @@ impl EventSource {
         }
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeServiceInfo {
+    pub pid: u32,
+    pub transport: String,
+    pub started_at_ms: i64,
+    pub last_seen_at_ms: i64,
+}

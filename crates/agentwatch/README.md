@@ -38,7 +38,19 @@ That means a session can stay visible even when it is only reading/searching, no
 
 ## Runtime Model
 
-AgentWatch now supports three local runtime transport layers, in this order:
+AgentWatch now starts in TUI mode by default. Running:
+
+```bash
+agentwatch --repo .
+```
+
+will:
+
+1. open the TUI
+2. ensure a repo-local runtime service is running in the background
+3. read live events from the local runtime feed
+
+The runtime transport layers are attempted in this order:
 
 1. Unix domain socket
 2. Localhost TCP
@@ -46,6 +58,7 @@ AgentWatch now supports three local runtime transport layers, in this order:
 
 The current commands are:
 
+- `agentwatch`
 - `agentwatch tui`
 - `agentwatch serve`
 - `agentwatch hook <client> <event>`
@@ -55,18 +68,17 @@ Recommended local flow:
 
 ```bash
 cargo build -p agentwatch
-target/debug/agentwatch --repo . serve
-target/debug/agentwatch --repo . tui
+target/debug/agentwatch --repo .
 ```
 
-If local socket/port binding is unavailable, hooks automatically fall back to the JSONL feed.
+If local socket/port binding is unavailable, hooks automatically fall back to the JSONL feed. The title bar shows the current runtime mode as `rpc:socket`, `rpc:tcp`, or `rpc:feed`.
 
 ## TUI Layout
 
 Example layout:
 
 ```text
- AgentWatch  repo:routa-js  branch:main  WATCH  files:BY SESSION  refreshed 0s ago
+ AgentWatch  repo:routa-js  branch:main  rpc:socket  WATCH  files:BY SESSION  refreshed 0s ago
 ┌Sessions───────────────────┬Files──────────────────────────────┬Details─────────────────────┐
 │ …hook-check  ACTIVE gpt-5 │ src/main.rs                      │ src/main.rs                │
 │ pane %12  5s ago  3 files │ M +12 -4      5s  live-hook     │ last by live-hook-check    │
@@ -99,6 +111,8 @@ Main regions:
 - `D`: diff view
 - `s`: cycle file mode
 - `T`: cycle theme
+- `/`: start search filter
+- `Esc`: clear filter / exit search input
 - `r`: follow mode on/off
 - `1`: all events
 - `2`: hook events

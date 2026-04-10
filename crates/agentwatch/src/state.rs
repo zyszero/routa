@@ -93,6 +93,9 @@ pub struct RuntimeState {
     pub selected_session: usize,
     pub selected_file: usize,
     pub last_refresh_at_ms: i64,
+    pub runtime_transport: String,
+    pub search_query: String,
+    pub search_active: bool,
 }
 
 impl RuntimeState {
@@ -115,6 +118,9 @@ impl RuntimeState {
             selected_session: 0,
             selected_file: 0,
             last_refresh_at_ms: Utc::now().timestamp_millis(),
+            runtime_transport: "feed".to_string(),
+            search_query: String::new(),
+            search_active: false,
         }
     }
 
@@ -206,6 +212,7 @@ impl RuntimeState {
         let mut items: Vec<_> = self
             .sessions
             .values()
+            .filter(|session| self.matches_session_search(session))
             .map(|session| SessionListItem {
                 session_id: session.session_id.clone(),
                 model: session.model.clone(),
@@ -230,6 +237,7 @@ impl RuntimeState {
                     || file.last_session_id.is_none()
                     || file.touched_by.is_empty()
             })
+            .filter(|file| self.matches_file_search(file))
             .count();
         if unknown_count > 0 {
             items.push(SessionListItem {
@@ -256,6 +264,7 @@ impl RuntimeState {
             .files
             .values()
             .filter(|file| file.dirty || file.conflicted)
+            .filter(|file| self.matches_file_search(file))
             .collect();
         match self.file_list_mode {
             FileListMode::BySession => {
@@ -351,6 +360,10 @@ impl RuntimeState {
         self.follow_mode = !self.follow_mode;
     }
 
+    pub fn set_runtime_transport(&mut self, transport: impl Into<String>) {
+        self.runtime_transport = transport.into();
+    }
+
     pub fn toggle_theme_mode(&mut self) {
         self.theme_mode = match self.theme_mode {
             ThemeMode::Dark => ThemeMode::Light,
@@ -360,6 +373,31 @@ impl RuntimeState {
 
     pub fn set_event_log_filter(&mut self, filter: EventLogFilter) {
         self.event_log_filter = filter;
+    }
+
+    pub fn begin_search(&mut self) {
+        self.search_active = true;
+    }
+
+    pub fn cancel_search(&mut self) {
+        self.search_active = false;
+    }
+
+    pub fn clear_search(&mut self) {
+        self.search_active = false;
+        self.search_query.clear();
+        self.clamp_selection();
+    }
+
+    pub fn push_search_char(&mut self, ch: char) {
+        self.search_active = true;
+        self.search_query.push(ch);
+        self.clamp_selection();
+    }
+
+    pub fn pop_search_char(&mut self) {
+        self.search_query.pop();
+        self.clamp_selection();
     }
 
     pub fn cycle_file_list_mode(&mut self) {
@@ -585,6 +623,41 @@ impl RuntimeState {
             self.selected_file = self.selected_file.min(file_len - 1);
         }
         self.restore_detail_scroll_for_selection();
+    }
+
+    fn matches_session_search(&self, session: &SessionView) -> bool {
+        if self.search_query.is_empty() {
+            return true;
+        }
+        let needle = self.search_query.to_ascii_lowercase();
+        session.session_id.to_ascii_lowercase().contains(&needle)
+            || session
+                .model
+                .as_deref()
+                .unwrap_or_default()
+                .to_ascii_lowercase()
+                .contains(&needle)
+            || session
+                .tmux_pane
+                .as_deref()
+                .unwrap_or_default()
+                .to_ascii_lowercase()
+                .contains(&needle)
+    }
+
+    fn matches_file_search(&self, file: &FileView) -> bool {
+        if self.search_query.is_empty() {
+            return true;
+        }
+        let needle = self.search_query.to_ascii_lowercase();
+        file.rel_path.to_ascii_lowercase().contains(&needle)
+            || file
+                .last_session_id
+                .as_deref()
+                .unwrap_or_default()
+                .to_ascii_lowercase()
+                .contains(&needle)
+            || file.state_code.to_ascii_lowercase().contains(&needle)
     }
 
     fn set_detail_scroll(&mut self, value: u16) {

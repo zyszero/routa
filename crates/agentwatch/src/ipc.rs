@@ -1,4 +1,4 @@
-use crate::models::RuntimeMessage;
+use crate::models::{RuntimeMessage, RuntimeServiceInfo};
 use anyhow::{Context, Result};
 use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
@@ -190,6 +190,25 @@ pub fn send_tcp_message(addr: &str, message: &RuntimeMessage) -> Result<()> {
         .context("write runtime tcp newline")?;
     stream.flush().context("flush runtime tcp")?;
     Ok(())
+}
+
+pub fn write_service_info(info_path: &Path, info: &RuntimeServiceInfo) -> Result<()> {
+    if let Some(parent) = info_path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("create runtime info dir {:?}", parent))?;
+    }
+    let payload = serde_json::to_vec_pretty(info).context("encode runtime info json")?;
+    std::fs::write(info_path, payload).with_context(|| format!("write runtime info {:?}", info_path))
+}
+
+pub fn read_service_info(info_path: &Path) -> Result<Option<RuntimeServiceInfo>> {
+    if !info_path.exists() {
+        return Ok(None);
+    }
+    let payload =
+        std::fs::read_to_string(info_path).with_context(|| format!("read runtime info {:?}", info_path))?;
+    let info = serde_json::from_str(&payload).context("decode runtime info json")?;
+    Ok(Some(info))
 }
 
 fn read_stream_message(stream: UnixStream) -> Result<Option<RuntimeMessage>> {

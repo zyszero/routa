@@ -9,6 +9,7 @@ mod tui;
 
 use crate::db::Db;
 use crate::ipc::{RuntimeSocket, RuntimeTcp};
+use crate::models::RuntimeServiceInfo;
 use crate::observe::Snapshot;
 use crate::repo::{resolve, resolve_runtime};
 use anyhow::Result;
@@ -38,7 +39,7 @@ struct Cli {
     db: Option<String>,
 
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Subcommand)]
@@ -87,7 +88,9 @@ enum Command {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    match cli.command {
+    match cli.command.unwrap_or(Command::Tui {
+        interval_ms: models::DEFAULT_TUI_POLL_MS,
+    }) {
         Command::Tui { interval_ms } => {
             let ctx = resolve_runtime(cli.repo.as_deref())?;
             tui::run(ctx, interval_ms)?;
@@ -162,6 +165,13 @@ fn run_serve(ctx: &crate::repo::RepoContext) -> Result<()> {
     } else {
         None
     };
+    let transport = if socket_server.is_some() {
+        "socket"
+    } else if tcp_server.is_some() {
+        "tcp"
+    } else {
+        "feed"
+    };
 
     if socket_server.is_none() && tcp_server.is_none() {
         anyhow::bail!(
@@ -171,7 +181,18 @@ fn run_serve(ctx: &crate::repo::RepoContext) -> Result<()> {
         );
     }
 
+    let started_at_ms = chrono::Utc::now().timestamp_millis();
     loop {
+        crate::ipc::write_service_info(
+            &ctx.runtime_info_path,
+            &RuntimeServiceInfo {
+                pid: std::process::id(),
+                transport: transport.to_string(),
+                started_at_ms,
+                last_seen_at_ms: chrono::Utc::now().timestamp_millis(),
+            },
+        )?;
+
         if let Some(server) = &socket_server {
             for message in server.read_pending()? {
                 crate::ipc::send_message(&ctx.runtime_event_path, &message)?;

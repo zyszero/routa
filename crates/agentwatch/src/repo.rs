@@ -12,6 +12,7 @@ pub struct RepoContext {
     pub db_path: PathBuf,
     pub runtime_event_path: PathBuf,
     pub runtime_socket_path: PathBuf,
+    pub runtime_info_path: PathBuf,
     pub runtime_tcp_addr: String,
 }
 
@@ -103,6 +104,7 @@ pub fn resolve(path_opt: Option<&str>, db_path_opt: Option<&str>) -> Result<Repo
     Ok(RepoContext {
         runtime_event_path: runtime_event_path(&repo_root),
         runtime_socket_path: runtime_socket_path(&repo_root),
+        runtime_info_path: runtime_info_path(&repo_root),
         runtime_tcp_addr: runtime_tcp_addr(&repo_root),
         repo_root,
         git_dir,
@@ -120,6 +122,7 @@ pub fn resolve_runtime(path_opt: Option<&str>) -> Result<RepoContext> {
     Ok(RepoContext {
         runtime_event_path: runtime_event_path(&repo_root),
         runtime_socket_path: runtime_socket_path(&repo_root),
+        runtime_info_path: runtime_info_path(&repo_root),
         runtime_tcp_addr: runtime_tcp_addr(&repo_root),
         repo_root,
         git_dir,
@@ -133,6 +136,10 @@ pub fn runtime_event_path(repo_root: &Path) -> PathBuf {
 
 pub fn runtime_socket_path(repo_root: &Path) -> PathBuf {
     runtime_runtime_dir(repo_root).join("events.sock")
+}
+
+pub fn runtime_info_path(repo_root: &Path) -> PathBuf {
+    runtime_runtime_dir(repo_root).join("service.json")
 }
 
 pub fn runtime_tcp_addr(repo_root: &Path) -> String {
