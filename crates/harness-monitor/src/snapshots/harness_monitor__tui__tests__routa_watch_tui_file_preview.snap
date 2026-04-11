@@ -1,14 +1,14 @@
 ---
 source: crates/harness-monitor/src/tui_tests.rs
-assertion_line: 656
+assertion_line: 657
 expression: "render_snapshot(&state, &mut cache, 120, 24)"
 ---
- Harness Monitor   repo:routa-js  branch:main  agents:2 active:1  dirty:1  unknown:0  synced 2m ago
+ Harness Monitor   repo:routa-js  branch:main  agents:2 active:1  dirty:2  unknown:1  synced 2m ago
 ┌Git Status──────────────────────────────────────────────────────────────────────────┐┌File Preview────────────────────┐
-│ 1 file, 5 commits, run: impl-buddy, branch: main, 2 worktrees                      ││ 1 fn render(frame: &mut Frame) │
+│ 2 files, 5 commits, workspace: project, 1 agent, branch: main, 2 worktrees         ││ 1 fn render(frame: &mut Frame) │
 │────────────────────────────────────────────────────────────────────────────────────││{                               │
 │> tui.rs                                        src/             M  +38 -5     4m   ││ 2     // preview               │
-│                                                                                    ││ 3 }                            │
+│  route.ts                                      card/            D  -12        5m   ││ 3 }                            │
 │                                                                                    ││                                │
 │                                                                                    ││                                │
 │                                                                                    ││                                │

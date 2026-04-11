@@ -341,6 +341,7 @@ fn search_filters_sessions_and_files() {
 fn assign_selected_file_to_selected_session_updates_owner() {
     let mut state = sample_state();
     state.file_list_mode = FileListMode::Global;
+    state.refresh_views();
     state.selected_run = state
         .runs()
         .iter()
@@ -351,8 +352,12 @@ fn assign_selected_file_to_selected_session_updates_owner() {
         .iter()
         .position(|run| run.session_id == "live-hook-check")
         .expect("live run");
-    state.selected_file = 0;
     state.refresh_views();
+    state.selected_file = state
+        .file_items()
+        .iter()
+        .position(|file| file.rel_path == "src/app/api/a2a/card/route.ts")
+        .expect("route file");
 
     let message = state
         .selected_file_assignment_message()
@@ -451,6 +456,7 @@ fn toggling_fitness_mode_updates_cache_key_prefix() {
 fn selected_file_assignment_message_is_attribution_event() {
     let mut state = sample_state();
     state.file_list_mode = FileListMode::Global;
+    state.refresh_views();
     state.selected_run = state
         .runs()
         .iter()
@@ -461,8 +467,12 @@ fn selected_file_assignment_message_is_attribution_event() {
         .iter()
         .position(|run| run.session_id == "live-hook-check")
         .expect("live run");
-    state.selected_file = 0;
     state.refresh_views();
+    state.selected_file = state
+        .file_items()
+        .iter()
+        .position(|file| file.rel_path == "src/app/api/a2a/card/route.ts")
+        .expect("route file");
 
     let message = state
         .selected_file_assignment_message()
@@ -858,20 +868,17 @@ fn agents_from_recovered_repo_alias_still_count_as_repo_local_runs() {
 }
 
 #[test]
-fn file_list_follows_selected_run_scope() {
+fn file_list_follows_selected_workspace_scope() {
     let mut state = sample_state();
     state.focus = FocusPane::Runs;
 
-    assert_eq!(state.selected_run_scope_label(), "impl-buddy");
-    assert_eq!(state.file_items().len(), 1);
-    assert_eq!(
-        state.file_items()[0].rel_path,
-        "crates/harness-monitor/src/tui.rs"
-    );
+    assert_eq!(state.selected_workspace_scope_label(), "project");
+    assert_eq!(state.selected_workspace_agent_count(), 1);
+    assert_eq!(state.file_items().len(), 2);
 
     state.move_selection_down();
-    assert_eq!(state.selected_run_scope_label(), "test-master");
-    assert_eq!(state.file_items().len(), 0);
+    assert_eq!(state.selected_workspace_scope_label(), "project");
+    assert_eq!(state.file_items().len(), 2);
 }
 
 #[test]

@@ -15,7 +15,7 @@ use crate::ipc::{RuntimeSocket, RuntimeTcp};
 use crate::models::RuntimeServiceInfo;
 use crate::observe::Snapshot;
 use crate::repo::{resolve, resolve_runtime};
-use anyhow::Result;
+use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -533,6 +533,270 @@ fn resolve_path(root: &Path, raw: &str) -> PathBuf {
     }
 }
 
+#[derive(Debug, Clone)]
+struct CliRunSummary {
+    run_id: String,
+    client: String,
+    cwd: String,
+    model: String,
+    started_at_ms: i64,
+    last_seen_at_ms: i64,
+    status: String,
+    ended_at_ms: Option<i64>,
+    role: &'static str,
+    origin: &'static str,
+    operator_state: String,
+    block_reason: String,
+    exact_files: usize,
+    inferred_files: usize,
+    unknown_files: usize,
+    changed_files: Vec<String>,
+    latest_eval: Option<crate::domain::EvalSnapshot>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct GitWorktreeRecord {
+    path: String,
+    head: Option<String>,
+    branch: Option<String>,
+    detached: bool,
+}
+
+fn load_cli_run_summaries(db: &Db, repo_root: &str) -> Result<Vec<CliRunSummary>> {
+    let sessions = db.list_active_sessions(repo_root)?;
+    let dirty_files = db.file_state_all_dirty(repo_root)?;
+    let mut dirty_by_session: BTreeMap<String, Vec<models::FileStateRow>> = BTreeMap::new();
+    let mut unknown_rows = Vec::new();
+
+    for row in dirty_files {
+        if let Some(session_id) = row.session_id.clone() {
+            dirty_by_session.entry(session_id).or_default().push(row);
+        } else {
+            unknown_rows.push(row);
+        }
+    }
+
+    let mut runs = Vec::new();
+    for (session_id, cwd, model, started_at_ms, last_seen_at_ms, client, status, ended_at_ms) in
+        sessions
+    {
+        let rows = dirty_by_session.remove(&session_id).unwrap_or_default();
+        let exact_files = rows
+            .iter()
+            .filter(|row| row.confidence.as_deref() == Some("exact"))
+            .count();
+        let inferred_files = rows
+            .iter()
+            .filter(|row| row.confidence.as_deref() == Some("inferred"))
+            .count();
+        let unknown_files = rows
+            .iter()
+            .filter(|row| row.confidence.as_deref() != Some("exact"))
+            .filter(|row| row.confidence.as_deref() != Some("inferred"))
+            .count();
+        let changed_files = rows
+            .iter()
+            .map(|row| row.rel_path.clone())
+            .collect::<Vec<_>>();
+        let latest_eval = db
+            .list_eval_snapshots_for_run(&session_id, 1)?
+            .into_iter()
+            .next();
+        let role = infer_cli_run_role(&session_id, &client, &status);
+        let block_reason = infer_cli_run_block_reason(latest_eval.as_ref(), unknown_files);
+        let operator_state =
+            infer_cli_run_state(&status, latest_eval.as_ref(), block_reason.as_str());
+
+        runs.push(CliRunSummary {
+            run_id: session_id,
+            client,
+            cwd,
+            model,
+            started_at_ms,
+            last_seen_at_ms,
+            status,
+            ended_at_ms,
+            role,
+            origin: "hook-backed",
+            operator_state,
+            block_reason,
+            exact_files,
+            inferred_files,
+            unknown_files,
+            changed_files,
+            latest_eval,
+        });
+    }
+
+    if !unknown_rows.is_empty() {
+        runs.push(CliRunSummary {
+            run_id: "unknown".to_string(),
+            client: "unknown".to_string(),
+            cwd: repo_root.to_string(),
+            model: String::new(),
+            started_at_ms: 0,
+            last_seen_at_ms: unknown_rows
+                .iter()
+                .map(|row| row.last_seen_ms)
+                .max()
+                .unwrap_or(0),
+            status: "unknown".to_string(),
+            ended_at_ms: None,
+            role: "reviewer",
+            origin: "attribution-review",
+            operator_state: "attention".to_string(),
+            block_reason: "ownership ambiguity".to_string(),
+            exact_files: 0,
+            inferred_files: 0,
+            unknown_files: unknown_rows.len(),
+            changed_files: unknown_rows
+                .iter()
+                .map(|row| row.rel_path.clone())
+                .collect::<Vec<_>>(),
+            latest_eval: None,
+        });
+    }
+
+    runs.sort_by(|a, b| {
+        b.last_seen_at_ms
+            .cmp(&a.last_seen_at_ms)
+            .then_with(|| a.run_id.cmp(&b.run_id))
+    });
+    Ok(runs)
+}
+
+fn infer_cli_run_role(session_id: &str, client: &str, status: &str) -> &'static str {
+    let mut haystack = session_id.to_ascii_lowercase();
+    haystack.push(' ');
+    haystack.push_str(&client.to_ascii_lowercase());
+    haystack.push(' ');
+    haystack.push_str(&status.to_ascii_lowercase());
+    if haystack.contains("plan") {
+        "planner"
+    } else if haystack.contains("review") || haystack.contains("test") {
+        "reviewer"
+    } else if haystack.contains("fix") {
+        "fixer"
+    } else if haystack.contains("release") {
+        "release"
+    } else {
+        "builder"
+    }
+}
+
+fn infer_cli_run_block_reason(
+    latest_eval: Option<&crate::domain::EvalSnapshot>,
+    unknown_files: usize,
+) -> String {
+    if unknown_files > 0 {
+        "ownership ambiguity".to_string()
+    } else if let Some(eval) = latest_eval {
+        if eval.hard_gate_blocked {
+            "hard gate failure".to_string()
+        } else if eval.score_blocked {
+            "score threshold failed".to_string()
+        } else {
+            "ready".to_string()
+        }
+    } else {
+        "eval pending".to_string()
+    }
+}
+
+fn infer_cli_run_state(
+    status: &str,
+    latest_eval: Option<&crate::domain::EvalSnapshot>,
+    block_reason: &str,
+) -> String {
+    if block_reason.contains("ambiguity") {
+        "attention".to_string()
+    } else if block_reason.contains("hard gate") || block_reason.contains("score") {
+        "failed".to_string()
+    } else if status == "active" {
+        "executing".to_string()
+    } else if latest_eval.is_some() {
+        "evaluating".to_string()
+    } else {
+        "observing".to_string()
+    }
+}
+
+fn summarize_eval(eval: &crate::domain::EvalSnapshot) -> String {
+    let status = if eval.hard_gate_blocked {
+        "blocked(hard)"
+    } else if eval.score_blocked {
+        "blocked(score)"
+    } else {
+        "pass"
+    };
+    format!(
+        "{} {} {:.1}%",
+        eval.mode.as_str(),
+        status,
+        eval.overall_score
+    )
+}
+
+fn load_git_worktree_records(repo_root: &str) -> Result<Vec<GitWorktreeRecord>> {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["worktree", "list", "--porcelain"])
+        .output()
+        .context("run git worktree list")?;
+    if !output.status.success() {
+        bail!("git worktree list failed");
+    }
+    Ok(parse_git_worktree_records(&String::from_utf8_lossy(
+        &output.stdout,
+    )))
+}
+
+fn parse_git_worktree_records(raw: &str) -> Vec<GitWorktreeRecord> {
+    let mut records = Vec::new();
+    let mut current = GitWorktreeRecord::default();
+
+    for line in raw.lines() {
+        if line.trim().is_empty() {
+            if !current.path.is_empty() {
+                records.push(current);
+            }
+            current = GitWorktreeRecord::default();
+            continue;
+        }
+        if let Some(value) = line.strip_prefix("worktree ") {
+            current.path = value.to_string();
+        } else if let Some(value) = line.strip_prefix("HEAD ") {
+            current.head = Some(value.to_string());
+        } else if let Some(value) = line.strip_prefix("branch ") {
+            current.branch = Some(
+                value
+                    .strip_prefix("refs/heads/")
+                    .unwrap_or(value)
+                    .to_string(),
+            );
+        } else if line == "detached" {
+            current.detached = true;
+        }
+    }
+
+    if !current.path.is_empty() {
+        records.push(current);
+    }
+    records
+}
+
+fn workspace_id_for(path: &str, repo_root: &str) -> String {
+    if path == repo_root {
+        "main".to_string()
+    } else {
+        Path::new(path)
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.to_string())
+    }
+}
+
 // ── Domain command handlers (Phase 0 stubs) ──────────────────────────────────
 
 fn handle_task_command(action: TaskCommand, db: &Db, repo_root: &str) -> Result<()> {
@@ -592,35 +856,80 @@ fn handle_task_command(action: TaskCommand, db: &Db, repo_root: &str) -> Result<
 fn handle_run_command(action: RunCommand, db: &Db, repo_root: &str) -> Result<()> {
     match action {
         RunCommand::List => {
-            let sessions = db.list_active_sessions(repo_root)?;
-            if sessions.is_empty() {
+            let runs = load_cli_run_summaries(db, repo_root)?;
+            if runs.is_empty() {
                 println!("No active runs.");
                 return Ok(());
             }
             println!(
-                "{:<36}  {:<10}  {:<12}  STATUS",
-                "RUN / SESSION", "MODE", "CLIENT"
+                "{:<24}  {:<10}  {:<11}  {:<18}  {:>5}",
+                "RUN / SESSION", "ROLE", "STATE", "BLOCK", "FILES"
             );
             println!("{}", "-".repeat(80));
-            for (session_id, _cwd, _model, _started, _last, client, status, _ended) in &sessions {
+            for run in &runs {
                 println!(
-                    "{:<36}  {:<10}  {:<12}  {}",
-                    session_id, "unmanaged", client, status
+                    "{:<24}  {:<10}  {:<11}  {:<18}  {:>5}",
+                    run.run_id,
+                    run.role,
+                    run.operator_state,
+                    run.block_reason,
+                    run.changed_files.len()
                 );
             }
         }
         RunCommand::Show { id } => {
-            let sessions = db.list_active_sessions(repo_root)?;
-            let found = sessions.iter().find(|(session_id, ..)| session_id == &id);
+            let runs = load_cli_run_summaries(db, repo_root)?;
+            let found = runs.iter().find(|run| run.run_id == id);
             match found {
-                Some((session_id, cwd, model, _started, _last, client, status, _ended)) => {
-                    println!("run_id:  {session_id}");
-                    println!("mode:    unmanaged");
-                    println!("client:  {client}");
-                    println!("status:  {status}");
-                    println!("cwd:     {cwd}");
-                    if !model.is_empty() {
-                        println!("model:   {model}");
+                Some(run) => {
+                    println!("run_id:      {}", run.run_id);
+                    println!("mode:        unmanaged");
+                    println!("origin:      {}", run.origin);
+                    println!("role:        {}", run.role);
+                    println!("state:       {}", run.operator_state);
+                    println!("block:       {}", run.block_reason);
+                    println!("client:      {}", run.client);
+                    println!("status:      {}", run.status);
+                    println!("cwd:         {}", run.cwd);
+                    println!(
+                        "files:       {} exact / {} inferred / {} unknown",
+                        run.exact_files, run.inferred_files, run.unknown_files
+                    );
+                    println!(
+                        "started:     {}",
+                        chrono::DateTime::from_timestamp_millis(run.started_at_ms)
+                            .map(|dt| dt.to_rfc3339())
+                            .unwrap_or_else(|| run.started_at_ms.to_string())
+                    );
+                    println!(
+                        "last_seen:   {}",
+                        chrono::DateTime::from_timestamp_millis(run.last_seen_at_ms)
+                            .map(|dt| dt.to_rfc3339())
+                            .unwrap_or_else(|| run.last_seen_at_ms.to_string())
+                    );
+                    if let Some(ended_at_ms) = run.ended_at_ms {
+                        println!(
+                            "ended:       {}",
+                            chrono::DateTime::from_timestamp_millis(ended_at_ms)
+                                .map(|dt| dt.to_rfc3339())
+                                .unwrap_or_else(|| ended_at_ms.to_string())
+                        );
+                    }
+                    if !run.model.is_empty() {
+                        println!("model:       {}", run.model);
+                    }
+                    if let Some(eval) = &run.latest_eval {
+                        println!("eval:        {}", summarize_eval(eval));
+                    } else {
+                        println!("eval:        pending");
+                    }
+                    if run.changed_files.is_empty() {
+                        println!("changed:     -");
+                    } else {
+                        println!("changed:");
+                        for path in &run.changed_files {
+                            println!("  - {}", path);
+                        }
                     }
                 }
                 None => println!("Run '{id}' not found."),
@@ -640,36 +949,120 @@ fn handle_run_command(action: RunCommand, db: &Db, repo_root: &str) -> Result<()
 
 fn handle_workspace_command(action: WorkspaceCommand, repo_root: &str) -> Result<()> {
     match action {
-        WorkspaceCommand::List => {
-            let output = std::process::Command::new("git")
-                .arg("-C")
-                .arg(repo_root)
-                .args(["worktree", "list", "--porcelain"])
-                .output();
-            match output {
-                Ok(out) if out.status.success() => {
-                    print!("{}", String::from_utf8_lossy(&out.stdout));
-                }
-                _ => {
-                    println!("worktree: {repo_root} (main)");
+        WorkspaceCommand::List => match load_git_worktree_records(repo_root) {
+            Ok(records) if !records.is_empty() => {
+                println!(
+                    "{:<16}  {:<8}  {:<20}  PATH",
+                    "WORKSPACE", "STATE", "BRANCH"
+                );
+                println!("{}", "-".repeat(88));
+                for record in records {
+                    let state = if record.path == repo_root {
+                        "attached"
+                    } else {
+                        "ready"
+                    };
+                    println!(
+                        "{:<16}  {:<8}  {:<20}  {}",
+                        workspace_id_for(&record.path, repo_root),
+                        state,
+                        record
+                            .branch
+                            .clone()
+                            .unwrap_or_else(|| "<detached>".to_string()),
+                        record.path
+                    );
                 }
             }
-        }
+            _ => println!("worktree: {repo_root} (main)"),
+        },
         WorkspaceCommand::Show { id } => {
-            println!("Workspace: {id}");
-            println!("(Detailed workspace tracking is a Phase 0/1 capability.)");
+            let records = load_git_worktree_records(repo_root).unwrap_or_else(|_| {
+                vec![GitWorktreeRecord {
+                    path: repo_root.to_string(),
+                    head: None,
+                    branch: Some("main".to_string()),
+                    detached: false,
+                }]
+            });
+            let dirty_count = std::process::Command::new("git")
+                .arg("-C")
+                .arg(repo_root)
+                .args(["status", "--porcelain"])
+                .output()
+                .ok()
+                .map(|output| String::from_utf8_lossy(&output.stdout).lines().count())
+                .unwrap_or(0);
+            let found = records.iter().find(|record| {
+                record.path == id
+                    || workspace_id_for(&record.path, repo_root) == id
+                    || (id == "main" && record.path == repo_root)
+            });
+
+            match found {
+                Some(record) => {
+                    let workspace_id = workspace_id_for(&record.path, repo_root);
+                    let state = if record.path == repo_root && dirty_count > 0 {
+                        "dirty"
+                    } else {
+                        "ready"
+                    };
+                    println!("workspace:   {}", workspace_id);
+                    println!("path:        {}", record.path);
+                    println!(
+                        "branch:      {}",
+                        record
+                            .branch
+                            .clone()
+                            .unwrap_or_else(|| "<detached>".to_string())
+                    );
+                    if let Some(head) = &record.head {
+                        println!("head:        {}", head);
+                    }
+                    println!("state:       {}", state);
+                    println!(
+                        "dirty_files: {}",
+                        if record.path == repo_root {
+                            dirty_count
+                        } else {
+                            0
+                        }
+                    );
+                    println!("detached:    {}", record.detached);
+                }
+                None => println!("Workspace '{id}' not found."),
+            }
         }
     }
     Ok(())
 }
 
-fn handle_eval_command(action: EvalCommand, _db: &Db, repo_root: &str) -> Result<()> {
+fn handle_eval_command(action: EvalCommand, db: &Db, repo_root: &str) -> Result<()> {
     match action {
         EvalCommand::Run { mode } => {
-            println!("Triggering eval in mode: {mode}");
-            println!("repo: {repo_root}");
-            println!("(Structured eval output via EvalSnapshot is a Phase 1 capability.)");
-            println!("Tip: run `entrix run --tier {}` directly for now.", mode);
+            let eval_mode = match mode.as_str() {
+                "fast" => crate::domain::EvalMode::Fast,
+                "full" => crate::domain::EvalMode::Full,
+                other => bail!("unsupported eval mode '{other}', expected fast|full"),
+            };
+            let changed_files = db.file_state_by_repo_paths(repo_root)?;
+            let evaluator = crate::domain::EntrixEvaluator::new(repo_root);
+            let snapshot = crate::domain::Evaluator::evaluate(
+                &evaluator,
+                &crate::domain::EvalInput {
+                    task_id: None,
+                    run_id: None,
+                    workspace_id: None,
+                    changed_files,
+                    eval_mode,
+                    repo_root: repo_root.to_string(),
+                },
+            )?;
+            db.insert_eval_snapshot(repo_root, &snapshot)?;
+            println!("repo:        {}", repo_root);
+            println!("eval:        {}", summarize_eval(&snapshot));
+            println!("duration_ms: {:.1}", snapshot.duration_ms);
+            println!("dimensions:  {}", snapshot.dimensions.len());
         }
     }
     Ok(())
@@ -718,4 +1111,49 @@ fn handle_policy_command(action: PolicyCommand) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_git_worktree_records_reads_multiple_entries() {
+        let records = parse_git_worktree_records(
+            "worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /repo-wt\nHEAD def456\nbranch refs/heads/feature/x\n",
+        );
+
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].path, "/repo");
+        assert_eq!(records[0].branch.as_deref(), Some("main"));
+        assert_eq!(records[1].path, "/repo-wt");
+        assert_eq!(records[1].branch.as_deref(), Some("feature/x"));
+    }
+
+    #[test]
+    fn workspace_id_maps_repo_root_to_main() {
+        assert_eq!(workspace_id_for("/repo", "/repo"), "main");
+        assert_eq!(workspace_id_for("/repo-worktree", "/repo"), "repo-worktree");
+    }
+
+    #[test]
+    fn cli_run_state_prefers_failed_over_active() {
+        let eval = crate::domain::EvalSnapshot {
+            run_id: None,
+            mode: crate::domain::EvalMode::Fast,
+            overall_score: 62.0,
+            hard_gate_blocked: true,
+            score_blocked: false,
+            dimensions: Vec::new(),
+            evidence: Vec::new(),
+            recommendations: Vec::new(),
+            evaluated_at_ms: 0,
+            duration_ms: 0.0,
+        };
+
+        assert_eq!(
+            infer_cli_run_state("active", Some(&eval), "hard gate failure"),
+            "failed"
+        );
+    }
 }

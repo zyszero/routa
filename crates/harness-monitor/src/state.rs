@@ -323,16 +323,26 @@ impl RuntimeState {
         &self.cached_session_items
     }
 
-    pub fn selected_run_scope_label(&self) -> String {
-        self.selected_run_item()
-            .map(|run| {
-                if run.is_unknown_bucket {
-                    "review".to_string()
-                } else {
-                    run.display_name.clone()
-                }
+    pub fn selected_workspace_scope_label(&self) -> String {
+        self.selected_workspace_path()
+            .map(|path| canonical_repo_identity(&path))
+            .unwrap_or_else(|| canonical_repo_identity(&self.repo_root))
+    }
+
+    pub fn selected_workspace_agent_count(&self) -> usize {
+        let workspace = self
+            .selected_workspace_path()
+            .unwrap_or_else(|| self.repo_root.clone());
+        let workspace_id = canonical_repo_identity(&workspace);
+        self.detected_agents
+            .iter()
+            .filter(|agent| {
+                agent
+                    .cwd
+                    .as_deref()
+                    .is_some_and(|cwd| canonical_repo_identity(cwd) == workspace_id)
             })
-            .unwrap_or_else(|| "all".to_string())
+            .count()
     }
 
     fn compute_session_items(&self) -> Vec<SessionListItem> {
@@ -466,7 +476,7 @@ impl RuntimeState {
             .files
             .values()
             .filter(|file| file.dirty || file.conflicted)
-            .filter(|file| self.matches_selected_run_file_scope(file))
+            .filter(|file| self.matches_selected_workspace_file_scope(file))
             .filter(|file| self.matches_file_search(file))
             .collect();
         match self.file_list_mode {
@@ -1067,24 +1077,30 @@ impl RuntimeState {
             .collect()
     }
 
-    fn matches_selected_run_file_scope(&self, file: &FileView) -> bool {
-        let Some(run) = self.selected_run_item() else {
-            return true;
-        };
-
+    pub(crate) fn selected_workspace_path(&self) -> Option<String> {
+        let run = self.selected_run_item()?;
+        if let Some(agent) = run
+            .attached_agent_key
+            .as_ref()
+            .and_then(|key| self.detected_agents.iter().find(|agent| &agent.key == key))
+        {
+            return agent.cwd.clone().or_else(|| Some(self.repo_root.clone()));
+        }
         if run.is_unknown_bucket {
-            return file.conflicted
-                || matches!(file.confidence, AttributionConfidence::Unknown)
-                || file.last_session_id.is_none()
-                || file.touched_by.is_empty();
+            return Some(self.repo_root.clone());
         }
+        self.sessions
+            .get(&run.session_id)
+            .map(|session| session.cwd.clone())
+            .or_else(|| Some(self.repo_root.clone()))
+    }
 
-        if run.is_synthetic_agent_run {
-            return false;
-        }
-
-        file.last_session_id.as_deref() == Some(run.session_id.as_str())
-            || file.touched_by.contains(&run.session_id)
+    fn matches_selected_workspace_file_scope(&self, _file: &FileView) -> bool {
+        let workspace_id = self
+            .selected_workspace_path()
+            .map(|path| canonical_repo_identity(&path))
+            .unwrap_or_else(|| canonical_repo_identity(&self.repo_root));
+        workspace_id == canonical_repo_identity(&self.repo_root)
     }
 
     fn matches_session_search(&self, session: &SessionView) -> bool {

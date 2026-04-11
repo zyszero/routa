@@ -48,6 +48,7 @@ struct RunOperatorModel {
     origin_label: &'static str,
     operator_state: String,
     workspace_path: String,
+    process_cwd: Option<String>,
     workspace_state: WorkspaceState,
     effect_classes: Vec<EffectClass>,
     policy_decision: PolicyDecisionKind,
@@ -1080,15 +1081,18 @@ fn render_file_header_line(state: &RuntimeState, cache: &AppCache, _width: u16) 
         .ahead_count
         .map(|count| count.to_string())
         .unwrap_or_else(|| "...".to_string());
+    let workspace_agents = state.selected_workspace_agent_count();
     let worktree_total = state
         .worktree_count
         .map(|count| count.to_string())
         .unwrap_or_else(|| "...".to_string());
     let summary = format!(
-        "{}, {}, run: {}, branch: {}, {}",
+        "{}, {}, workspace: {}, {} agent{}, branch: {}, {}",
         pluralize(files.len(), "file"),
         pluralize_count_text(&commit_total, "commit"),
-        state.selected_run_scope_label(),
+        state.selected_workspace_scope_label(),
+        workspace_agents,
+        if workspace_agents == 1 { "" } else { "s" },
         state.branch,
         pluralize_count_text(&worktree_total, "worktree"),
     );
@@ -1245,6 +1249,11 @@ fn render_run_details(
         .clone()
         .unwrap_or_else(|| "ready".to_string());
     let workspace_path = shorten_path(&model.workspace_path, width.saturating_sub(18) as usize);
+    let process_cwd = model
+        .process_cwd
+        .as_deref()
+        .map(|path| shorten_path(path, width.saturating_sub(20) as usize))
+        .unwrap_or_else(|| "-".to_string());
     let next_text = model
         .handoff_summary
         .as_ref()
@@ -1290,6 +1299,10 @@ fn render_run_details(
             Span::raw("  "),
             Span::styled("Path: ", Style::default().fg(colors.muted)),
             Span::styled(workspace_path, Style::default().fg(colors.text)),
+        ]),
+        Line::from(vec![
+            Span::styled("Process CWD: ", Style::default().fg(colors.muted)),
+            Span::styled(process_cwd, Style::default().fg(colors.text)),
         ]),
         Line::from(vec![
             Span::styled("Eval: ", Style::default().fg(colors.muted)),
@@ -1444,6 +1457,7 @@ fn build_run_operator_model(
     let role = infer_run_role(run);
     let origin_label = run_origin_label(run);
     let workspace_path = workspace_path_for_run(state, run);
+    let process_cwd = process_cwd_for_run(state, run);
     let effect_classes = infer_effect_classes(run, &changed_files);
     let policy_decision = infer_policy_decision(run, &effect_classes);
     let evidence = build_evidence_requirements(cache, run, &changed_files, policy_decision.clone());
@@ -1470,6 +1484,7 @@ fn build_run_operator_model(
         origin_label,
         operator_state,
         workspace_path,
+        process_cwd,
         workspace_state,
         effect_classes,
         policy_decision,
@@ -1571,18 +1586,27 @@ fn run_origin_label(run: &crate::state::SessionListItem) -> &'static str {
 }
 
 fn workspace_path_for_run(state: &RuntimeState, run: &crate::state::SessionListItem) -> String {
+    let _ = run;
+    state
+        .selected_workspace_path()
+        .unwrap_or_else(|| state.repo_root.clone())
+}
+
+fn process_cwd_for_run(
+    state: &RuntimeState,
+    run: &crate::state::SessionListItem,
+) -> Option<String> {
     if let Some(agent) = run
         .attached_agent_key
         .as_ref()
         .and_then(|key| state.detected_agents.iter().find(|agent| &agent.key == key))
     {
-        return agent.cwd.clone().unwrap_or_else(|| state.repo_root.clone());
+        return agent.cwd.clone();
     }
     state
         .sessions
         .get(&run.session_id)
         .map(|session| session.cwd.clone())
-        .unwrap_or_else(|| state.repo_root.clone())
 }
 
 fn infer_effect_classes(
