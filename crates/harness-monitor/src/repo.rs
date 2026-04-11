@@ -5,11 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const APP_SLUG: &str = "harness-monitor";
-const LEGACY_APP_SLUG_ROUTA: &str = "routa-watch";
-const LEGACY_APP_SLUG: &str = "agentwatch";
 const DB_FILE_NAME: &str = "harness-monitor.db";
-const LEGACY_DB_FILE_NAME_ROUTA: &str = "routa-watch.db";
-const LEGACY_DB_FILE_NAME: &str = "agentwatch.db";
 
 #[allow(dead_code)]
 pub struct RepoContext {
@@ -87,33 +83,7 @@ pub fn resolve(path_opt: Option<&str>, db_path_opt: Option<&str>) -> Result<Repo
     let db_path = if let Some(db_path) = db_path_opt {
         PathBuf::from(db_path)
     } else {
-        let primary_db_path = git_dir.join(APP_SLUG).join(DB_FILE_NAME);
-        let routa_legacy_db_path = git_dir
-            .join(LEGACY_APP_SLUG_ROUTA)
-            .join(LEGACY_DB_FILE_NAME_ROUTA);
-        let agentwatch_legacy_db_path = git_dir.join(LEGACY_APP_SLUG).join(LEGACY_DB_FILE_NAME);
-        let preferred_db_path = if routa_legacy_db_path.exists() && !primary_db_path.exists() {
-            routa_legacy_db_path
-        } else if agentwatch_legacy_db_path.exists() && !primary_db_path.exists() {
-            agentwatch_legacy_db_path
-        } else {
-            primary_db_path
-        };
-        match ensure_writable_db_path(&preferred_db_path) {
-            Ok(_) => preferred_db_path,
-            Err(err) => {
-                let fallback = fallback_db_path(&repo_root).context("resolve fallback db path")?;
-                let fallback_parent = fallback.parent().context("fallback db has no parent")?;
-                std::fs::create_dir_all(fallback_parent).with_context(|| {
-                    format!("create fallback db directory {:?}", fallback_parent)
-                })?;
-                eprintln!(
-                    "harness-monitor warning: cannot write {:?}, fallback to {:?}: {}",
-                    preferred_db_path, fallback, err
-                );
-                fallback
-            }
-        }
+        resolve_default_db_path(&repo_root)?
     };
 
     Ok(RepoContext {
@@ -181,9 +151,20 @@ fn runtime_port(repo_root: &Path) -> u16 {
     43000 + (seed % 10000)
 }
 
-fn fallback_db_path(repo_root: &Path) -> Result<PathBuf> {
-    let marker = runtime_marker(repo_root);
+fn resolve_default_db_path(repo_root: &Path) -> Result<PathBuf> {
+    let mut attempted = Vec::new();
+    for candidate in db_path_candidates(repo_root) {
+        match ensure_writable_db_path(&candidate) {
+            Ok(()) => return Ok(candidate),
+            Err(err) => attempted.push((candidate, err.to_string())),
+        }
+    }
 
+    anyhow::bail!("could not create a writable database path: {:?}", attempted);
+}
+
+fn db_path_candidates(repo_root: &Path) -> Vec<PathBuf> {
+    let marker = runtime_marker(repo_root);
     let mut candidate_bases = Vec::new();
     if let Ok(custom_base) = std::env::var("HARNESS_MONITOR_DB_DIR") {
         if !custom_base.trim().is_empty() {
@@ -200,32 +181,34 @@ fn fallback_db_path(repo_root: &Path) -> Result<PathBuf> {
             candidate_bases.push(PathBuf::from(custom_base));
         }
     }
+    if let Some(data_dir) = dirs::data_local_dir() {
+        candidate_bases.push(data_dir);
+    }
     if let Some(cache_dir) = dirs::cache_dir() {
         candidate_bases.push(cache_dir);
     }
     if let Some(home_dir) = std::env::var_os("HOME").map(PathBuf::from) {
+        candidate_bases.push(home_dir.join(".local").join("share"));
         candidate_bases.push(home_dir.join(".cache"));
     }
     candidate_bases.push(PathBuf::from("/tmp"));
 
-    for base in &candidate_bases {
-        let candidate = base
-            .join(APP_SLUG)
-            .join("repos")
-            .join(&marker)
-            .join(DB_FILE_NAME);
-        let parent = candidate
-            .parent()
-            .context("fallback db path has no parent")?;
-        if std::fs::create_dir_all(parent).is_ok() {
-            return Ok(candidate);
+    let mut candidates = Vec::new();
+    for base in candidate_bases {
+        let candidate = scoped_db_path(&base, &marker);
+        if !candidates.contains(&candidate) {
+            candidates.push(candidate);
         }
     }
 
-    anyhow::bail!(
-        "could not create a writable fallback database directory from {:?}",
-        candidate_bases
-    );
+    candidates
+}
+
+fn scoped_db_path(base: &Path, marker: &str) -> PathBuf {
+    base.join(APP_SLUG)
+        .join("repos")
+        .join(marker)
+        .join(DB_FILE_NAME)
 }
 
 fn ensure_writable_db_path(path: &Path) -> Result<()> {
@@ -250,5 +233,21 @@ fn ensure_writable_db_path(path: &Path) -> Result<()> {
             }
             _ => Err(err.into()),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scoped_db_path_uses_repo_scoped_safe_directory() {
+        let path = scoped_db_path(Path::new("/safe-base"), "repo-marker");
+
+        assert_eq!(
+            path,
+            PathBuf::from("/safe-base/harness-monitor/repos/repo-marker/harness-monitor.db")
+        );
+        assert!(!path.to_string_lossy().contains("/.git/"));
     }
 }
