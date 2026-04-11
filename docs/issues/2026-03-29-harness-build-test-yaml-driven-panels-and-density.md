@@ -84,6 +84,9 @@ related_issues: [
 `2026-03-29-harness-governance-loop-missing-build-metadata.md` is now treated
 as a narrower symptom of this broader build/test harness issue rather than a
 separate active tracker.
+- `2026-03-28-harness-governance-loop-semantic-drift.md` is also treated as a
+  narrower governance-loop presentation symptom inside the same broader harness
+  surface family.
 - 当前屏幕首屏已经同时呈现 governance graph 与 instruction file 的大块内容，首屏以下还会继续堆叠 Hook system、Review triggers、Fitness files 等区块。
 - `build` 与 `test` 比 `review` 更需要“摘要化”，因为它们天然会带来 scripts、config、artifact、coverage、reports 等多组内容。
 - 如果后续直接把 repo heuristics 暴露给 UI，很容易把 `package.json`、`Cargo.toml`、`vitest.config.ts`、`playwright.config.ts`、`coverage/` 等全部平铺出来，进一步放大页面长度问题。
