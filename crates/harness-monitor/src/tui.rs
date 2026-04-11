@@ -72,13 +72,8 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
     let mut feed = RuntimeFeed::open(&ctx.runtime_event_path)?;
     ensure_runtime_service(&ctx)?;
     let repo_root = ctx.repo_root.to_string_lossy().to_string();
-    let repo_name = ctx
-        .repo_root
-        .file_name()
-        .map(|name| name.to_string_lossy().to_string())
-        .unwrap_or_else(|| repo_root.clone());
     let branch = current_branch(&ctx).unwrap_or_else(|_| "-".to_string());
-    let mut state = RuntimeState::new(repo_root.clone(), repo_name, branch);
+    let mut state = RuntimeState::new(repo_root.clone(), branch);
     state.sync_focus_for_width(terminal.size()?.width);
     state.set_runtime_transport(read_runtime_transport(&ctx));
     state.set_ahead_count(current_ahead_count(&ctx).ok());

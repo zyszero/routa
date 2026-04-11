@@ -148,7 +148,6 @@ pub struct SessionListItem {
 #[derive(Debug)]
 pub struct RuntimeState {
     pub repo_root: String,
-    pub repo_name: String,
     pub branch: String,
     pub ahead_count: Option<usize>,
     pub worktree_count: Option<usize>,
@@ -183,10 +182,9 @@ pub struct RuntimeState {
 }
 
 impl RuntimeState {
-    pub fn new(repo_root: String, repo_name: String, branch: String) -> Self {
+    pub fn new(repo_root: String, branch: String) -> Self {
         let mut state = Self {
             repo_root,
-            repo_name,
             branch,
             ahead_count: None,
             worktree_count: None,

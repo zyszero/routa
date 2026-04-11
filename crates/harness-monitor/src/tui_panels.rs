@@ -1017,7 +1017,6 @@ pub(super) fn render_title_bar(
         format_compact_loc(cache.scc_summary().map(|summary| summary.code))
     );
     let transport = format!("transport: {}", state.runtime_transport);
-    let branch = format!("branch: {}", state.branch);
     let line = if area.width < 110 {
         Line::from(vec![
             Span::styled("routa.js", Style::default().fg(colors.accent)),
@@ -1043,8 +1042,6 @@ pub(super) fn render_title_bar(
             Span::styled(unattributed_label, Style::default().fg(INFERRED)),
             Span::raw("  "),
             Span::styled(loc_label, Style::default().fg(colors.text)),
-            Span::raw("  "),
-            Span::styled(branch, Style::default().fg(colors.text)),
             Span::raw("  "),
             Span::styled(
                 format!("fitness: {current_mode}"),

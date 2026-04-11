@@ -109,11 +109,7 @@ fn sample_state() -> RuntimeState {
         },
     ]);
 
-    let mut state = RuntimeState::new(
-        "/tmp/project".to_string(),
-        "routa-js".to_string(),
-        "main".to_string(),
-    );
+    let mut state = RuntimeState::new("/tmp/project".to_string(), "main".to_string());
     state.sessions = sessions;
     state.files = files;
     state.event_log = event_log;
@@ -384,11 +380,7 @@ fn assign_selected_file_to_selected_session_updates_owner() {
 
 #[test]
 fn sync_dirty_files_rebuilds_unknown_session_and_file_views() {
-    let mut state = RuntimeState::new(
-        "/tmp/project".to_string(),
-        "routa-js".to_string(),
-        "main".to_string(),
-    );
+    let mut state = RuntimeState::new("/tmp/project".to_string(), "main".to_string());
 
     state.sync_dirty_files(vec![(
         "src/app/globals.css".to_string(),
@@ -590,11 +582,7 @@ fn hard_gate_failure_blocks_selected_run() {
 #[test]
 fn synthetic_run_details_surface_process_scan_origin() {
     let now = chrono::Utc::now().timestamp_millis();
-    let mut state = RuntimeState::new(
-        "/tmp/project".to_string(),
-        "routa-js".to_string(),
-        "main".to_string(),
-    );
+    let mut state = RuntimeState::new("/tmp/project".to_string(), "main".to_string());
     state.last_refresh_at_ms = now;
     state.sync_dirty_files(vec![(
         "crates/harness-monitor/src/tui_render.rs".to_string(),
@@ -787,11 +775,7 @@ fn run_sort_by_name_orders_named_runs_alphabetically() {
 #[test]
 fn unmatched_repo_local_agents_become_synthetic_runs() {
     let now = chrono::Utc::now().timestamp_millis();
-    let mut state = RuntimeState::new(
-        "/tmp/project".to_string(),
-        "routa-js".to_string(),
-        "main".to_string(),
-    );
+    let mut state = RuntimeState::new("/tmp/project".to_string(), "main".to_string());
     state.last_refresh_at_ms = now;
     state.sync_dirty_files(vec![(
         "crates/harness-monitor/src/detect.rs".to_string(),
@@ -845,11 +829,7 @@ fn unmatched_repo_local_agents_become_synthetic_runs() {
 #[test]
 fn agents_from_recovered_repo_alias_still_count_as_repo_local_runs() {
     let now = chrono::Utc::now().timestamp_millis();
-    let mut state = RuntimeState::new(
-        "/Users/phodal/ai/routa-js".to_string(),
-        "routa-js".to_string(),
-        "main".to_string(),
-    );
+    let mut state = RuntimeState::new("/Users/phodal/ai/routa-js".to_string(), "main".to_string());
     state.last_refresh_at_ms = now;
     state.set_detected_agents(vec![DetectedAgent {
         key: "codex:5297".to_string(),

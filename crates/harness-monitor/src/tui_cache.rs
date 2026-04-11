@@ -519,11 +519,15 @@ impl AppCache {
             return;
         }
         if !force && self.scc_summary.is_none() {
-            let _ = self.worker_tx.send(BackgroundCommand::RefreshScc { repo_root });
+            let _ = self
+                .worker_tx
+                .send(BackgroundCommand::RefreshScc { repo_root });
             self.pending_scc = true;
             return;
         }
-        let _ = self.worker_tx.send(BackgroundCommand::RefreshScc { repo_root });
+        let _ = self
+            .worker_tx
+            .send(BackgroundCommand::RefreshScc { repo_root });
         self.pending_scc = true;
     }
 
@@ -1082,22 +1086,30 @@ mod scc_tests {
     #[test]
     fn git_submodule_paths_reads_gitlinks() {
         let dir = tempdir().expect("tempdir");
-        Command::new("git")
+        let init = Command::new("git")
             .arg("init")
             .arg(dir.path())
             .output()
             .expect("init repo");
-        Command::new("git")
+        assert!(init.status.success(), "git init failed: {:?}", init);
+
+        let update_index = Command::new("git")
             .arg("-C")
             .arg(dir.path())
             .arg("update-index")
             .arg("--add")
+            .arg("--info-only")
             .arg("--cacheinfo")
             .arg("160000")
             .arg("a745c6f9664e4525be45e02582e7dc970158ec74")
             .arg("tools/entrix")
             .output()
             .expect("register gitlink");
+        assert!(
+            update_index.status.success(),
+            "git update-index failed: {:?}",
+            update_index
+        );
 
         assert_eq!(
             git_submodule_paths(&dir.path().to_string_lossy()),
