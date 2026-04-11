@@ -324,7 +324,11 @@ fn render_fitness_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
             4
         };
         for dim in snapshot.dimensions.iter().take(dimension_limit) {
-            let dim_bar_width = inner.width.saturating_sub(28).clamp(8, 24) as usize;
+            let dim_name_width = inner.width.saturating_sub(36).clamp(14, 22) as usize;
+            let dim_bar_width = inner
+                .width
+                .saturating_sub(dim_name_width as u16 + 16)
+                .clamp(8, 28) as usize;
             let warning = if dim.hard_gate_failures.is_empty() {
                 String::new()
             } else {
@@ -336,7 +340,7 @@ fn render_fitness_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
             )];
             row.push(Span::raw(" "));
             row.push(Span::styled(
-                format!("{:<10}", truncate_short(&dim.name, 10)),
+                format!("{:<dim_name_width$}", truncate_short(&dim.name, dim_name_width)),
                 Style::default().fg(colors.text),
             ));
             row.push(Span::raw(" "));
@@ -345,15 +349,16 @@ fn render_fitness_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
                 Style::default().fg(colors.muted),
             ));
             row.push(Span::raw(" "));
+            row.push(Span::styled(
+                format!("{:>2}/{:<2}", dim.passed, dim.total),
+                Style::default().fg(colors.muted),
+            ));
+            row.push(Span::raw(" "));
             row.push(render_score_bar(dim.score, dim_bar_width));
             if !warning.is_empty() {
                 row.push(Span::styled(warning, Style::default().fg(STOPPED)));
             }
             lines.push(Line::from(row));
-            lines.push(Line::from(vec![Span::styled(
-                format!("     {}/{} metrics passed", dim.passed, dim.total),
-                Style::default().fg(colors.muted),
-            )]));
         }
 
         if !compact_height {
