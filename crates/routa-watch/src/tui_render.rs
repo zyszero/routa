@@ -291,7 +291,6 @@ fn render_fitness_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
             ]));
         }
 
-        lines.push(Line::from(""));
         lines.push(Line::from(vec![Span::styled(
             "Dimension scores:",
             Style::default()
@@ -339,7 +338,6 @@ fn render_fitness_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
         }
 
         if !compact_height {
-            lines.push(Line::from(""));
             lines.push(Line::from(vec![
                 Span::styled("Slowest:", Style::default().fg(colors.text)),
                 Span::raw(" "),
@@ -1130,8 +1128,13 @@ fn render_file_single_line(
     area_width: usize,
 ) -> Line<'static> {
     let (_, parent_dir) = split_display_path(file);
-    let name_width = area_width.saturating_sub(25).clamp(30, 56);
-    let dir_width = area_width.saturating_sub(name_width + 21).clamp(8, 12);
+    let folder_label = compact_folder_label(&parent_dir);
+    let folder_width = if folder_label == "/" {
+        0
+    } else {
+        area_width.saturating_sub(40).clamp(8, 14)
+    };
+    let name_width = area_width.saturating_sub(25 + folder_width).clamp(20, 52);
     let mut spans = vec![Span::styled(
         format!(
             "{} {}",
@@ -1140,11 +1143,16 @@ fn render_file_single_line(
         ),
         row_style(selected, focused, colors).add_modifier(Modifier::BOLD),
     )];
-    spans.push(Span::styled(
-        pad_right(&shorten_path(&parent_dir, dir_width), dir_width + 1),
-        Style::default().fg(colors.muted),
-    ));
-    spans.push(Span::raw(" "));
+    if folder_width > 0 {
+        spans.push(Span::styled(
+            pad_right(
+                &format!("{}/", shorten_path(&folder_label, folder_width)),
+                folder_width + 2,
+            ),
+            Style::default().fg(colors.muted),
+        ));
+        spans.push(Span::raw(" "));
+    }
     spans.extend(render_file_secondary_line(file, diff_stat, colors).spans);
     Line::from(spans)
 }
@@ -1214,6 +1222,17 @@ fn split_display_path(file: &crate::models::FileView) -> (String, String) {
         })
         .unwrap_or_else(|| "/".to_string());
     (file_name, parent)
+}
+
+fn compact_folder_label(parent_dir: &str) -> String {
+    if parent_dir == "/" {
+        return "/".to_string();
+    }
+    Path::new(parent_dir)
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| parent_dir.to_string())
 }
 
 fn pad_right(value: &str, width: usize) -> String {
