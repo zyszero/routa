@@ -122,9 +122,9 @@ fn render_main_area(
             ])
             .split(split[1]);
         render_files(frame, split[0], state, cache, FileRowDensity::TwoLine);
-        render_preview_panel(frame, lower[0], state, cache);
-        render_details_panel(frame, lower[1], state, cache);
-        render_fitness_panel(frame, lower[2], state, cache);
+        render_fitness_panel(frame, lower[0], state, cache);
+        render_preview_panel(frame, lower[1], state, cache);
+        render_details_panel(frame, lower[2], state, cache);
         return;
     }
 
@@ -133,18 +133,18 @@ fn render_main_area(
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(72), Constraint::Percentage(28)])
             .split(area);
+        let left = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(68), Constraint::Percentage(32)])
+            .split(columns[0]);
         let right = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Percentage(45),
-                Constraint::Percentage(30),
-                Constraint::Percentage(25),
-            ])
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(columns[1]);
-        render_files(frame, columns[0], state, cache, FileRowDensity::SingleLine);
+        render_files(frame, left[0], state, cache, FileRowDensity::SingleLine);
+        render_fitness_panel(frame, left[1], state, cache);
         render_preview_panel(frame, right[0], state, cache);
         render_details_panel(frame, right[1], state, cache);
-        render_fitness_panel(frame, right[2], state, cache);
         return;
     }
 

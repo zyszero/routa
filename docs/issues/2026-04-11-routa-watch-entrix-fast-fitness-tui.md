@@ -45,6 +45,8 @@ related_issues: []
   - 在 `crates/routa-watch` 增加 `Entrix` fast 健康快照获取与展示。
   - 背景异步刷新机制接通（启动时、手动 `g`、10 分钟周期刷新）。
   - 首屏面板显示总分、维度得分、关键度量失败统计、覆盖率可见性说明。
+  - 小/中屏下已将 `Fitness (Entrix Fast)` 面板置于 `Files` 下面。
+  - 启动逻辑改为优先读取历史快照；无历史才触发一次 `fast` 刷新。
 - 已验证：
   - `cargo check -p routa-watch`、`cargo test -p routa-watch` 正常。
   - 快照渲染测试覆盖面可见，当前面板可在无快照数据时回退到 `idle`。

@@ -77,10 +77,10 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
         .map(|name| name.to_string_lossy().to_string())
         .unwrap_or_else(|| repo_root.clone());
     let branch = current_branch(&ctx).unwrap_or_else(|_| "-".to_string());
-    let mut state = RuntimeState::new(repo_root, repo_name, branch);
+    let mut state = RuntimeState::new(repo_root.clone(), repo_name, branch);
     state.set_runtime_transport(read_runtime_transport(&ctx));
     state.set_ahead_count(current_ahead_count(&ctx).ok());
-    let mut cache = AppCache::new();
+    let mut cache = AppCache::new(&repo_root);
     let bootstrap_cutoff = bootstrap_history_cutoff(chrono::Utc::now().timestamp_millis());
     for message in feed.read_recent_since(bootstrap_cutoff)? {
         state.apply_message(message);
@@ -90,8 +90,10 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
     let mut last_repo_status_refresh =
         Instant::now() - Duration::from_millis(REPO_STATUS_REFRESH_MS);
     let mut last_agent_refresh = Instant::now() - Duration::from_millis(AGENT_SCAN_REFRESH_MS);
-    let mut last_fitness_refresh = Instant::now() - Duration::from_millis(FITNESS_AUTO_REFRESH_MS);
-    cache.request_fitness_refresh(state.repo_root.clone());
+    let mut last_fitness_refresh = Instant::now();
+    if !cache.has_fitness_data() {
+        cache.request_fitness_refresh(state.repo_root.clone());
+    }
 
     loop {
         while event::poll(Duration::from_millis(0)).context("poll terminal events")? {

@@ -157,7 +157,7 @@ fn sample_state() -> RuntimeState {
 }
 
 fn sample_cache(state: &RuntimeState) -> AppCache {
-    let mut cache = AppCache::new();
+    let mut cache = AppCache::new(&state.repo_root);
     let file = state.selected_file().expect("selected file");
     cache.diff_stats.insert(
         diff_stat_key(&file.rel_path, &file.state_code, file.last_modified_at_ms),

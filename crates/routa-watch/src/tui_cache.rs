@@ -1,12 +1,17 @@
 use super::fitness;
 use super::*;
+use crate::repo;
 use ratatui::text::Text;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::Command;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
+const FITNESS_HISTORY_SCHEMA_VERSION: u32 = 1;
+const FITNESS_HISTORY_FILE: &str = "fitness-history.json";
 const FITNESS_TREND_CAPACITY: usize = 12;
 
 #[derive(Clone, Debug, Default)]
@@ -100,16 +105,31 @@ pub(super) struct AppCache {
     fitness_error: Option<String>,
     fitness_last_run_ms: Option<i64>,
     fitness_is_running: bool,
+    fitness_repo_root: String,
     worker_tx: Sender<BackgroundCommand>,
     worker_rx: Receiver<BackgroundResult>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct FitnessHistoryRecord {
+    #[serde(default)]
+    schema_version: u32,
+    #[serde(default)]
+    snapshot: Option<fitness::FitnessSnapshot>,
+    #[serde(default)]
+    trend: Vec<f64>,
+    #[serde(default)]
+    last_run_ms: Option<i64>,
+    #[serde(default)]
+    last_error: Option<String>,
+}
+
 impl AppCache {
-    pub(super) fn new() -> Self {
+    pub(super) fn new(repo_root: &str) -> Self {
         let (worker_tx, worker_rx_cmd) = mpsc::channel();
         let (result_tx, worker_rx) = mpsc::channel();
         thread::spawn(move || background_worker(worker_rx_cmd, result_tx));
-        Self {
+        let mut cache = Self {
             diff_stats: BTreeMap::new(),
             preview_cache: BTreeMap::new(),
             diff_cache: BTreeMap::new(),
@@ -125,9 +145,54 @@ impl AppCache {
             fitness_error: None,
             fitness_last_run_ms: None,
             fitness_is_running: false,
+            fitness_repo_root: repo_root.to_string(),
             worker_tx,
             worker_rx,
+        };
+        cache.load_fitness_history();
+        cache
+    }
+
+    pub(super) fn has_fitness_data(&self) -> bool {
+        self.fitness_snapshot.is_some() || !self.fitness_trend.is_empty()
+    }
+
+    fn persist_fitness_history(&self) {
+        let path = match fitness_history_path(&self.fitness_repo_root) {
+            Some(path) => path,
+            None => return,
+        };
+        let payload = serde_json::to_vec_pretty(&FitnessHistoryRecord {
+            schema_version: FITNESS_HISTORY_SCHEMA_VERSION,
+            snapshot: self.fitness_snapshot.clone(),
+            trend: self.fitness_trend.clone(),
+            last_run_ms: self.fitness_last_run_ms,
+            last_error: self.fitness_error.clone(),
+        });
+        let Ok(payload) = payload else {
+            return;
+        };
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
         }
+        let _ = std::fs::write(path, payload);
+    }
+
+    fn load_fitness_history(&mut self) {
+        let Some(record) = read_fitness_history_record(&self.fitness_repo_root) else {
+            return;
+        };
+        if record.schema_version > FITNESS_HISTORY_SCHEMA_VERSION {
+            return;
+        }
+        self.fitness_snapshot = record.snapshot;
+        self.fitness_trend = record.trend;
+        if self.fitness_trend.len() > FITNESS_TREND_CAPACITY {
+            let overflow = self.fitness_trend.len() - FITNESS_TREND_CAPACITY;
+            self.fitness_trend.drain(0..overflow);
+        }
+        self.fitness_last_run_ms = record.last_run_ms;
+        self.fitness_error = record.last_error;
     }
 
     pub(super) fn sync_results(&mut self) {
@@ -173,6 +238,7 @@ impl AppCache {
                             self.fitness_error = Some(message);
                         }
                     }
+                    self.persist_fitness_history();
                     self.pending_fitness = false;
                 }
             }
@@ -358,6 +424,17 @@ impl AppCache {
     }
 }
 
+fn read_fitness_history_record(repo_root: &str) -> Option<FitnessHistoryRecord> {
+    let path = fitness_history_path(repo_root)?;
+    let payload = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&payload).ok()
+}
+
+fn fitness_history_path(repo_root: &str) -> Option<PathBuf> {
+    let event_path = repo::runtime_event_path(Path::new(repo_root));
+    Some(event_path.parent()?.join(FITNESS_HISTORY_FILE))
+}
+
 pub(super) fn diff_stat_key(rel_path: &str, state_code: &str, version: i64) -> String {
     format!("{rel_path}:{state_code}:{version}")
 }
@@ -488,9 +565,14 @@ fn compute_diff_stat(repo_root: &str, rel_path: &str, state_code: &str) -> DiffS
 
 #[cfg(test)]
 mod tests {
-    use super::display_status_code;
+    use super::{
+        display_status_code, fitness, AppCache, FitnessHistoryRecord, FITNESS_HISTORY_FILE,
+        FITNESS_HISTORY_SCHEMA_VERSION,
+    };
     use crate::models::{AttributionConfidence, EntryKind, FileView};
+    use crate::repo;
     use std::collections::BTreeSet;
+    use tempfile::tempdir;
 
     #[test]
     fn directory_entries_use_dir_status_label() {
@@ -508,6 +590,45 @@ mod tests {
         };
 
         assert_eq!(display_status_code(&file), "DIR");
+    }
+
+    #[test]
+    fn app_cache_restores_fitness_history_on_startup() {
+        let dir = tempdir().expect("tempdir");
+        let repo_root = dir.path().to_string_lossy().to_string();
+        let history_path = repo::runtime_event_path(std::path::Path::new(&repo_root))
+            .parent()
+            .expect("runtime directory")
+            .join(FITNESS_HISTORY_FILE);
+        std::fs::create_dir_all(history_path.parent().expect("runtime history parent"))
+            .expect("create runtime history parent");
+        let record = FitnessHistoryRecord {
+            schema_version: FITNESS_HISTORY_SCHEMA_VERSION,
+            snapshot: Some(fitness::FitnessSnapshot {
+                final_score: 88.5,
+                hard_gate_blocked: false,
+                score_blocked: false,
+                duration_ms: 1234.0,
+                metric_count: 10,
+                coverage_metric_available: false,
+                dimensions: vec![],
+                slowest_metrics: vec![],
+            }),
+            trend: vec![88.5, 89.0],
+            last_run_ms: Some(12_345),
+            last_error: Some("cached error".to_string()),
+        };
+        let payload = serde_json::to_vec_pretty(&record).expect("serialize history");
+        std::fs::write(&history_path, payload).expect("write history");
+
+        let cache = AppCache::new(&repo_root);
+        assert!(cache.has_fitness_data());
+        assert_eq!(cache.fitness_last_run_ms(), Some(12_345));
+        assert_eq!(
+            cache.fitness_snapshot().expect("snapshot").final_score,
+            88.5
+        );
+        assert_eq!(cache.fitness_trend(), &[88.5, 89.0]);
     }
 }
 

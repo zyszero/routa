@@ -4,12 +4,13 @@ use routa_entrix::governance::{filter_dimensions, GovernancePolicy};
 use routa_entrix::model::{ExecutionScope, MetricResult, Tier};
 use routa_entrix::runner::ShellRunner;
 use routa_entrix::scoring::{score_dimension, score_report};
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::path::Path;
 use std::thread;
 use std::time::Instant;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FitnessMetricSummary {
     pub name: String,
     pub passed: bool,
@@ -18,7 +19,7 @@ pub struct FitnessMetricSummary {
     pub duration_ms: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FitnessDimensionSummary {
     pub name: String,
     pub weight: i32,
@@ -29,7 +30,7 @@ pub struct FitnessDimensionSummary {
     pub metrics: Vec<FitnessMetricSummary>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FitnessSnapshot {
     pub final_score: f64,
     pub hard_gate_blocked: bool,

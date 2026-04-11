@@ -13,17 +13,17 @@ expression: "render_snapshot(&state, &mut cache, 120, 24)"
 │                                                                                    ││                                │
 │                                                                                    ││                                │
 │                                                                                    ││                                │
+│                                                                                    ││                                │
 │                                                                                    │└────────────────────────────────┘
 │                                                                                    │┌Details─────────────────────────┐
 │                                                                                    ││tui.rs                          │
 │                                                                                    ││crates/routa-watch/src          │
-│                                                                                    ││Lines: ...  Size: ...  Git      │
-│                                                                                    ││changes: ...                    │
+└────────────────────────────────────────────────────────────────────────────────────┘│Lines: ...  Size: ...  Git      │
+┌Fitness (Entrix Fast)───────────────────────────────────────────────────────────────┐│changes: ...                    │
+│Health Run: idle (press g refresh)                                                  ││                                │
 │                                                                                    ││                                │
-│                                                                                    │└────────────────────────────────┘
-│                                                                                    │┌Fitness (Entrix Fast)───────────┐
-│                                                                                    ││Health Run: idle (press g       │
-│                                                                                    ││refresh)                        │
+│                                                                                    ││                                │
+│                                                                                    ││                                │
 │                                                                                    ││                                │
 └────────────────────────────────────────────────────────────────────────────────────┘└────────────────────────────────┘
 Tab focus  ↑↓ select  u unknown  d preview/diff  Pg scroll  f follow:on  T theme  Esc clear  g refresh fitness  q quit
