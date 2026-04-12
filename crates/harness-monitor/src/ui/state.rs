@@ -112,7 +112,7 @@ impl RunFilterMode {
         match self {
             RunFilterMode::All => "all",
             RunFilterMode::Active => "active",
-            RunFilterMode::Attention => "attention",
+            RunFilterMode::Attention => "review",
         }
     }
 }
@@ -157,7 +157,7 @@ impl SessionListItem {
             return "All";
         }
         if self.is_unknown_bucket {
-            return "unattributed";
+            return "unassigned";
         }
         self.prompt_preview
             .as_deref()

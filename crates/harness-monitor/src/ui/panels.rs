@@ -434,7 +434,7 @@ pub(super) fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, stat
             Span::styled("v", Style::default().fg(colors.accent)),
             Span::styled(" run filter  ", Style::default().fg(colors.muted)),
             Span::styled("u", Style::default().fg(colors.accent)),
-            Span::styled(" unknown  ", Style::default().fg(colors.muted)),
+            Span::styled(" unassigned  ", Style::default().fg(colors.muted)),
             Span::styled("d", Style::default().fg(colors.accent)),
             Span::styled(" preview  ", Style::default().fg(colors.muted)),
             Span::styled("Pg", Style::default().fg(colors.accent)),
@@ -460,7 +460,7 @@ pub(super) fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, stat
             Span::styled("v", Style::default().fg(colors.accent)),
             Span::styled(" run filter  ", Style::default().fg(colors.muted)),
             Span::styled("u", Style::default().fg(colors.accent)),
-            Span::styled(" unknown  ", Style::default().fg(colors.muted)),
+            Span::styled(" unassigned  ", Style::default().fg(colors.muted)),
             Span::styled("d", Style::default().fg(colors.accent)),
             Span::styled(" preview/diff  ", Style::default().fg(colors.muted)),
             Span::styled("Pg", Style::default().fg(colors.accent)),
@@ -546,11 +546,7 @@ fn render_run_details(
     };
 
     let model = build_run_operator_model(state, cache, run);
-    let state_color = run_status_color(&model.operator_state);
-    let block_text = model
-        .block_reason
-        .clone()
-        .unwrap_or_else(|| "ready".to_string());
+    let origin_label = display_run_origin_label(model.origin);
 
     if run.is_synthetic_agent_run {
         return render_process_scan_run_details(state, run, &model, width, colors);
@@ -603,7 +599,7 @@ fn render_run_details(
             Span::raw("  "),
             Span::styled(model.role.as_str(), Style::default().fg(colors.text)),
             Span::raw("  "),
-            Span::styled(model.origin.as_str(), Style::default().fg(colors.accent)),
+            Span::styled(origin_label, Style::default().fg(colors.accent)),
         ]),
     ];
 
@@ -638,31 +634,6 @@ fn render_run_details(
         ]));
     }
 
-    if model.operator_state != "active" && model.operator_state != "executing" {
-        let status_text = if block_text == "ready" {
-            model.operator_state.clone()
-        } else {
-            format!("{}  {}", model.operator_state, block_text)
-        };
-        lines.push(Line::from(vec![
-            Span::styled("Status: ", Style::default().fg(colors.muted)),
-            Span::styled(
-                shorten_path(&status_text, width.saturating_sub(12) as usize),
-                Style::default().fg(state_color),
-            ),
-        ]));
-    }
-
-    if let Some(warning) = &model.integrity_warning {
-        lines.push(Line::from(vec![
-            Span::styled("Guard: ", Style::default().fg(colors.muted)),
-            Span::styled(
-                shorten_path(warning, width.saturating_sub(14) as usize),
-                Style::default().fg(INFERRED),
-            ),
-        ]));
-    }
-
     if let Some(event) = &run.last_event_name {
         let tool = run
             .last_tool_name
@@ -678,19 +649,6 @@ fn render_run_details(
         ]));
     }
 
-    if !model.recovery_hints.is_empty() && model.operator_state != "executing" {
-        lines.push(Line::from(vec![
-            Span::styled("Recovery: ", Style::default().fg(colors.muted)),
-            Span::styled(
-                shorten_path(
-                    &model.recovery_hints.join("; "),
-                    width.saturating_sub(14) as usize,
-                ),
-                Style::default().fg(INFERRED),
-            ),
-        ]));
-    }
-
     if run.is_synthetic_agent_run {
         if let Some(agent) = run
             .attached_agent_key
@@ -700,12 +658,6 @@ fn render_run_details(
             lines.push(Line::from(vec![
                 Span::styled("PID: ", Style::default().fg(colors.muted)),
                 Span::styled(agent.pid.to_string(), Style::default().fg(colors.text)),
-                Span::raw("  "),
-                Span::styled("Status: ", Style::default().fg(colors.muted)),
-                Span::styled(
-                    agent.status.to_ascii_lowercase(),
-                    Style::default().fg(run_status_color(&model.operator_state)),
-                ),
                 Span::raw("  "),
                 Span::styled("CPU: ", Style::default().fg(colors.muted)),
                 Span::styled(
@@ -802,7 +754,10 @@ fn render_process_scan_run_details(
             Span::raw("  "),
             Span::styled(model.role.as_str(), Style::default().fg(colors.text)),
             Span::raw("  "),
-            Span::styled(model.origin.as_str(), Style::default().fg(colors.muted)),
+            Span::styled(
+                display_run_origin_label(model.origin),
+                Style::default().fg(colors.muted),
+            ),
         ]),
         Line::from(vec![
             Span::styled("Workspace: ", Style::default().fg(colors.muted)),
@@ -813,9 +768,9 @@ fn render_process_scan_run_details(
             Span::styled(process_cwd, Style::default().fg(colors.text)),
         ]),
         Line::from(vec![
-            Span::styled("Status: ", Style::default().fg(colors.muted)),
+            Span::styled("State: ", Style::default().fg(colors.muted)),
             Span::styled(
-                run.status.to_ascii_lowercase(),
+                display_run_status_label(&run.status.to_ascii_lowercase()),
                 Style::default().fg(run_status_color(&run.status)),
             ),
         ]),
@@ -852,7 +807,7 @@ fn render_process_scan_run_details(
     }
 
     lines.push(Line::from(vec![
-        Span::styled("Guard: ", Style::default().fg(colors.muted)),
+        Span::styled("Context: ", Style::default().fg(colors.muted)),
         Span::styled(
             shorten_path(&guard_text, width.saturating_sub(12) as usize),
             Style::default().fg(INFERRED),
@@ -868,6 +823,27 @@ pub(super) fn run_status_color(status: &str) -> Color {
         "stopped" | "ended" | "failed" => STOPPED,
         "unknown" | "attention" | "evaluating" | "awaiting_approval" => INFERRED,
         _ => IDLE,
+    }
+}
+
+pub(super) fn display_run_status_label(status: &str) -> String {
+    match status {
+        "active" => "running".to_string(),
+        "executing" => "running".to_string(),
+        "failed" => "review".to_string(),
+        "attention" => "review".to_string(),
+        "unknown" => "unassigned".to_string(),
+        "awaiting_approval" => "pending".to_string(),
+        _ => status.to_string(),
+    }
+}
+
+pub(super) fn display_run_origin_label(origin: RunOrigin) -> &'static str {
+    match origin {
+        RunOrigin::HookBacked => "hook",
+        RunOrigin::ProcessScan => "scan",
+        RunOrigin::AttributionReview => "file-review",
+        RunOrigin::McpService => "shared-service",
     }
 }
 
@@ -1133,7 +1109,7 @@ pub(super) fn render_title_bar(
             || file.last_session_id.is_none()
     });
     let dirty_label = format!("{dirty} dirty");
-    let unattributed_label = format!("{} unattributed", unattributed.count());
+    let unattributed_label = format!("{} unassigned", unattributed.count());
     let lines_label = format!(
         "lines: {}",
         format_compact_count(cache.scc_summary().map(|summary| summary.lines))

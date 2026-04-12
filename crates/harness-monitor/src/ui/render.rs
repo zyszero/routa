@@ -1,4 +1,5 @@
 use super::fitness;
+use super::panels::{display_run_origin_label, display_run_status_label};
 use super::*;
 use crate::ui::state::FocusPane;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
@@ -647,7 +648,12 @@ fn render_runs_panel(
             };
 
             let model = build_run_operator_model(state, cache, session);
-            let status_color = run_status_color(&model.operator_state);
+            let origin_label = display_run_origin_label(model.origin);
+            let client_label = if session.is_unknown_bucket {
+                "unassigned"
+            } else {
+                session.client.as_str()
+            };
             let icon = if session.is_all_runs_bucket {
                 "="
             } else {
@@ -659,7 +665,7 @@ fn render_runs_panel(
             } else {
                 String::new()
             };
-            let run_label_width = split[1].width.saturating_sub(18) as usize;
+            let run_label_width = split[1].width.saturating_sub(10) as usize;
             let event_label = match (&session.last_event_name, &session.last_tool_name) {
                 (Some(event), Some(tool)) if !tool.is_empty() => format!("{event}/{tool}"),
                 (Some(event), _) => event.clone(),
@@ -690,10 +696,6 @@ fn render_runs_panel(
                         .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
-                    format!(" {}", model.operator_state),
-                    Style::default().fg(status_color).bg(bg),
-                ),
-                Span::styled(
                     format!("  {}", pad_left(&time_ago(session.last_seen_at_ms), 4)),
                     Style::default().fg(colors.muted).bg(bg),
                 ),
@@ -703,8 +705,8 @@ fn render_runs_panel(
                     format!(
                         "  {}  {}  {}  files:{}  e/i/?:{}/{}/{}{}",
                         model.role.as_str(),
-                        model.origin.as_str(),
-                        session.client,
+                        origin_label,
+                        client_label,
                         session.touched_files_count,
                         session.exact_count,
                         session.inferred_count,
@@ -1057,10 +1059,6 @@ fn render_file_secondary_line(
     }
     spans.push(Span::raw(" "));
     spans.push(Span::styled(age, Style::default().fg(colors.muted)));
-    if file.conflicted {
-        spans.push(Span::raw("  "));
-        spans.push(Span::styled("CONFLICT", Style::default().fg(STOPPED)));
-    }
     Line::from(spans)
 }
 
