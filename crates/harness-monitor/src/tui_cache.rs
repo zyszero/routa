@@ -51,45 +51,6 @@ pub(super) struct FileFactsEntry {
     pub(super) git_change_count: usize,
 }
 
-#[derive(Clone, Debug, Default)]
-pub(super) struct TestMappingSnapshot {
-    pub(super) cache_key: String,
-    pub(super) by_file: BTreeMap<String, TestMappingEntry>,
-    pub(super) skipped_test_files: BTreeSet<String>,
-    pub(super) status_counts: BTreeMap<String, usize>,
-}
-
-#[allow(dead_code)]
-#[derive(Clone, Debug, Default, Deserialize)]
-pub(super) struct TestMappingEntry {
-    #[serde(default)]
-    pub(super) source_file: String,
-    #[serde(default)]
-    pub(super) language: String,
-    #[serde(default)]
-    pub(super) status: String,
-    #[serde(default)]
-    pub(super) related_test_files: Vec<String>,
-    #[serde(default)]
-    pub(super) graph_test_files: Vec<String>,
-    #[serde(default)]
-    pub(super) resolver_kind: String,
-    #[serde(default)]
-    pub(super) confidence: String,
-    #[serde(default)]
-    pub(super) has_inline_tests: bool,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct TestMappingCliPayload {
-    #[serde(default)]
-    mappings: Vec<TestMappingEntry>,
-    #[serde(default)]
-    skipped_test_files: Vec<String>,
-    #[serde(default)]
-    status_counts: BTreeMap<String, usize>,
-}
-
 #[derive(Debug)]
 enum BackgroundCommand {
     RefreshStats {
@@ -653,19 +614,11 @@ impl AppCache {
         entries: Vec<TestMappingEntry>,
         skipped_test_files: Vec<String>,
     ) {
-        let mut status_counts = BTreeMap::new();
-        for entry in &entries {
-            *status_counts.entry(entry.status.clone()).or_insert(0) += 1;
-        }
-        self.test_mapping_snapshot = Some(TestMappingSnapshot {
-            cache_key: "test".to_string(),
-            by_file: entries
-                .into_iter()
-                .map(|entry| (entry.source_file.clone(), entry))
-                .collect(),
-            skipped_test_files: skipped_test_files.into_iter().collect(),
-            status_counts,
-        });
+        self.test_mapping_snapshot = Some(build_test_mapping_snapshot(
+            "test".to_string(),
+            entries,
+            skipped_test_files,
+        ));
     }
 
     fn active_fitness_history(&self) -> Option<&FitnessHistoryEntry> {
@@ -1126,71 +1079,6 @@ fn queue_command(pending: &mut PendingCommands, command: BackgroundCommand) {
     }
 }
 
-fn test_mapping_cache_key(state: &RuntimeState) -> String {
-    let mut markers = state
-        .file_items()
-        .iter()
-        .filter(|file| file.dirty || file.conflicted)
-        .map(|file| {
-            format!(
-                "{}:{}:{}",
-                file.rel_path, file.state_code, file.last_modified_at_ms
-            )
-        })
-        .collect::<Vec<_>>();
-    markers.sort();
-    markers.join("|")
-}
-
-fn load_test_mapping_snapshot(
-    repo_root: &str,
-    files: &[String],
-    cache_key: String,
-) -> Result<TestMappingSnapshot, String> {
-    let mut command = Command::new("python3");
-    command
-        .current_dir(repo_root)
-        .env("PYTHONPATH", "tools/entrix")
-        .arg("-m")
-        .arg("entrix")
-        .arg("graph")
-        .arg("test-mapping")
-        .arg("--json")
-        .arg("--no-graph");
-    if !files.is_empty() {
-        command.args(files);
-    }
-
-    let output = command.output().map_err(|error| error.to_string())?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let message = if !stderr.is_empty() {
-            stderr
-        } else if !stdout.is_empty() {
-            stdout
-        } else {
-            "entrix graph test-mapping failed".to_string()
-        };
-        return Err(message);
-    }
-
-    let payload: TestMappingCliPayload =
-        serde_json::from_slice(&output.stdout).map_err(|error| error.to_string())?;
-    let by_file = payload
-        .mappings
-        .into_iter()
-        .map(|entry| (entry.source_file.clone(), entry))
-        .collect::<BTreeMap<_, _>>();
-
-    Ok(TestMappingSnapshot {
-        cache_key,
-        by_file,
-        skipped_test_files: payload.skipped_test_files.into_iter().collect(),
-        status_counts: payload.status_counts,
-    })
-}
-
 fn run_scc_summary(repo_root: &str) -> Result<SccSummary, String> {
     let mut command = Command::new("scc");
     command
@@ -1356,6 +1244,13 @@ mod scc_tests {
 #[cfg(test)]
 #[path = "tui_cache_tests.rs"]
 mod tests;
+
+#[path = "tui_cache_test_mapping.rs"]
+mod test_mapping;
+use self::test_mapping::{
+    build_test_mapping_snapshot, load_test_mapping_snapshot, test_mapping_cache_key,
+};
+pub(super) use self::test_mapping::{TestMappingEntry, TestMappingSnapshot};
 
 #[path = "tui_cache_history.rs"]
 mod history;
