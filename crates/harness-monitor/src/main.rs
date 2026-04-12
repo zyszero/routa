@@ -8,7 +8,9 @@ mod run;
 mod shared;
 mod ui;
 
-use crate::observe::ipc::{RuntimeSocket, RuntimeTcp};
+#[cfg(unix)]
+use crate::observe::ipc::RuntimeSocket;
+use crate::observe::ipc::RuntimeTcp;
 use crate::observe::Snapshot;
 use crate::observe::{resolve, resolve_runtime};
 use crate::shared::db::Db;
@@ -293,7 +295,11 @@ fn run_watch(
 }
 
 fn run_serve(ctx: &crate::observe::repo::RepoContext) -> Result<()> {
+    #[cfg(unix)]
     let socket_server = RuntimeSocket::bind(&ctx.runtime_socket_path).ok();
+    #[cfg(not(unix))]
+    let socket_server: Option<()> = None;
+
     let tcp_server = if socket_server.is_none() {
         RuntimeTcp::bind(&ctx.runtime_tcp_addr).ok()
     } else {
@@ -327,6 +333,7 @@ fn run_serve(ctx: &crate::observe::repo::RepoContext) -> Result<()> {
             },
         )?;
 
+        #[cfg(unix)]
         if let Some(server) = &socket_server {
             for message in server.read_pending()? {
                 crate::observe::ipc::send_message(&ctx.runtime_event_path, &message)?;

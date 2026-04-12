@@ -11,7 +11,9 @@ pub mod repo;
 // Re-export commonly used types at this module level
 pub use self::detect::{calculate_stats, scan_agents};
 pub use self::hooks::{handle_git_event, handle_hook, parse_stdin_payload};
-pub use self::ipc::{RuntimeFeed, RuntimeSocket, RuntimeTcp};
+#[cfg(unix)]
+pub use self::ipc::RuntimeSocket;
+pub use self::ipc::{RuntimeFeed, RuntimeTcp};
 pub use self::observe::{
     entry_kind_for_path, entry_kind_for_repo_path, poll_repo, scan_repo, Snapshot,
 };

@@ -3,6 +3,7 @@ use anyhow::{Context, Result};
 use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
 use std::net::{TcpListener, TcpStream};
+#[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -85,10 +86,12 @@ impl RuntimeFeed {
     }
 }
 
+#[cfg(unix)]
 pub struct RuntimeSocket {
     listener: UnixListener,
 }
 
+#[cfg(unix)]
 impl RuntimeSocket {
     pub fn bind(socket_path: &Path) -> Result<Self> {
         if let Some(parent) = socket_path.parent() {
@@ -172,6 +175,7 @@ pub fn send_message(event_path: &Path, message: &RuntimeMessage) -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
 pub fn send_socket_message(socket_path: &Path, message: &RuntimeMessage) -> Result<()> {
     let mut stream = UnixStream::connect(socket_path)
         .with_context(|| format!("connect runtime socket {:?}", socket_path))?;
@@ -181,6 +185,11 @@ pub fn send_socket_message(socket_path: &Path, message: &RuntimeMessage) -> Resu
         .context("write runtime socket newline")?;
     stream.flush().context("flush runtime socket")?;
     Ok(())
+}
+
+#[cfg(not(unix))]
+pub fn send_socket_message(_socket_path: &Path, _message: &RuntimeMessage) -> Result<()> {
+    anyhow::bail!("Unix sockets are not supported on this platform")
 }
 
 pub fn send_tcp_message(addr: &str, message: &RuntimeMessage) -> Result<()> {
@@ -194,8 +203,14 @@ pub fn send_tcp_message(addr: &str, message: &RuntimeMessage) -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
 pub fn socket_reachable(socket_path: &Path) -> bool {
     socket_path.exists() && UnixStream::connect(socket_path).is_ok()
+}
+
+#[cfg(not(unix))]
+pub fn socket_reachable(_socket_path: &Path) -> bool {
+    false
 }
 
 pub fn tcp_reachable(addr: &str) -> bool {
@@ -227,6 +242,7 @@ pub fn read_service_info(info_path: &Path) -> Result<Option<RuntimeServiceInfo>>
     Ok(Some(info))
 }
 
+#[cfg(unix)]
 fn read_stream_message(stream: UnixStream) -> Result<Option<RuntimeMessage>> {
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
