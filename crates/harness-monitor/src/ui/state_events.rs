@@ -27,6 +27,9 @@ impl RuntimeState {
                     last_turn_id: event.turn_id.clone(),
                     last_event_name: Some(event.event_name.clone()),
                     last_tool_name: event.tool_name.clone(),
+                    active_task_id: event.task_id.clone(),
+                    active_task_title: event.task_title.clone(),
+                    last_prompt_preview: event.prompt_preview.clone(),
                 });
 
             session.cwd = event.cwd.clone();
@@ -45,6 +48,15 @@ impl RuntimeState {
             session.last_turn_id = event.turn_id.clone();
             session.last_event_name = Some(event.event_name.clone());
             session.last_tool_name = event.tool_name.clone();
+            if event.task_id.is_some() {
+                session.active_task_id = event.task_id.clone();
+            }
+            if event.task_title.is_some() {
+                session.active_task_title = event.task_title.clone();
+            }
+            if event.prompt_preview.is_some() {
+                session.last_prompt_preview = event.prompt_preview.clone();
+            }
             session.tmux_pane = event
                 .tmux_pane
                 .clone()
@@ -56,6 +68,46 @@ impl RuntimeState {
             };
         }
 
+        if let Some(task_id) = event.task_id.clone() {
+            let title = event.task_title.clone().unwrap_or_else(|| task_id.clone());
+            let objective = event
+                .prompt_preview
+                .clone()
+                .unwrap_or_else(|| title.clone());
+            self.tasks
+                .entry(task_id.clone())
+                .and_modify(|task| {
+                    task.turn_id = event.turn_id.clone().or_else(|| task.turn_id.clone());
+                    task.title = title.clone();
+                    task.objective = objective.clone();
+                    task.prompt_preview =
+                        event.prompt_preview.clone().or(task.prompt_preview.clone());
+                    task.transcript_path = event
+                        .transcript_path
+                        .clone()
+                        .or(task.transcript_path.clone());
+                    task.updated_at_ms = event.observed_at_ms;
+                    task.status = "active".to_string();
+                })
+                .or_insert_with(|| crate::shared::models::TaskView {
+                    task_id,
+                    session_id: event.session_id.clone(),
+                    turn_id: event.turn_id.clone(),
+                    title,
+                    objective,
+                    prompt_preview: event.prompt_preview.clone(),
+                    transcript_path: event.transcript_path.clone(),
+                    status: "active".to_string(),
+                    created_at_ms: event.observed_at_ms,
+                    updated_at_ms: event.observed_at_ms,
+                });
+        }
+
+        let active_task_id = event.task_id.clone().or_else(|| {
+            self.sessions
+                .get(&event.session_id)
+                .and_then(|session| session.active_task_id.clone())
+        });
         self.push_event(
             event.observed_at_ms,
             EventSource::Hook,
@@ -81,6 +133,7 @@ impl RuntimeState {
                     entry_kind: EntryKind::File,
                     last_modified_at_ms: event.observed_at_ms,
                     last_session_id: Some(event.session_id.clone()),
+                    last_task_id: active_task_id.clone(),
                     confidence: AttributionConfidence::Exact,
                     conflicted: false,
                     touched_by: BTreeSet::new(),
@@ -94,6 +147,9 @@ impl RuntimeState {
             file.dirty = true;
             file.last_modified_at_ms = event.observed_at_ms;
             file.last_session_id = Some(event.session_id.clone());
+            if active_task_id.is_some() {
+                file.last_task_id = active_task_id.clone();
+            }
             file.confidence = AttributionConfidence::Exact;
             file.touched_by.insert(event.session_id.clone());
             file.recent_events.insert(
@@ -141,6 +197,7 @@ impl RuntimeState {
                 entry_kind: EntryKind::File,
                 last_modified_at_ms: event.observed_at_ms,
                 last_session_id: Some(event.session_id.clone()),
+                last_task_id: None,
                 confidence: AttributionConfidence::from_str(&event.confidence),
                 conflicted: false,
                 touched_by: BTreeSet::new(),

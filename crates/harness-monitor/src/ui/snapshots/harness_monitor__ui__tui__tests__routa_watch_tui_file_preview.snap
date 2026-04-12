@@ -1,11 +1,11 @@
 ---
 source: crates/harness-monitor/src/ui/tests.rs
-assertion_line: 754
+assertion_line: 764
 expression: "render_snapshot(&state, &mut cache, 120, 24)"
 ---
 routa.js  2 dirty  1 unattributed  lines: --  loc: --  fitness: fast  transport: socket
 ┌Git Status──────────────────────────────────────────────────────────────────────────┐┌File Preview────────────────────┐
-│ 2 files, 0 untracked, 5 commits, 1 agent, branch: main, 2 worktrees  [tests:1 miss ││ 1 fn render(frame: &mut Frame) │
+│ 2 files, 0 untracked, 5 commits, 1 agent, branch: main, 2 worktrees                ││ 1 fn render(frame: &mut Frame) │
 │────────────────────────────────────────────────────────────────────────────────────││{                               │
 │> tui.rs                                        src/             M  +38 -5   TM chan││ 2     // preview               │
 │  route.ts                                      card/            D  -12      TM miss││ 3 }                            │

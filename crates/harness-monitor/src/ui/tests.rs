@@ -35,6 +35,9 @@ fn sample_state() -> RuntimeState {
             last_turn_id: Some("turn-1".to_string()),
             last_event_name: Some("PostToolUse".to_string()),
             last_tool_name: Some("Write".to_string()),
+            active_task_id: Some("task:live-hook-check:turn-1".to_string()),
+            active_task_title: Some("Fix harness monitor task journey".to_string()),
+            last_prompt_preview: Some("Fix harness monitor task journey".to_string()),
         },
     );
     sessions.insert(
@@ -57,6 +60,9 @@ fn sample_state() -> RuntimeState {
             last_turn_id: Some("turn-2".to_string()),
             last_event_name: Some("UserPromptSubmit".to_string()),
             last_tool_name: None,
+            active_task_id: Some("task:idle-review:turn-2".to_string()),
+            active_task_title: Some("Review harness monitor UI".to_string()),
+            last_prompt_preview: Some("Review harness monitor UI".to_string()),
         },
     );
 
@@ -70,6 +76,7 @@ fn sample_state() -> RuntimeState {
             entry_kind: EntryKind::File,
             last_modified_at_ms: now - 240_000,
             last_session_id: Some("live-hook-check".to_string()),
+            last_task_id: Some("task:live-hook-check:turn-1".to_string()),
             confidence: AttributionConfidence::Exact,
             conflicted: false,
             touched_by: ["live-hook-check".to_string()].into_iter().collect(),
@@ -85,6 +92,7 @@ fn sample_state() -> RuntimeState {
             entry_kind: EntryKind::File,
             last_modified_at_ms: now - 300_000,
             last_session_id: None,
+            last_task_id: None,
             confidence: AttributionConfidence::Unknown,
             conflicted: false,
             touched_by: BTreeSet::new(),
@@ -621,7 +629,9 @@ fn run_details_surface_run_centric_operator_context() {
 
     let snapshot = render_snapshot(&state, &mut cache, 180, 40);
 
-    assert!(snapshot.contains("live-hook-check  builder  hook-backed"));
+    assert!(snapshot.contains("Fix harness monitor task journey"));
+    assert!(snapshot.contains("live-hook-check"));
+    assert!(snapshot.contains("fixer  hook-backed"));
     assert!(snapshot.contains("Policy: allow_with_evidence"));
     assert!(snapshot.contains("Workspace: dirty"));
     assert!(snapshot.contains("missing coverage_report"));
@@ -898,11 +908,11 @@ fn run_sort_by_name_orders_named_runs_alphabetically() {
     let runs = state.runs();
     assert_eq!(
         runs.first().map(|run| run.display_name.as_str()),
-        Some("impl-buddy")
+        Some("Fix harness monitor task journey")
     );
     assert_eq!(
         runs.get(1).map(|run| run.display_name.as_str()),
-        Some("test-master")
+        Some("Review harness monitor UI")
     );
 }
 

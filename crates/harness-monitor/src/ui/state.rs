@@ -1,7 +1,7 @@
 use crate::shared::models::{
     AgentStats, AttributionConfidence, AttributionEvent, DetectedAgent, DirtyRepoEntry, EntryKind,
     EventLogEntry, EventSource, FileView, FitnessEvent, GitEvent, HookEvent, RuntimeMessage,
-    SessionView, DEFAULT_INFERENCE_WINDOW_MS, EVENT_LOG_LIMIT,
+    SessionView, TaskView, DEFAULT_INFERENCE_WINDOW_MS, EVENT_LOG_LIMIT,
 };
 use chrono::Utc;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -126,6 +126,8 @@ const DETAIL_PAGE_STEP: u16 = 12;
 pub struct SessionListItem {
     pub session_id: String,
     pub display_name: String,
+    pub task_id: Option<String>,
+    pub task_title: Option<String>,
     pub client: String,
     pub source: Option<String>,
     pub model: Option<String>,
@@ -151,6 +153,7 @@ pub struct RuntimeState {
     pub branch: String,
     pub ahead_count: Option<usize>,
     pub worktree_count: Option<usize>,
+    pub tasks: BTreeMap<String, TaskView>,
     pub sessions: BTreeMap<String, SessionView>,
     pub files: BTreeMap<String, FileView>,
     pub event_log: VecDeque<EventLogEntry>,
@@ -188,6 +191,7 @@ impl RuntimeState {
             branch,
             ahead_count: None,
             worktree_count: None,
+            tasks: BTreeMap::new(),
             sessions: BTreeMap::new(),
             files: BTreeMap::new(),
             event_log: VecDeque::new(),
@@ -258,6 +262,7 @@ impl RuntimeState {
                     entry_kind,
                     last_modified_at_ms: now_ms,
                     last_session_id: None,
+                    last_task_id: None,
                     confidence: AttributionConfidence::Unknown,
                     conflicted: false,
                     touched_by: BTreeSet::new(),
@@ -353,6 +358,12 @@ impl RuntimeState {
         self.cached_file_item_keys
             .get(self.selected_file)
             .and_then(|key| self.files.get(key))
+    }
+
+    pub fn task_for_file(&self, file: &FileView) -> Option<&TaskView> {
+        file.last_task_id
+            .as_deref()
+            .and_then(|task_id| self.tasks.get(task_id))
     }
 
     #[allow(dead_code)]

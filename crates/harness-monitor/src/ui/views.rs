@@ -39,6 +39,8 @@ impl RuntimeState {
                 SessionListItem {
                     session_id: session.session_id.clone(),
                     display_name: session_display_name(session),
+                    task_id: session.active_task_id.clone(),
+                    task_title: session.active_task_title.clone(),
                     client: session.client.clone(),
                     source: session.source.clone(),
                     model: session.model.clone(),
@@ -70,6 +72,8 @@ impl RuntimeState {
                 .map(|agent| SessionListItem {
                     session_id: format!("agent:{}:{}", agent.name.to_ascii_lowercase(), agent.pid),
                     display_name: format!("{}#{}", agent.name, agent.pid),
+                    task_id: None,
+                    task_title: None,
                     client: agent.name.to_ascii_lowercase(),
                     source: Some("process-scan".to_string()),
                     model: None,
@@ -108,6 +112,8 @@ impl RuntimeState {
             items.push(SessionListItem {
                 session_id: UNKNOWN_SESSION_ID.to_string(),
                 display_name: "Unknown / review".to_string(),
+                task_id: None,
+                task_title: None,
                 client: "unknown".to_string(),
                 source: None,
                 model: None,
@@ -235,6 +241,12 @@ impl RuntimeState {
         }
         let needle = self.search_query.to_ascii_lowercase();
         session.session_id.to_ascii_lowercase().contains(&needle)
+            || session
+                .active_task_title
+                .as_deref()
+                .unwrap_or_default()
+                .to_ascii_lowercase()
+                .contains(&needle)
             || session
                 .display_name
                 .as_deref()
@@ -504,9 +516,15 @@ fn is_repo_local_agent(agent: &DetectedAgent, repo_root: &str) -> bool {
 
 fn session_display_name(session: &SessionView) -> String {
     session
-        .display_name
+        .active_task_title
         .clone()
         .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            session
+                .display_name
+                .clone()
+                .filter(|value| !value.trim().is_empty())
+        })
         .unwrap_or_else(|| short_session(&session.session_id))
 }
 

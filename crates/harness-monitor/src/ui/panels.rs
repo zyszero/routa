@@ -71,6 +71,15 @@ pub(super) fn render_details_panel(
             shorten_path(&parent_dir, area.width.saturating_sub(4) as usize),
             Style::default().fg(colors.muted),
         )));
+        if let Some(task) = state.task_for_file(file) {
+            lines.push(Line::from(vec![
+                Span::styled("Task: ", Style::default().fg(colors.muted)),
+                Span::styled(
+                    shorten_path(&task.title, area.width.saturating_sub(12) as usize),
+                    Style::default().fg(colors.accent),
+                ),
+            ]));
+        }
         if let Some(facts) = cache.file_facts(file) {
             lines.push(Line::from(vec![
                 Span::styled("Type: ", Style::default().fg(colors.muted)),
@@ -287,9 +296,10 @@ pub(super) fn render_log(frame: &mut Frame, area: ratatui::layout::Rect, state: 
 pub(super) fn render_file_header_line(
     state: &RuntimeState,
     cache: &AppCache,
-    _width: u16,
+    width: u16,
 ) -> Line<'static> {
     let colors = palette(state.theme_mode);
+    let available_width = width.saturating_sub(2) as usize;
     let files = state.file_items();
     let untracked = files
         .iter()
@@ -314,23 +324,38 @@ pub(super) fn render_file_header_line(
         state.branch,
         pluralize_count_text(&worktree_total, "worktree"),
     );
+    let summary_text = if available_width <= 20 {
+        truncate_header_text(&summary, available_width.max(8))
+    } else {
+        summary
+    };
     let mut spans = vec![Span::styled(
-        format!(" {summary} "),
+        format!(" {summary_text} "),
         Style::default()
             .fg(colors.text)
             .bg(colors.border)
             .add_modifier(Modifier::BOLD),
     )];
+    let mut used_width = spans
+        .iter()
+        .map(|span| span.content.as_ref().chars().count())
+        .sum::<usize>();
     for hint in cache.repo_review_hints(&files).into_iter().take(2) {
+        let hint_text = format!("[{}:{}]", hint.label, hint.rule_name);
+        let extra_width = 1 + hint_text.chars().count();
+        if used_width + extra_width > available_width {
+            break;
+        }
         let color = match hint.level {
             crate::ui::tui::review::ReviewRiskLevel::High => STOPPED,
             crate::ui::tui::review::ReviewRiskLevel::Medium => INFERRED,
         };
         spans.push(Span::raw(" "));
         spans.push(Span::styled(
-            format!("[{}:{}]", hint.label, hint.rule_name),
+            hint_text,
             Style::default().fg(color).bg(colors.surface),
         ));
+        used_width += extra_width;
     }
     if let Some(test_counts) = cache.test_mapping_status_counts() {
         let missing = test_counts.get("missing").copied().unwrap_or(0);
@@ -354,14 +379,27 @@ pub(super) fn render_file_header_line(
             parts.push(format!("{inline} inline"));
         }
         if !parts.is_empty() {
-            spans.push(Span::raw(" "));
-            spans.push(Span::styled(
-                format!("[tests:{}]", parts.join(" ")),
-                Style::default().fg(color).bg(colors.surface),
-            ));
+            let test_text = format!("[tests:{}]", parts.join(" "));
+            let extra_width = 1 + test_text.chars().count();
+            if used_width + extra_width <= available_width {
+                spans.push(Span::raw(" "));
+                spans.push(Span::styled(
+                    test_text,
+                    Style::default().fg(color).bg(colors.surface),
+                ));
+            }
         }
     }
     Line::from(spans)
+}
+
+fn truncate_header_text(value: &str, max_len: usize) -> String {
+    if value.chars().count() <= max_len {
+        return value.to_string();
+    }
+    let keep = max_len.saturating_sub(3);
+    let truncated = value.chars().take(keep).collect::<String>();
+    format!("{truncated}...")
 }
 
 fn pluralize(count: usize, noun: &str) -> String {
@@ -529,7 +567,10 @@ fn render_run_details(
 
     let mut lines = vec![
         Line::from(Span::styled(
-            shorten_path(&run.display_name, width.saturating_sub(4) as usize),
+            shorten_path(
+                run.task_title.as_deref().unwrap_or(&run.display_name),
+                width.saturating_sub(4) as usize,
+            ),
             Style::default()
                 .fg(colors.text)
                 .add_modifier(Modifier::BOLD),
@@ -539,6 +580,15 @@ fn render_run_details(
                 shorten_path(&run.session_id, 18),
                 Style::default().fg(colors.muted),
             ),
+            Span::raw("  "),
+            if let Some(task_id) = &run.task_id {
+                Span::styled(
+                    shorten_path(task_id, 22),
+                    Style::default().fg(colors.accent),
+                )
+            } else {
+                Span::styled("-", Style::default().fg(colors.muted))
+            },
             Span::raw("  "),
             Span::styled(model.role.as_str(), Style::default().fg(colors.text)),
             Span::raw("  "),

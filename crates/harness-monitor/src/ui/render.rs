@@ -151,9 +151,9 @@ fn render_main_area(
     let columns = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(25),
-            Constraint::Percentage(42),
-            Constraint::Percentage(33),
+            Constraint::Length(((area.width as usize * 24) / 100).clamp(36, 44) as u16),
+            Constraint::Min(64),
+            Constraint::Length(((area.width as usize * 28) / 100).clamp(42, 56) as u16),
         ])
         .split(area);
     let center = Layout::default()
@@ -651,8 +651,15 @@ fn render_runs_panel(
             let icon = crate::shared::models::HookClient::from_str(&session.client).icon();
             let run_name = if session.is_unknown_bucket {
                 "unattributed".to_string()
+            } else if let Some(task_title) = &session.task_title {
+                task_title.clone()
             } else {
                 session.display_name.clone()
+            };
+            let session_label = if session.task_title.is_some() {
+                shorten_path(&session.session_id, 14)
+            } else {
+                String::new()
             };
             let run_label_width = split[1].width.saturating_sub(18) as usize;
             let event_label = match (&session.last_event_name, &session.last_tool_name) {
@@ -711,6 +718,14 @@ fn render_runs_panel(
                     Span::styled(
                         format!("  {}", shorten_path(&event_label, 18)),
                         Style::default().fg(colors.accent).bg(bg),
+                    )
+                } else {
+                    Span::styled("", Style::default().bg(bg))
+                },
+                if !session_label.is_empty() {
+                    Span::styled(
+                        format!("  {}", session_label),
+                        Style::default().fg(colors.muted).bg(bg),
                     )
                 } else {
                     Span::styled("", Style::default().bg(bg))
@@ -860,6 +875,7 @@ fn render_files(
                             review_hint.as_ref(),
                             test_mapping,
                             changed_test_file,
+                            split[1].width as usize,
                             colors,
                         );
                         vec![primary, secondary]
@@ -1052,11 +1068,13 @@ fn render_file_meta_line(
     review_hint: Option<&crate::ui::tui::review::ReviewHint>,
     test_mapping: Option<&TestMappingEntry>,
     changed_test_file: bool,
+    area_width: usize,
     colors: UiPalette,
 ) -> Line<'static> {
+    let parent_width = area_width.saturating_sub(28).clamp(16, 30);
     let mut spans = Vec::new();
     spans.push(Span::styled(
-        format!("  {}", shorten_path(parent_dir, 16)),
+        format!("  {}", shorten_path(parent_dir, parent_width)),
         Style::default().fg(colors.muted),
     ));
     spans.push(Span::styled("  ", Style::default().fg(colors.muted)));
