@@ -548,53 +548,65 @@ fn resolve_path(root: &Path, raw: &str) -> PathBuf {
 fn handle_task_command(action: TaskCommand, db: &Db, repo_root: &str) -> Result<()> {
     match action {
         TaskCommand::List => {
-            let sessions = db.list_active_sessions(repo_root)?;
-            if sessions.is_empty() {
-                println!("No active tasks.");
+            let tasks = db.list_tasks(repo_root)?;
+            if tasks.is_empty() {
+                println!("No tasks.");
                 return Ok(());
             }
-            println!(
-                "{:<36}  {:<12}  {:<12}  CWD",
-                "SESSION / TASK", "CLIENT", "STATUS"
-            );
-            println!("{}", "-".repeat(90));
-            for (session_id, cwd, _model, _started, _last, client, status, _ended) in &sessions {
+            println!("{:<36}  {:<20}  {:<12}  TITLE", "TASK", "SESSION", "STATUS");
+            println!("{}", "-".repeat(120));
+            for task in &tasks {
                 println!(
-                    "{:<36}  {:<12}  {:<12}  {}",
-                    session_id, client, status, cwd
+                    "{:<36}  {:<20}  {:<12}  {}",
+                    task.task_id, task.session_id, task.status, task.title
                 );
             }
         }
-        TaskCommand::Show { id } => {
-            let sessions = db.list_active_sessions(repo_root)?;
-            let found = sessions.iter().find(|(session_id, ..)| session_id == &id);
-            match found {
-                Some((session_id, cwd, model, started_at_ms, _last, client, status, ended)) => {
-                    println!("id:      {session_id}");
-                    println!("client:  {client}");
-                    println!("status:  {status}");
-                    println!("cwd:     {cwd}");
-                    if !model.is_empty() {
-                        println!("model:   {model}");
-                    }
-                    println!(
-                        "started: {}",
-                        chrono::DateTime::from_timestamp_millis(*started_at_ms)
-                            .map(|dt| dt.to_rfc3339())
-                            .unwrap_or_else(|| started_at_ms.to_string())
-                    );
-                    if let Some(ended_ms) = ended {
-                        println!(
-                            "ended:   {}",
-                            chrono::DateTime::from_timestamp_millis(*ended_ms)
-                                .map(|dt| dt.to_rfc3339())
-                                .unwrap_or_else(|| ended_ms.to_string())
-                        );
+        TaskCommand::Show { id } => match db.get_task(repo_root, &id)? {
+            Some(task) => {
+                println!("id:         {}", task.task_id);
+                println!("title:      {}", task.title);
+                println!("status:     {}", task.status);
+                println!("session:    {}", task.session_id);
+                if let Some(turn_id) = &task.turn_id {
+                    println!("turn:       {turn_id}");
+                }
+                if let Some(transcript_path) = &task.transcript_path {
+                    println!("transcript: {transcript_path}");
+                }
+                println!(
+                    "created:    {}",
+                    chrono::DateTime::from_timestamp_millis(task.created_at_ms)
+                        .map(|dt| dt.to_rfc3339())
+                        .unwrap_or_else(|| task.created_at_ms.to_string())
+                );
+                println!(
+                    "updated:    {}",
+                    chrono::DateTime::from_timestamp_millis(task.updated_at_ms)
+                        .map(|dt| dt.to_rfc3339())
+                        .unwrap_or_else(|| task.updated_at_ms.to_string())
+                );
+                if let Some(prompt_preview) = &task.prompt_preview {
+                    println!("preview:    {prompt_preview}");
+                }
+                if !task.objective.is_empty() {
+                    println!("objective:  {}", task.objective);
+                }
+
+                let dirty_files = db
+                    .file_state_all_dirty(repo_root)?
+                    .into_iter()
+                    .filter(|row| row.task_id.as_deref() == Some(task.task_id.as_str()))
+                    .collect::<Vec<_>>();
+                if !dirty_files.is_empty() {
+                    println!("files:");
+                    for file in dirty_files {
+                        println!("  {}", file.rel_path);
                     }
                 }
-                None => println!("Task / session '{id}' not found."),
             }
-        }
+            None => println!("Task '{id}' not found."),
+        },
     }
     Ok(())
 }

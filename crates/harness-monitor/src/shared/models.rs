@@ -149,6 +149,7 @@ pub struct FileEventRecord {
     pub observed_at_ms: i64,
     pub session_id: Option<String>,
     pub turn_id: Option<String>,
+    pub task_id: Option<String>,
     pub confidence: AttributionConfidence,
     pub source: String,
     pub metadata_json: String,
@@ -165,6 +166,7 @@ pub struct FileStateRow {
     pub last_seen_ms: i64,
     pub session_id: Option<String>,
     pub turn_id: Option<String>,
+    pub task_id: Option<String>,
     pub confidence: Option<String>,
     pub source: Option<String>,
 }
@@ -199,6 +201,9 @@ pub struct HookEvent {
     pub tool_name: Option<String>,
     pub tool_command: Option<String>,
     pub file_paths: Vec<String>,
+    pub task_id: Option<String>,
+    pub task_title: Option<String>,
+    pub prompt_preview: Option<String>,
     pub tmux_session: Option<String>,
     pub tmux_window: Option<String>,
     pub tmux_pane: Option<String>,
@@ -222,6 +227,20 @@ pub struct AttributionEvent {
     pub session_id: String,
     pub confidence: String,
     pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskView {
+    pub task_id: String,
+    pub session_id: String,
+    pub turn_id: Option<String>,
+    pub title: String,
+    pub objective: String,
+    pub prompt_preview: Option<String>,
+    pub transcript_path: Option<String>,
+    pub status: String,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -256,6 +275,9 @@ pub struct SessionView {
     pub last_turn_id: Option<String>,
     pub last_event_name: Option<String>,
     pub last_tool_name: Option<String>,
+    pub active_task_id: Option<String>,
+    pub active_task_title: Option<String>,
+    pub last_prompt_preview: Option<String>,
 }
 
 impl SessionView {
@@ -272,7 +294,7 @@ impl SessionView {
         };
         Run {
             id: RunId(self.session_id.clone()),
-            task_id: None,
+            task_id: self.active_task_id.clone().map(Into::into),
             role: Role::Builder,
             mode: RunMode::Unmanaged,
             state,
@@ -298,6 +320,7 @@ pub struct FileView {
     pub entry_kind: EntryKind,
     pub last_modified_at_ms: i64,
     pub last_session_id: Option<String>,
+    pub last_task_id: Option<String>,
     pub confidence: AttributionConfidence,
     pub conflicted: bool,
     pub touched_by: BTreeSet<String>,

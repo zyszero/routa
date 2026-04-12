@@ -10,7 +10,7 @@
           },
           {
             "type": "command",
-            "command": "bash ./crates/agentwatch/scripts/run-codex-hook.sh PreToolUse"
+            "command": "bash ./crates/harness-monitor/scripts/run-codex-hook.sh PreToolUse"
           }
         ]
       },
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ./crates/agentwatch/scripts/run-codex-hook.sh PreToolUse"
+            "command": "bash ./crates/harness-monitor/scripts/run-codex-hook.sh PreToolUse"
           }
         ]
       }
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ./crates/agentwatch/scripts/run-codex-hook.sh PostToolUse"
+            "command": "bash ./crates/harness-monitor/scripts/run-codex-hook.sh PostToolUse"
           }
         ]
       },
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ./crates/agentwatch/scripts/run-codex-hook.sh PostToolUse"
+            "command": "bash ./crates/harness-monitor/scripts/run-codex-hook.sh PostToolUse"
           }
         ]
       }
@@ -54,7 +54,7 @@
           },
           {
             "type": "command",
-            "command": "bash ./crates/agentwatch/scripts/run-codex-hook.sh SessionStart"
+            "command": "bash ./crates/harness-monitor/scripts/run-codex-hook.sh SessionStart"
           }
         ]
       }
@@ -68,7 +68,7 @@
           },
           {
             "type": "command",
-            "command": "bash ./crates/agentwatch/scripts/run-codex-hook.sh UserPromptSubmit"
+            "command": "bash ./crates/harness-monitor/scripts/run-codex-hook.sh UserPromptSubmit"
           }
         ]
       }
@@ -78,7 +78,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ./crates/agentwatch/scripts/run-codex-hook.sh Stop"
+            "command": "bash ./crates/harness-monitor/scripts/run-codex-hook.sh Stop"
           }
         ]
       }

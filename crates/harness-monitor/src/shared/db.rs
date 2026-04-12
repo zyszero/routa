@@ -1,4 +1,6 @@
-use crate::shared::models::{AttributionConfidence, FileEventRecord, FileStateRow, SessionRecord};
+use crate::shared::models::{
+    AttributionConfidence, FileEventRecord, FileStateRow, SessionRecord, TaskView,
+};
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::json;
@@ -73,6 +75,7 @@ impl Db {
             observed_at_ms INTEGER NOT NULL,
             session_id TEXT,
             turn_id TEXT,
+            task_id TEXT,
             confidence TEXT NOT NULL,
             source TEXT NOT NULL,
             metadata_json TEXT NOT NULL DEFAULT '{}'
@@ -98,6 +101,7 @@ impl Db {
             last_seen_ms INTEGER NOT NULL,
             session_id TEXT,
             turn_id TEXT,
+            task_id TEXT,
             confidence TEXT,
             source TEXT,
             PRIMARY KEY (repo_root, rel_path)
@@ -124,10 +128,75 @@ impl Db {
 
         CREATE INDEX IF NOT EXISTS idx_eval_snapshots_repo ON eval_snapshots (repo_root, evaluated_at_ms DESC);
         CREATE INDEX IF NOT EXISTS idx_eval_snapshots_run ON eval_snapshots (run_id, evaluated_at_ms DESC);
+
+        CREATE TABLE IF NOT EXISTS tasks (
+            task_id TEXT PRIMARY KEY,
+            repo_root TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            turn_id TEXT,
+            title TEXT NOT NULL,
+            objective TEXT NOT NULL,
+            prompt_preview TEXT,
+            transcript_path TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at_ms INTEGER NOT NULL,
+            updated_at_ms INTEGER NOT NULL,
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_tasks_repo_updated ON tasks (repo_root, updated_at_ms DESC);
+        CREATE INDEX IF NOT EXISTS idx_tasks_session_updated ON tasks (repo_root, session_id, updated_at_ms DESC);
+
+        CREATE TABLE IF NOT EXISTS session_task_links (
+            repo_root TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            task_id TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            linked_at_ms INTEGER NOT NULL,
+            PRIMARY KEY (repo_root, session_id, task_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_session_task_links_active
+            ON session_task_links (repo_root, session_id, is_active, linked_at_ms DESC);
+
+        CREATE TABLE IF NOT EXISTS turn_task_links (
+            repo_root TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            turn_id TEXT NOT NULL,
+            task_id TEXT NOT NULL,
+            linked_at_ms INTEGER NOT NULL,
+            PRIMARY KEY (repo_root, session_id, turn_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_turn_task_links_task
+            ON turn_task_links (repo_root, task_id, linked_at_ms DESC);
         "#;
         self.conn
             .execute_batch(schema)
             .context("apply sqlite schema")?;
+        self.ensure_column("file_events", "task_id", "TEXT")?;
+        self.ensure_column("file_state", "task_id", "TEXT")?;
+        Ok(())
+    }
+
+    fn ensure_column(&self, table: &str, column: &str, definition: &str) -> Result<()> {
+        let pragma = format!("PRAGMA table_info({table})");
+        let mut stmt = self
+            .conn
+            .prepare(&pragma)
+            .with_context(|| format!("prepare table info for {table}"))?;
+        let rows = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .with_context(|| format!("read table info for {table}"))?;
+        for row in rows {
+            if row.with_context(|| format!("inspect columns for {table}"))? == column {
+                return Ok(());
+            }
+        }
+        let sql = format!("ALTER TABLE {table} ADD COLUMN {column} {definition}");
+        self.conn
+            .execute(&sql, [])
+            .with_context(|| format!("add column {table}.{column}"))?;
         Ok(())
     }
 
@@ -233,8 +302,8 @@ impl Db {
             .execute(
                 "INSERT INTO file_events (
                     repo_root, rel_path, event_kind, observed_at_ms, session_id,
-                    turn_id, confidence, source, metadata_json
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    turn_id, task_id, confidence, source, metadata_json
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 params![
                     record.repo_root,
                     record.rel_path,
@@ -242,6 +311,7 @@ impl Db {
                     record.observed_at_ms,
                     record.session_id,
                     record.turn_id,
+                    record.task_id,
                     record.confidence.as_str(),
                     record.source,
                     record.metadata_json
@@ -293,8 +363,8 @@ impl Db {
             .execute(
                 "INSERT INTO file_state (
                     repo_root, rel_path, is_dirty, state_code, mtime_ms, size_bytes,
-                    last_seen_ms, session_id, turn_id, confidence, source
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                    last_seen_ms, session_id, turn_id, task_id, confidence, source
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
                 ON CONFLICT(repo_root, rel_path) DO UPDATE SET
                     is_dirty = excluded.is_dirty,
                     state_code = excluded.state_code,
@@ -303,6 +373,7 @@ impl Db {
                     last_seen_ms = excluded.last_seen_ms,
                     session_id = excluded.session_id,
                     turn_id = excluded.turn_id,
+                    task_id = excluded.task_id,
                     confidence = excluded.confidence,
                     source = excluded.source",
                 params![
@@ -315,6 +386,7 @@ impl Db {
                     observed_at_ms,
                     session_id,
                     turn_id,
+                    self.resolve_task_id(repo_root, session_id, turn_id)?,
                     confidence.map(|it| it.as_str()),
                     source,
                 ],
@@ -454,7 +526,7 @@ impl Db {
             .prepare(
                 "SELECT
                     rel_path, is_dirty, state_code, mtime_ms, size_bytes,
-                    last_seen_ms, session_id, turn_id, confidence, source
+                    last_seen_ms, session_id, turn_id, task_id, confidence, source
                  FROM file_state
                  WHERE repo_root = ?1 AND is_dirty = 1
                  ORDER BY rel_path ASC",
@@ -472,8 +544,9 @@ impl Db {
                     last_seen_ms: row.get(5)?,
                     session_id: row.get(6)?,
                     turn_id: row.get(7)?,
-                    confidence: row.get::<_, Option<String>>(8)?,
-                    source: row.get(9)?,
+                    task_id: row.get(8)?,
+                    confidence: row.get::<_, Option<String>>(9)?,
+                    source: row.get(10)?,
                 })
             })
             .context("query dirty file state")?;
@@ -494,7 +567,7 @@ impl Db {
             .conn
             .prepare(
                 "SELECT id, repo_root, rel_path, event_kind, observed_at_ms,
-                        session_id, turn_id, confidence, source, metadata_json
+                        session_id, turn_id, task_id, confidence, source, metadata_json
                  FROM file_events
                  WHERE repo_root = ?1 AND rel_path = ?2
                  ORDER BY observed_at_ms DESC
@@ -503,7 +576,7 @@ impl Db {
             .context("prepare latest file event query")?;
 
         stmt.query_row(params![repo_root, rel_path], |row| {
-            let conf: String = row.get(7)?;
+            let conf: String = row.get(8)?;
             Ok(FileEventRecord {
                 id: Some(row.get(0)?),
                 repo_root: row.get(1)?,
@@ -512,9 +585,10 @@ impl Db {
                 observed_at_ms: row.get(4)?,
                 session_id: row.get(5)?,
                 turn_id: row.get(6)?,
+                task_id: row.get(7)?,
                 confidence: AttributionConfidence::from_str(&conf),
-                source: row.get(8)?,
-                metadata_json: row.get(9)?,
+                source: row.get(9)?,
+                metadata_json: row.get(10)?,
             })
         })
         .optional()
@@ -636,7 +710,7 @@ impl Db {
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT id, repo_root, rel_path, event_kind, observed_at_ms, session_id, turn_id, confidence, source, metadata_json
+                "SELECT id, repo_root, rel_path, event_kind, observed_at_ms, session_id, turn_id, task_id, confidence, source, metadata_json
                  FROM file_events
                  WHERE repo_root = ?1 AND observed_at_ms >= ?2
                  ORDER BY observed_at_ms DESC",
@@ -653,9 +727,10 @@ impl Db {
                     observed_at_ms: row.get(4)?,
                     session_id: row.get::<_, Option<String>>(5)?,
                     turn_id: row.get::<_, Option<String>>(6)?,
-                    confidence: AttributionConfidence::from_str(&row.get::<_, String>(7)?),
-                    source: row.get(8)?,
-                    metadata_json: row.get(9)?,
+                    task_id: row.get::<_, Option<String>>(7)?,
+                    confidence: AttributionConfidence::from_str(&row.get::<_, String>(8)?),
+                    source: row.get(9)?,
+                    metadata_json: row.get(10)?,
                 })
             })
             .context("query recent file events")?;
@@ -690,6 +765,250 @@ impl Db {
             .execute(params![session_id, repo_root, at_ms - window_ms])
             .context("mark inferred updates")?;
         Ok(updated)
+    }
+
+    pub fn upsert_task_from_prompt(
+        &self,
+        repo_root: &str,
+        session_id: &str,
+        turn_id: Option<&str>,
+        transcript_path: Option<&str>,
+        task_id: &str,
+        title: &str,
+        objective: &str,
+        prompt_preview: Option<&str>,
+        observed_at_ms: i64,
+    ) -> Result<TaskView> {
+        self.conn
+            .execute(
+                "UPDATE session_task_links
+                 SET is_active = 0
+                 WHERE repo_root = ?1 AND session_id = ?2 AND task_id != ?3",
+                params![repo_root, session_id, task_id],
+            )
+            .context("deactivate prior session tasks")?;
+        self.conn
+            .execute(
+                "UPDATE tasks
+                 SET status = 'superseded', updated_at_ms = ?4
+                 WHERE repo_root = ?1 AND session_id = ?2 AND task_id != ?3 AND status = 'active'",
+                params![repo_root, session_id, task_id, observed_at_ms],
+            )
+            .context("mark prior tasks superseded")?;
+        self.conn
+            .execute(
+                "INSERT INTO tasks (
+                    task_id, repo_root, session_id, turn_id, title, objective, prompt_preview,
+                    transcript_path, status, created_at_ms, updated_at_ms, metadata_json
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'active', ?9, ?10, ?11)
+                ON CONFLICT(task_id) DO UPDATE SET
+                    session_id = excluded.session_id,
+                    turn_id = excluded.turn_id,
+                    title = excluded.title,
+                    objective = excluded.objective,
+                    prompt_preview = excluded.prompt_preview,
+                    transcript_path = COALESCE(excluded.transcript_path, tasks.transcript_path),
+                    status = 'active',
+                    updated_at_ms = excluded.updated_at_ms,
+                    metadata_json = excluded.metadata_json",
+                params![
+                    task_id,
+                    repo_root,
+                    session_id,
+                    turn_id,
+                    title,
+                    objective,
+                    prompt_preview,
+                    transcript_path,
+                    observed_at_ms,
+                    observed_at_ms,
+                    json!({ "source": "UserPromptSubmit" }).to_string(),
+                ],
+            )
+            .context("upsert task")?;
+        self.conn
+            .execute(
+                "INSERT INTO session_task_links (repo_root, session_id, task_id, is_active, linked_at_ms)
+                 VALUES (?1, ?2, ?3, 1, ?4)
+                 ON CONFLICT(repo_root, session_id, task_id) DO UPDATE SET
+                    is_active = 1,
+                    linked_at_ms = excluded.linked_at_ms",
+                params![repo_root, session_id, task_id, observed_at_ms],
+            )
+            .context("upsert session task link")?;
+        if let Some(turn_id) = turn_id.filter(|turn| !turn.trim().is_empty()) {
+            self.conn
+                .execute(
+                    "INSERT INTO turn_task_links (repo_root, session_id, turn_id, task_id, linked_at_ms)
+                     VALUES (?1, ?2, ?3, ?4, ?5)
+                     ON CONFLICT(repo_root, session_id, turn_id) DO UPDATE SET
+                        task_id = excluded.task_id,
+                        linked_at_ms = excluded.linked_at_ms",
+                    params![repo_root, session_id, turn_id, task_id, observed_at_ms],
+                )
+                .context("upsert turn task link")?;
+        }
+        self.get_task(repo_root, task_id)?
+            .context("load task after prompt upsert")
+    }
+
+    pub fn list_tasks(&self, repo_root: &str) -> Result<Vec<TaskView>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT task_id, session_id, turn_id, title, objective, prompt_preview, transcript_path,
+                        status, created_at_ms, updated_at_ms
+                 FROM tasks
+                 WHERE repo_root = ?1
+                 ORDER BY updated_at_ms DESC",
+            )
+            .context("prepare task list query")?;
+        let rows = stmt
+            .query_map(params![repo_root], |row| {
+                Ok(TaskView {
+                    task_id: row.get(0)?,
+                    session_id: row.get(1)?,
+                    turn_id: row.get(2)?,
+                    title: row.get(3)?,
+                    objective: row.get(4)?,
+                    prompt_preview: row.get(5)?,
+                    transcript_path: row.get(6)?,
+                    status: row.get(7)?,
+                    created_at_ms: row.get(8)?,
+                    updated_at_ms: row.get(9)?,
+                })
+            })
+            .context("query tasks")?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row.context("read task row")?);
+        }
+        Ok(out)
+    }
+
+    pub fn get_task(&self, repo_root: &str, task_id: &str) -> Result<Option<TaskView>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT task_id, session_id, turn_id, title, objective, prompt_preview, transcript_path,
+                        status, created_at_ms, updated_at_ms
+                 FROM tasks
+                 WHERE repo_root = ?1 AND task_id = ?2",
+            )
+            .context("prepare task query")?;
+        stmt.query_row(params![repo_root, task_id], |row| {
+            Ok(TaskView {
+                task_id: row.get(0)?,
+                session_id: row.get(1)?,
+                turn_id: row.get(2)?,
+                title: row.get(3)?,
+                objective: row.get(4)?,
+                prompt_preview: row.get(5)?,
+                transcript_path: row.get(6)?,
+                status: row.get(7)?,
+                created_at_ms: row.get(8)?,
+                updated_at_ms: row.get(9)?,
+            })
+        })
+        .optional()
+        .context("read task")
+    }
+
+    pub fn active_task_for_session(
+        &self,
+        repo_root: &str,
+        session_id: &str,
+    ) -> Result<Option<TaskView>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT t.task_id, t.session_id, t.turn_id, t.title, t.objective, t.prompt_preview,
+                        t.transcript_path, t.status, t.created_at_ms, t.updated_at_ms
+                 FROM tasks t
+                 JOIN session_task_links l
+                   ON l.repo_root = t.repo_root
+                  AND l.task_id = t.task_id
+                 WHERE l.repo_root = ?1
+                   AND l.session_id = ?2
+                   AND l.is_active = 1
+                 ORDER BY l.linked_at_ms DESC
+                 LIMIT 1",
+            )
+            .context("prepare active task query")?;
+        stmt.query_row(params![repo_root, session_id], |row| {
+            Ok(TaskView {
+                task_id: row.get(0)?,
+                session_id: row.get(1)?,
+                turn_id: row.get(2)?,
+                title: row.get(3)?,
+                objective: row.get(4)?,
+                prompt_preview: row.get(5)?,
+                transcript_path: row.get(6)?,
+                status: row.get(7)?,
+                created_at_ms: row.get(8)?,
+                updated_at_ms: row.get(9)?,
+            })
+        })
+        .optional()
+        .context("load active task for session")
+    }
+
+    pub fn task_for_turn(
+        &self,
+        repo_root: &str,
+        session_id: &str,
+        turn_id: &str,
+    ) -> Result<Option<TaskView>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT t.task_id, t.session_id, t.turn_id, t.title, t.objective, t.prompt_preview,
+                        t.transcript_path, t.status, t.created_at_ms, t.updated_at_ms
+                 FROM tasks t
+                 JOIN turn_task_links l
+                   ON l.repo_root = t.repo_root
+                  AND l.task_id = t.task_id
+                 WHERE l.repo_root = ?1
+                   AND l.session_id = ?2
+                   AND l.turn_id = ?3
+                 LIMIT 1",
+            )
+            .context("prepare turn task query")?;
+        stmt.query_row(params![repo_root, session_id, turn_id], |row| {
+            Ok(TaskView {
+                task_id: row.get(0)?,
+                session_id: row.get(1)?,
+                turn_id: row.get(2)?,
+                title: row.get(3)?,
+                objective: row.get(4)?,
+                prompt_preview: row.get(5)?,
+                transcript_path: row.get(6)?,
+                status: row.get(7)?,
+                created_at_ms: row.get(8)?,
+                updated_at_ms: row.get(9)?,
+            })
+        })
+        .optional()
+        .context("load task for turn")
+    }
+
+    pub fn resolve_task_id(
+        &self,
+        repo_root: &str,
+        session_id: Option<&str>,
+        turn_id: Option<&str>,
+    ) -> Result<Option<String>> {
+        let Some(session_id) = session_id.filter(|value| !value.trim().is_empty()) else {
+            return Ok(None);
+        };
+        if let Some(turn_id) = turn_id.filter(|value| !value.trim().is_empty()) {
+            if let Some(task) = self.task_for_turn(repo_root, session_id, turn_id)? {
+                return Ok(Some(task.task_id));
+            }
+        }
+        Ok(self
+            .active_task_for_session(repo_root, session_id)?
+            .map(|task| task.task_id))
     }
 
     pub fn clear_inconsistent_state(&self, repo_root: &str) -> Result<()> {

@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use serde_json::{json, Value};
 use std::collections::HashSet;
-use std::io::Read;
+use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
 
 pub fn parse_stdin_payload() -> Result<String> {
@@ -25,10 +25,6 @@ pub fn handle_hook(
     db_hint: Option<&str>,
     payload_raw: &str,
 ) -> Result<()> {
-    if try_forward_hook_to_runtime(client_name, event_name, repo_hint, db_hint, payload_raw)? {
-        return Ok(());
-    }
-
     let payload: Value = if payload_raw.trim().is_empty() {
         json!({})
     } else {
@@ -38,7 +34,7 @@ pub fn handle_hook(
     let cwd = extract_field(&payload, &["cwd", "workingDir", "working_directory"])
         .or_else(|| repo_hint.map(|r| r.to_string()))
         .unwrap_or_else(|| ".".to_string());
-    let ctx = resolve_runtime(Some(&cwd))?;
+    let ctx = resolve(Some(&cwd), db_hint)?;
     let db = Db::open(&ctx.db_path)?;
     let repo_root = ctx.repo_root.to_string_lossy().to_string();
     let now_ms = Utc::now().timestamp_millis();
@@ -50,6 +46,7 @@ pub fn handle_hook(
     let model = extract_field(&payload, &["model"]).filter(|value| !value.is_empty());
     let transcript_path = extract_field(&payload, &["transcript_path", "transcriptPath"]);
     let session_source = extract_field(&payload, &["source"]);
+    let prompt = extract_field(&payload, &["prompt"]);
     let hook_event_name = extract_field(
         &payload,
         &[
@@ -62,6 +59,29 @@ pub fn handle_hook(
     .unwrap_or_else(|| normalize_event_name(client_name, event_name));
     let tool_name = extract_field(&payload, &["tool_name", "toolName"])
         .or_else(|| extract_field_from_cmd_path(&payload));
+    let mut task_prompt = prompt.clone();
+    let mut task_identity = derive_task_identity(
+        &hook_event_name,
+        &session_id,
+        turn_id.as_deref(),
+        task_prompt.as_deref(),
+    );
+    if task_identity.is_none()
+        && db
+            .resolve_task_id(&repo_root, Some(&session_id), turn_id.as_deref())?
+            .is_none()
+    {
+        if let Some(recovered_prompt) =
+            recover_prompt_from_transcript(turn_id.as_deref(), transcript_path.as_deref())
+        {
+            task_identity = task_identity_from_prompt(
+                &session_id,
+                turn_id.as_deref(),
+                recovered_prompt.as_str(),
+            );
+            task_prompt = Some(recovered_prompt);
+        }
+    }
 
     let payload_json = serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string());
     let tmux_session = extract_field(&payload, &["tmux_session", "tmuxSession"])
@@ -123,6 +143,21 @@ pub fn handle_hook(
         &payload_json,
     )?;
 
+    if let Some((task_id, task_title, prompt_preview)) = &task_identity {
+        let objective = task_prompt.as_deref().unwrap_or(task_title.as_str());
+        let _ = db.upsert_task_from_prompt(
+            &repo_root,
+            &session_id,
+            turn_id.as_deref(),
+            transcript_path.as_deref(),
+            task_id,
+            task_title,
+            objective,
+            Some(prompt_preview.as_str()),
+            now_ms,
+        )?;
+    }
+
     if event_is_file_mutating(&hook_event_name, &client, tool_name.as_deref()) {
         let tool_input = payload
             .get("tool_input")
@@ -130,20 +165,56 @@ pub fn handle_hook(
             .unwrap_or_else(|| payload.clone());
         let candidate_paths = extract_file_paths(&tool_input, &ctx);
         for rel_path in candidate_paths {
+            let abs_path = ctx.repo_root.join(&rel_path);
+            let metadata = std::fs::metadata(&abs_path).ok();
+            let (mtime_ms, size_bytes) = metadata
+                .and_then(|meta| {
+                    meta.modified()
+                        .ok()
+                        .and_then(|ts| ts.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|dur| {
+                            (
+                                Some(dur.as_millis() as i64),
+                                if meta.is_file() {
+                                    Some(meta.len() as i64)
+                                } else {
+                                    None
+                                },
+                            )
+                        })
+                })
+                .unwrap_or((None, None));
+            let task_id = db.resolve_task_id(&repo_root, Some(&session_id), turn_id.as_deref())?;
             let _ = db.insert_file_event(&FileEventRecord {
                 id: None,
                 repo_root: repo_root.clone(),
-                rel_path,
+                rel_path: rel_path.clone(),
                 event_kind: "hook-file".to_string(),
                 observed_at_ms: now_ms,
                 session_id: Some(session_id.clone()),
                 turn_id: turn_id.clone(),
+                task_id: task_id.clone(),
                 confidence: AttributionConfidence::Exact,
                 source: client.as_str().to_string(),
                 metadata_json: json!({ "raw_event": hook_event_name }).to_string(),
             })?;
+            db.update_file_state(
+                &repo_root,
+                &rel_path,
+                true,
+                "modify",
+                mtime_ms,
+                size_bytes,
+                now_ms,
+                Some(&session_id),
+                turn_id.as_deref(),
+                Some(AttributionConfidence::Exact),
+                Some(client.as_str()),
+            )?;
         }
     }
+
+    let _ = try_forward_hook_to_runtime(client_name, event_name, repo_hint, db_hint, payload_raw)?;
 
     Ok(())
 }
@@ -206,6 +277,7 @@ pub fn build_hook_runtime_message(
     let model = extract_field(&payload, &["model"]).filter(|value| !value.is_empty());
     let transcript_path = extract_field(&payload, &["transcript_path", "transcriptPath"]);
     let session_source = extract_field(&payload, &["source"]);
+    let prompt = extract_field(&payload, &["prompt"]);
     let hook_event_name = extract_field(
         &payload,
         &[
@@ -218,6 +290,12 @@ pub fn build_hook_runtime_message(
     .unwrap_or_else(|| normalize_event_name(client_name, event_name));
     let tool_name = extract_field(&payload, &["tool_name", "toolName"])
         .or_else(|| extract_field_from_cmd_path(&payload));
+    let task_identity = derive_task_identity(
+        &hook_event_name,
+        &session_id,
+        turn_id.as_deref(),
+        prompt.as_deref(),
+    );
     let tool_command = extract_tool_command(&payload);
     let tmux_session = extract_field(&payload, &["tmux_session", "tmuxSession"])
         .or_else(|| std::env::var("TMUX_SESSION").ok());
@@ -261,6 +339,15 @@ pub fn build_hook_runtime_message(
             tool_name,
             tool_command,
             file_paths,
+            task_id: task_identity
+                .as_ref()
+                .map(|(task_id, _, _)| task_id.clone()),
+            task_title: task_identity
+                .as_ref()
+                .map(|(_, task_title, _)| task_title.clone()),
+            prompt_preview: task_identity
+                .as_ref()
+                .map(|(_, _, prompt_preview)| prompt_preview.clone()),
             tmux_session,
             tmux_window,
             tmux_pane,
@@ -402,6 +489,143 @@ fn transcript_display_name(path: &str) -> Option<String> {
     } else {
         Some(normalized.to_string())
     }
+}
+
+fn derive_task_identity(
+    hook_event_name: &str,
+    session_id: &str,
+    turn_id: Option<&str>,
+    prompt: Option<&str>,
+) -> Option<(String, String, String)> {
+    if hook_event_name != "UserPromptSubmit" {
+        return None;
+    }
+    task_identity_from_prompt(session_id, turn_id, prompt?)
+}
+
+fn task_identity_from_prompt(
+    session_id: &str,
+    turn_id: Option<&str>,
+    prompt: &str,
+) -> Option<(String, String, String)> {
+    let turn_id = turn_id?.trim();
+    if turn_id.is_empty() {
+        return None;
+    }
+    let prompt = prompt.trim();
+    if prompt.is_empty() {
+        return None;
+    }
+    let task_id = format!("task:{session_id}:{turn_id}");
+    let title = summarize_prompt_title(prompt);
+    let prompt_preview = summarize_prompt_preview(prompt);
+    Some((task_id, title, prompt_preview))
+}
+
+fn recover_prompt_from_transcript(
+    turn_id: Option<&str>,
+    transcript_path: Option<&str>,
+) -> Option<String> {
+    let turn_id = turn_id?.trim();
+    let transcript_path = transcript_path?.trim();
+    if turn_id.is_empty() || transcript_path.is_empty() {
+        return None;
+    }
+
+    let file = std::fs::File::open(transcript_path).ok()?;
+    let reader = BufReader::new(file);
+    let mut matched_turn = false;
+    let mut latest_user_prompt = None;
+
+    for line in reader.lines() {
+        let line = line.ok()?;
+        let entry: Value = serde_json::from_str(&line).ok()?;
+        let entry_type = entry.get("type").and_then(Value::as_str);
+
+        if entry_type == Some("event_msg") {
+            match entry.pointer("/payload/type").and_then(Value::as_str) {
+                Some("task_started") => {
+                    matched_turn =
+                        entry.pointer("/payload/turn_id").and_then(Value::as_str) == Some(turn_id);
+                    continue;
+                }
+                Some("user_message") if matched_turn => {
+                    if let Some(message) = entry.pointer("/payload/message").and_then(Value::as_str)
+                    {
+                        let message = message.trim();
+                        if !message.is_empty() {
+                            latest_user_prompt = Some(message.to_string());
+                        }
+                    }
+                }
+                Some("task_complete") if matched_turn => break,
+                _ => {}
+            }
+        }
+
+        if matched_turn
+            && entry_type == Some("response_item")
+            && entry.pointer("/payload/type").and_then(Value::as_str) == Some("message")
+            && entry.pointer("/payload/role").and_then(Value::as_str) == Some("user")
+        {
+            if let Some(message) = extract_user_prompt_from_response_item(&entry) {
+                latest_user_prompt = Some(message);
+            }
+        }
+    }
+
+    latest_user_prompt
+}
+
+fn extract_user_prompt_from_response_item(entry: &Value) -> Option<String> {
+    let items = entry.pointer("/payload/content")?.as_array()?;
+    let mut parts = Vec::new();
+    for item in items {
+        if item.get("type").and_then(Value::as_str) != Some("input_text") {
+            continue;
+        }
+        let Some(text) = item.get("text").and_then(Value::as_str) else {
+            continue;
+        };
+        let text = text.trim();
+        if !text.is_empty() {
+            parts.push(text.to_string());
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("\n"))
+    }
+}
+
+fn summarize_prompt_title(prompt: &str) -> String {
+    let first_non_empty = prompt
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or(prompt)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    truncate_text(&first_non_empty, 72)
+}
+
+fn summarize_prompt_preview(prompt: &str) -> String {
+    let normalized = prompt.split_whitespace().collect::<Vec<_>>().join(" ");
+    truncate_text(&normalized, 180)
+}
+
+fn truncate_text(text: &str, max_chars: usize) -> String {
+    let mut out = String::new();
+    for (index, ch) in text.chars().enumerate() {
+        if index >= max_chars {
+            out.push_str("...");
+            break;
+        }
+        out.push(ch);
+    }
+    out
 }
 
 fn event_is_file_mutating(event: &str, client: &HookClient, tool_name: Option<&str>) -> bool {
@@ -628,6 +852,7 @@ fn current_branch(repo_root: &std::path::Path) -> Result<String> {
 mod tests {
     use super::*;
     use serde_json::json;
+    use tempfile::tempdir;
 
     #[test]
     fn normalize_event_name_handles_edit_write_and_tool_events() {
@@ -720,5 +945,46 @@ mod tests {
         );
 
         assert_eq!(display.as_deref(), Some("review-check"));
+    }
+
+    #[test]
+    fn recover_prompt_from_transcript_uses_matching_turn_user_message() {
+        let dir = tempdir().expect("tempdir");
+        let transcript = dir.path().join("session.jsonl");
+        std::fs::write(
+            &transcript,
+            concat!(
+                "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"turn-1\"}}\n",
+                "{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"message\":\"first task\"}}\n",
+                "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"turn-1\"}}\n",
+                "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"turn-2\"}}\n",
+                "{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"message\":\"second task\"}}\n",
+                "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"turn-2\"}}\n"
+            ),
+        )
+        .expect("write transcript");
+
+        let prompt = recover_prompt_from_transcript(Some("turn-2"), transcript.to_str());
+
+        assert_eq!(prompt.as_deref(), Some("second task"));
+    }
+
+    #[test]
+    fn recover_prompt_from_transcript_falls_back_to_response_item_user_text() {
+        let dir = tempdir().expect("tempdir");
+        let transcript = dir.path().join("session.jsonl");
+        std::fs::write(
+            &transcript,
+            concat!(
+                "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"turn-3\"}}\n",
+                "{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"recover from response item\"}]}}\n",
+                "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"turn-3\"}}\n"
+            ),
+        )
+        .expect("write transcript");
+
+        let prompt = recover_prompt_from_transcript(Some("turn-3"), transcript.to_str());
+
+        assert_eq!(prompt.as_deref(), Some("recover from response item"));
     }
 }

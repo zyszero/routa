@@ -120,6 +120,7 @@ pub fn poll_repo(
                         observed_at_ms: now_ms,
                         session_id: None,
                         turn_id: None,
+                        task_id: None,
                         confidence: AttributionConfidence::Unknown,
                         source: source.to_string(),
                         metadata_json: json!({ "via": "git-status" }).to_string(),
