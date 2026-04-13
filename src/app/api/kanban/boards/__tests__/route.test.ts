@@ -36,6 +36,15 @@ const system = {
   workspaceStore,
 };
 
+const sessionStore = {
+  hydrateFromDb: vi.fn<() => Promise<void>>(),
+  getSession: vi.fn(),
+};
+
+const processManager = {
+  hasActiveSession: vi.fn<(sessionId: string) => boolean>(),
+};
+
 vi.mock("@/core/routa-system", () => ({
   getRoutaSystem: () => system,
 }));
