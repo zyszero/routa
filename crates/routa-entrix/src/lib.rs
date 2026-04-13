@@ -1,7 +1,7 @@
 //! Entrix — Rust implementation of the fitness function engine.
 //!
 //! This crate provides the core logic for evolutionary architecture fitness
-//! functions, matching the behavior of `tools/entrix` (Python).
+//! functions and replaces the former `tools/entrix` Python runtime.
 
 pub mod evidence;
 pub mod file_budgets;

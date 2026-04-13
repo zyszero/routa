@@ -82,8 +82,8 @@ struct ReviewTriggerRuleEntry {
 pub fn load_review_triggers(config_path: &Path) -> Result<Vec<ReviewTriggerRule>, String> {
     let raw = std::fs::read_to_string(config_path)
         .map_err(|error| format!("failed to read {}: {error}", config_path.display()))?;
-    let parsed: ReviewTriggerConfigFile =
-        serde_yaml::from_str(&raw).map_err(|error| format!("invalid review trigger yaml: {error}"))?;
+    let parsed: ReviewTriggerConfigFile = serde_yaml::from_str(&raw)
+        .map_err(|error| format!("invalid review trigger yaml: {error}"))?;
 
     Ok(parsed
         .review_triggers
@@ -197,7 +197,11 @@ pub fn evaluate_review_triggers(
             "changed_paths" => {
                 let reasons = changed_files
                     .iter()
-                    .filter(|file_path| rule.paths.iter().any(|pattern| pattern_matches_file(file_path, pattern)))
+                    .filter(|file_path| {
+                        rule.paths
+                            .iter()
+                            .any(|pattern| pattern_matches_file(file_path, pattern))
+                    })
                     .map(|file_path| format!("changed path: {file_path}"))
                     .collect::<Vec<_>>();
                 push_trigger_if_any(&mut triggers, rule, reasons);
@@ -205,7 +209,11 @@ pub fn evaluate_review_triggers(
             "sensitive_file_change" => {
                 let reasons = changed_files
                     .iter()
-                    .filter(|file_path| rule.paths.iter().any(|pattern| pattern_matches_file(file_path, pattern)))
+                    .filter(|file_path| {
+                        rule.paths
+                            .iter()
+                            .any(|pattern| pattern_matches_file(file_path, pattern))
+                    })
                     .map(|file_path| format!("sensitive file changed: {file_path}"))
                     .collect::<Vec<_>>();
                 push_trigger_if_any(&mut triggers, rule, reasons);
@@ -273,7 +281,11 @@ pub fn evaluate_review_triggers(
             "evidence_gap" => {
                 let monitored_changes = changed_files
                     .iter()
-                    .filter(|file_path| rule.paths.iter().any(|pattern| pattern_matches_file(file_path, pattern)))
+                    .filter(|file_path| {
+                        rule.paths
+                            .iter()
+                            .any(|pattern| pattern_matches_file(file_path, pattern))
+                    })
                     .cloned()
                     .collect::<Vec<_>>();
                 if monitored_changes.is_empty() {
@@ -321,7 +333,9 @@ pub fn evaluate_review_triggers(
                 if boundary_hits.len() >= rule.min_boundaries {
                     let reasons = boundary_hits
                         .into_iter()
-                        .map(|(name, paths)| format!("changed boundary '{name}': {}", paths.join(", ")))
+                        .map(|(name, paths)| {
+                            format!("changed boundary '{name}': {}", paths.join(", "))
+                        })
                         .collect::<Vec<_>>();
                     push_trigger_if_any(&mut triggers, rule, reasons);
                 }
@@ -340,7 +354,9 @@ pub fn evaluate_review_triggers(
 }
 
 fn normalize_string(value: Option<String>) -> Option<String> {
-    value.map(|item| item.trim().to_string()).filter(|item| !item.is_empty())
+    value
+        .map(|item| item.trim().to_string())
+        .filter(|item| !item.is_empty())
 }
 
 fn sanitize_strings(values: Vec<String>) -> Vec<String> {
@@ -396,7 +412,11 @@ fn count_direct_files(repo_root: &Path, directory: &str) -> usize {
         .count()
 }
 
-fn push_trigger_if_any(triggers: &mut Vec<TriggerMatch>, rule: &ReviewTriggerRule, reasons: Vec<String>) {
+fn push_trigger_if_any(
+    triggers: &mut Vec<TriggerMatch>,
+    rule: &ReviewTriggerRule,
+    reasons: Vec<String>,
+) {
     if reasons.is_empty() {
         return;
     }

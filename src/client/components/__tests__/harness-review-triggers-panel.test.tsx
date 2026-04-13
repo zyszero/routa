@@ -75,7 +75,7 @@ function createHooksResponse(): HooksResponse {
           ],
           evidencePaths: [
             "docs/fitness/**",
-            "tools/entrix/**",
+            "crates/routa-entrix/**",
             ".github/workflows/defense.yaml",
           ],
           boundaries: [],

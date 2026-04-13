@@ -124,7 +124,11 @@ pub fn resolve_paths(
     }
 
     if overrides_only {
-        return Ok(config.overrides.iter().map(|entry| entry.path.clone()).collect());
+        return Ok(config
+            .overrides
+            .iter()
+            .map(|entry| entry.path.clone())
+            .collect());
     }
 
     if !explicit_paths.is_empty() {
@@ -164,7 +168,8 @@ pub fn evaluate_paths(
             if let Some(baseline_lines) = count_head_lines(repo_root, &relative_path) {
                 max_lines = max_lines.max(baseline_lines);
                 if baseline_lines > configured_max_lines && reason.is_empty() {
-                    reason = format!("legacy hotspot frozen at HEAD baseline ({baseline_lines} lines)");
+                    reason =
+                        format!("legacy hotspot frozen at HEAD baseline ({baseline_lines} lines)");
                 }
             }
         }
@@ -191,7 +196,11 @@ fn retain_override_paths(paths: &mut Vec<String>, config: &FileBudgetConfig) {
 }
 
 fn resolve_budget(relative_path: &str, config: &FileBudgetConfig) -> (usize, String) {
-    if let Some(entry) = config.overrides.iter().find(|entry| entry.path == relative_path) {
+    if let Some(entry) = config
+        .overrides
+        .iter()
+        .find(|entry| entry.path == relative_path)
+    {
         return (entry.max_lines, entry.reason.clone());
     }
     let extension = Path::new(relative_path)
@@ -279,8 +288,14 @@ mod tests {
     fn tracked_source_file_checks_roots_extensions_and_exclusions() {
         let config = make_config();
         assert!(is_tracked_source_file("crates/foo/src/lib.rs", &config));
-        assert!(!is_tracked_source_file("docs/fitness/code-quality.md", &config));
-        assert!(!is_tracked_source_file("crates/foo/target/generated.rs", &config));
+        assert!(!is_tracked_source_file(
+            "docs/fitness/code-quality.md",
+            &config
+        ));
+        assert!(!is_tracked_source_file(
+            "crates/foo/target/generated.rs",
+            &config
+        ));
     }
 
     #[test]

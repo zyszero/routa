@@ -240,7 +240,8 @@ fn cmd_graph_review_context(args: GraphReviewContextArgs) -> i32 {
             if output_path != "-" {
                 if let Err(error) = std::fs::write(
                     &output_path,
-                    serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "{}".to_string()) + "\n",
+                    serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "{}".to_string())
+                        + "\n",
                 ) {
                     eprintln!("failed to write {output_path}: {error}");
                     return 1;
@@ -307,7 +308,11 @@ fn cmd_hook_file_length(args: HookFileLengthArgs) -> i32 {
         );
     }
 
-    if violations.is_empty() { 0 } else { 1 }
+    if violations.is_empty() {
+        0
+    } else {
+        1
+    }
 }
 
 fn find_project_root() -> PathBuf {
@@ -348,7 +353,11 @@ fn print_json<T: serde::Serialize>(value: &T) {
 fn print_review_trigger_report(report: &routa_entrix::review_trigger::ReviewTriggerReport) {
     println!(
         "human review required: {}",
-        if report.human_review_required { "yes" } else { "no" }
+        if report.human_review_required {
+            "yes"
+        } else {
+            "no"
+        }
     );
     println!("base: {}", report.base);
     println!("changed files: {}", report.changed_files.len());
