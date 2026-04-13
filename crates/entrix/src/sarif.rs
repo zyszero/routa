@@ -97,6 +97,13 @@ impl SarifRunner {
         }
     }
 
+    pub fn run_batch(&self, metrics: &[Metric], dry_run: bool) -> Vec<MetricResult> {
+        metrics
+            .iter()
+            .map(|metric| self.run(metric, dry_run))
+            .collect()
+    }
+
     fn load_payload(&self, command_or_path: &str, timeout: u64) -> Result<Value, String> {
         let candidate = self.project_root.join(command_or_path);
         if candidate.is_file() {

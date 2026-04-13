@@ -1,9 +1,11 @@
+mod run_support;
+
 use clap::{Args, Parser, Subcommand};
 use entrix::evidence::{load_dimensions, validate_weights};
 use entrix::file_budgets::{evaluate_paths, is_tracked_source_file, load_config, resolve_paths};
 use entrix::governance::{enforce, filter_dimensions, GovernancePolicy};
 use entrix::long_file::{analyze_long_files, default_comment_review_commit_threshold};
-use entrix::model::{EvidenceType, ExecutionScope, FitnessReport, Tier};
+use entrix::model::{ExecutionScope, FitnessReport, Tier};
 use entrix::release_trigger::{
     evaluate_release_triggers, load_release_manifest, load_release_triggers,
 };
@@ -20,6 +22,7 @@ use entrix::runner::ShellRunner;
 use entrix::sarif::SarifRunner;
 use entrix::scoring::{score_dimension, score_report};
 use entrix::test_mapping;
+use run_support::run_metric_batch;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
@@ -462,14 +465,16 @@ fn cmd_run(args: RunArgs) -> i32 {
     let mut dimension_scores = Vec::new();
 
     for dimension in &dimensions {
-        let results = dimension
-            .metrics
-            .iter()
-            .map(|metric| match metric.evidence_type {
-                EvidenceType::Sarif => sarif_runner.run(metric, policy.dry_run),
-                _ => shell_runner.run(metric, policy.dry_run),
-            })
-            .collect::<Vec<_>>();
+        let results = run_metric_batch(
+            &repo_root,
+            &dimension.metrics,
+            &shell_runner,
+            &sarif_runner,
+            policy.dry_run,
+            policy.parallel,
+            &changed_files,
+            &args.base,
+        );
         let scored = score_dimension(&results, &dimension.name, dimension.weight);
         dimension_scores.push(scored);
     }
