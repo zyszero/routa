@@ -1,5 +1,6 @@
 mod go;
 mod java;
+mod python;
 mod rust;
 #[cfg(test)]
 mod tests;
@@ -846,6 +847,35 @@ pub(super) fn resolve_relative_import(
     None
 }
 
+pub(super) fn resolve_python_import(
+    repo_root: &Path,
+    relative_path: &str,
+    import_path: &str,
+) -> Option<String> {
+    let leading_dots = import_path.len() - import_path.trim_start_matches('.').len();
+    let relative_part = import_path.trim_start_matches('.').replace('.', "/");
+    let mut anchor = repo_root.join(relative_path).parent()?.to_path_buf();
+    for _ in 0..leading_dots.saturating_sub(1) {
+        anchor = anchor.parent()?.to_path_buf();
+    }
+    let candidate = if relative_part.is_empty() {
+        anchor
+    } else {
+        anchor.join(relative_part)
+    };
+    for path in [
+        candidate.with_extension("py"),
+        candidate.join("__init__.py"),
+    ] {
+        if path.is_file() {
+            if let Some(relative) = resolve_repo_relative_path(repo_root, &path.to_string_lossy()) {
+                return Some(relative);
+            }
+        }
+    }
+    None
+}
+
 pub fn analyze_single_file(repo_root: &Path, target: &str) -> Option<SingleFileAnalysis> {
     let relative_path = resolve_repo_relative_path(repo_root, target)?;
     let language = language_config_for_path(&relative_path)?;
@@ -1137,6 +1167,31 @@ fn go_companion_test_candidates(relative_path: &str) -> Vec<String> {
         .replace('\\', "/")]
 }
 
+fn python_companion_test_candidates(relative_path: &str) -> Vec<String> {
+    let path = Path::new(relative_path);
+    let parent = path.parent().unwrap_or_else(|| Path::new(""));
+    let stem = path
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    if stem.is_empty() || stem.starts_with("test_") || stem.ends_with("_test") {
+        return Vec::new();
+    }
+
+    let mut candidates = Vec::new();
+    for name in [format!("test_{stem}.py"), format!("{stem}_test.py")] {
+        candidates.push(parent.join(&name).to_string_lossy().replace('\\', "/"));
+        candidates.push(
+            parent
+                .join("tests")
+                .join(&name)
+                .to_string_lossy()
+                .replace('\\', "/"),
+        );
+    }
+    candidates
+}
+
 fn typescript_companion_test_candidates(relative_path: &str) -> Vec<String> {
     let path = Path::new(relative_path);
     let parent = path.parent().unwrap_or_else(|| Path::new(""));
@@ -1181,7 +1236,10 @@ fn typescript_companion_test_candidates(relative_path: &str) -> Vec<String> {
 fn is_generic_test_file(relative_path: &str) -> bool {
     let lowered = relative_path.to_ascii_lowercase();
     lowered.contains("/src/test/java/")
+        || lowered.contains("/tests/")
+        || lowered.contains("/__tests__/")
         || lowered.ends_with("_test.go")
+        || lowered.ends_with("_test.rs")
         || lowered.contains(".test.")
         || lowered.contains(".spec.")
 }
@@ -1198,6 +1256,7 @@ fn language_config_for_path(path: &str) -> Option<&'static LanguageConfig> {
         "ts" | "tsx" | "mts" | "cts" | "js" | "jsx" => Some(&TYPESCRIPT_LANGUAGE),
         "java" => Some(&JAVA_LANGUAGE),
         "go" => Some(&GO_LANGUAGE),
+        "py" => Some(&PYTHON_LANGUAGE),
         _ => None,
     }
 }
@@ -1298,6 +1357,15 @@ const GO_LANGUAGE: LanguageConfig = LanguageConfig {
     ts_language: go_language,
 };
 
+const PYTHON_LANGUAGE: LanguageConfig = LanguageConfig {
+    name: "python",
+    parse_nodes: python::parse_nodes,
+    parse_imports: python::parse_imports,
+    companion_test_candidates: python_companion_test_candidates,
+    is_test_file: is_generic_test_file,
+    ts_language: python_language,
+};
+
 fn rust_language() -> Language {
     tree_sitter_rust::LANGUAGE.into()
 }
@@ -1312,4 +1380,8 @@ fn java_language() -> Language {
 
 fn go_language() -> Language {
     tree_sitter_go::LANGUAGE.into()
+}
+
+fn python_language() -> Language {
+    tree_sitter_python::LANGUAGE.into()
 }

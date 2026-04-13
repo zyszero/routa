@@ -892,6 +892,57 @@ fn parity_with_python_entrix_for_test_radius_core_fields() {
 }
 
 #[test]
+fn parity_with_python_entrix_for_python_queries() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(
+        root.join("src/service.py"),
+        "class Service:\n    def run(self):\n        return helper()\n\n\ndef helper():\n    return 1\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/test_service.py"),
+        "from .service import helper\n\n\ndef test_helper():\n    assert helper() == 1\n",
+    )
+    .unwrap();
+
+    let Some(python_children) =
+        python_entrix_adapter_json(root, "query", &["children_of", "src/service.py"])
+    else {
+        return;
+    };
+    let rust_children = serde_json::to_value(query_current_graph(
+        root,
+        "src/service.py",
+        "children_of",
+        ReviewBuildMode::Auto,
+    ))
+    .unwrap();
+    assert_eq!(
+        qualified_names(rust_children["results"].as_array().map_or(&[], |v| v)),
+        qualified_names(python_children["results"].as_array().map_or(&[], |v| v))
+    );
+
+    let Some(python_tests) =
+        python_entrix_adapter_json(root, "query", &["tests_for", "src/service.py:helper"])
+    else {
+        return;
+    };
+    let rust_tests = serde_json::to_value(query_current_graph(
+        root,
+        "src/service.py:helper",
+        "tests_for",
+        ReviewBuildMode::Auto,
+    ))
+    .unwrap();
+    assert_eq!(
+        qualified_names(rust_tests["results"].as_array().map_or(&[], |v| v)),
+        qualified_names(python_tests["results"].as_array().map_or(&[], |v| v))
+    );
+}
+
+#[test]
 fn query_current_graph_limits_call_edges_to_imported_symbols() {
     let temp = tempdir().unwrap();
     let root = temp.path();
@@ -957,6 +1008,186 @@ fn query_current_graph_avoids_ambiguous_global_call_matches() {
 
     assert_eq!(result.status, "ok");
     assert!(result.results.is_empty());
+}
+
+#[test]
+fn query_current_graph_resolves_multiline_grouped_rust_imports() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("crates/demo/src/commands")).unwrap();
+    fs::write(
+        root.join("crates/demo/src/lib.rs"),
+        "mod commands;\nmod agent;\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("crates/demo/src/commands/mod.rs"),
+        "pub fn execution_budget() -> u64 { 240 }\npub fn output_contains_artifact_payload() -> bool { true }\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("crates/demo/src/agent.rs"),
+        "use crate::commands::{\n    execution_budget,\n    output_contains_artifact_payload,\n};\n\npub fn run() -> bool {\n    execution_budget() > 0 && output_contains_artifact_payload()\n}\n",
+    )
+    .unwrap();
+
+    let result = query_current_graph(
+        root,
+        "crates/demo/src/agent.rs",
+        "imports_of",
+        ReviewBuildMode::Auto,
+    );
+
+    assert_eq!(result.status, "ok");
+    assert_eq!(result.results.len(), 1);
+    assert!(matches!(
+        &result.results[0],
+        GraphNodePayload::File(node) if node.qualified_name == "crates/demo/src/commands/mod.rs"
+    ));
+}
+
+#[test]
+fn resolve_rust_import_handles_ci_style_grouped_import_text() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("crates/demo/src/commands")).unwrap();
+    fs::write(root.join("crates/demo/src/lib.rs"), "mod commands;\n").unwrap();
+    fs::write(
+        root.join("crates/demo/src/commands/mod.rs"),
+        "pub fn execution_budget() {}\npub fn output_contains_artifact_payload() {}\n",
+    )
+    .unwrap();
+
+    let resolved = super::tree_sitter::resolve_rust_import(
+        root,
+        "crates/demo/src/lib.rs",
+        "use crate::commands::{\n        execution_budget, output_contains_artifact_payload, parse_prompt,\n        recover_success_artifacts_from_output, validate_prompt, validate_success_artifacts,\n        write_artifact_set, write_baseline_artifacts, UiJourneyAggregateRun, UiJourneyPromptParams,\n        UiJourneyRunContext, UiJourneyRunMetrics, DEFAULT_ARTIFACT_DIR, DEFAULT_BASE_URL,\n        DEFAULT_SCENARIO_ID,\n    };",
+    );
+
+    assert_eq!(resolved.as_deref(), Some("crates/demo/src/commands/mod.rs"));
+}
+
+#[test]
+fn query_current_graph_limits_tests_to_matching_symbols() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(
+        root.join("src/mod.ts"),
+        "export function run() { return 1 }\nexport function helper() { return 2 }\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/mod.test.ts"),
+        "import { run, helper } from './mod'\ntest('run works', () => run())\nvoid helper\n",
+    )
+    .unwrap();
+
+    let run_tests = query_current_graph(root, "src/mod.ts:run", "tests_for", ReviewBuildMode::Auto);
+    let helper_tests = query_current_graph(
+        root,
+        "src/mod.ts:helper",
+        "tests_for",
+        ReviewBuildMode::Auto,
+    );
+
+    assert_eq!(run_tests.status, "ok");
+    assert_eq!(run_tests.results.len(), 1);
+    assert!(matches!(
+        &run_tests.results[0],
+        GraphNodePayload::Symbol(node) if node.qualified_name == "src/mod.test.ts:test:2"
+    ));
+    assert_eq!(helper_tests.status, "ok");
+    assert!(helper_tests.results.is_empty());
+}
+
+#[test]
+fn query_current_graph_parses_python_and_tracks_import_impact() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(
+        root.join("src/service.py"),
+        "def run():\n    return helper()\n\n\ndef helper():\n    return 1\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/consumer.py"),
+        "from .service import run\n\n\ndef consume():\n    return run()\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/test_service.py"),
+        "from .service import run\n\n\ndef test_run():\n    assert run() == 1\n",
+    )
+    .unwrap();
+
+    let impact = analyze_impact(
+        root,
+        &["src/service.py".to_string()],
+        ImpactOptions {
+            base: "HEAD",
+            build_mode: ReviewBuildMode::Auto,
+            max_depth: 1,
+            max_impacted_files: 200,
+        },
+    );
+    let tests = query_current_graph(
+        root,
+        "src/service.py:run",
+        "tests_for",
+        ReviewBuildMode::Auto,
+    );
+
+    assert_eq!(impact.status, "ok");
+    assert_eq!(
+        impact.impacted_files,
+        vec!["src/test_service.py".to_string()]
+    );
+    assert_eq!(tests.status, "ok");
+    assert_eq!(tests.results.len(), 1);
+    assert!(matches!(
+        &tests.results[0],
+        GraphNodePayload::Symbol(node) if node.qualified_name == "src/test_service.py:test_run"
+    ));
+}
+
+#[test]
+fn query_current_graph_qualifies_python_class_methods() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(
+        root.join("src/service.py"),
+        "class Service:\n    def run(self):\n        return helper()\n\n\ndef helper():\n    return 1\n",
+    )
+    .unwrap();
+
+    let children =
+        query_current_graph(root, "src/service.py", "children_of", ReviewBuildMode::Auto);
+    let callees = query_current_graph(
+        root,
+        "src/service.py:Service.run",
+        "callees_of",
+        ReviewBuildMode::Auto,
+    );
+
+    assert_eq!(children.status, "ok");
+    let child_names = qualified_names(
+        &serde_json::to_value(&children).unwrap()["results"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default(),
+    );
+    assert!(child_names.contains(&"src/service.py:Service".to_string()));
+    assert!(child_names.contains(&"src/service.py:Service.run".to_string()));
+    assert!(child_names.contains(&"src/service.py:helper".to_string()));
+    assert_eq!(callees.status, "ok");
+    assert_eq!(callees.results.len(), 1);
+    assert!(matches!(
+        &callees.results[0],
+        GraphNodePayload::Symbol(node) if node.qualified_name == "src/service.py:helper"
+    ));
 }
 
 fn python_entrix_adapter_json(repo_root: &Path, action: &str, args: &[&str]) -> Option<Value> {
