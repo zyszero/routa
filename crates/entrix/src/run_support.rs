@@ -1,10 +1,10 @@
-use entrix::model::{EvidenceType, Metric, MetricResult, ResultState};
-use entrix::review_context::{
+use crate::model::{EvidenceType, Metric, MetricResult, ResultState};
+use crate::review_context::{
     analyze_impact, analyze_test_radius, ImpactOptions, ReviewBuildMode, TestRadiusOptions,
 };
-use entrix::runner::ShellRunner;
-use entrix::sarif::SarifRunner;
-use entrix::test_mapping;
+use crate::runner::ShellRunner;
+use crate::sarif::SarifRunner;
+use crate::test_mapping;
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -161,7 +161,7 @@ fn probe_impact(repo_root: &Path, changed_files: &[String], base: &str) -> Metri
         "graph_probe",
         !impact.wide_blast_radius,
         lines.join("\n"),
-        entrix::model::Tier::Normal,
+        crate::model::Tier::Normal,
     )
 }
 
@@ -183,7 +183,7 @@ fn probe_test_coverage(repo_root: &Path, changed_files: &[String], base: &str) -
             "graph_test_coverage",
             false,
             "graph_test_coverage: skipped (no changed files)\nchanged_files: 0\ntest_files_in_radius: 0",
-            entrix::model::Tier::Normal,
+            crate::model::Tier::Normal,
         )
         .with_state(ResultState::Skipped);
     }
@@ -201,7 +201,7 @@ fn probe_test_coverage(repo_root: &Path, changed_files: &[String], base: &str) -
             radius.changed_files.len(),
             radius.test_files.len()
         ),
-        entrix::model::Tier::Normal,
+        crate::model::Tier::Normal,
     )
 }
 
@@ -218,7 +218,7 @@ fn probe_test_mapping(repo_root: &Path, changed_files: &[String], _base: &str) -
             "graph_test_mapping",
             false,
             "graph_test_mapping: skipped (no changed source files)\nchanged_source_files: 0\nmissing_mappings: 0\nunknown_mappings: 0",
-            entrix::model::Tier::Normal,
+            crate::model::Tier::Normal,
         )
         .with_state(ResultState::Skipped);
     }
@@ -265,7 +265,7 @@ fn probe_test_mapping(repo_root: &Path, changed_files: &[String], _base: &str) -
             mapping_source_preview(&report, "unknown"),
             resolver_breakdown(&report.resolver_counts),
         ),
-        entrix::model::Tier::Normal,
+        crate::model::Tier::Normal,
     )
 }
 

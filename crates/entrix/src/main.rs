@@ -1,5 +1,3 @@
-mod run_support;
-
 use clap::{Args, Parser, Subcommand};
 use entrix::evidence::{load_dimensions, validate_weights};
 use entrix::file_budgets::{evaluate_paths, is_tracked_source_file, load_config, resolve_paths};
@@ -18,11 +16,12 @@ use entrix::review_context::{
 use entrix::review_trigger::{
     collect_changed_files, collect_diff_stats, evaluate_review_triggers, load_review_triggers,
 };
+use entrix::run_support::run_metric_batch;
 use entrix::runner::ShellRunner;
 use entrix::sarif::SarifRunner;
 use entrix::scoring::{score_dimension, score_report};
+use entrix::server;
 use entrix::test_mapping;
-use run_support::run_metric_batch;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
@@ -1152,8 +1151,25 @@ fn cmd_install(args: InstallArgs) -> i32 {
 }
 
 fn cmd_serve() -> i32 {
-    eprintln!("Rust entrix MCP server is not implemented yet. Use the Python entrix `serve` command for now.");
-    1
+    let repo_root = find_project_root();
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            eprintln!("failed to start tokio runtime: {error}");
+            return 1;
+        }
+    };
+
+    match runtime.block_on(server::serve_stdio(&repo_root)) {
+        Ok(()) => 0,
+        Err(error) => {
+            eprintln!("failed to run entrix MCP server: {error}");
+            1
+        }
+    }
 }
 
 fn cmd_analyze_long_file(args: AnalyzeLongFileArgs) -> i32 {
