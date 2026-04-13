@@ -15,15 +15,18 @@ import { runWithSpan } from "../telemetry/tracing";
 let schedulerTask: ScheduledTask | null = null;
 let isStarted = false;
 
+function stripTrailingSlash(value: string): string {
+  return value.replace(/\/$/, "");
+}
+
 export function resolveSchedulerTickUrl(): string {
-  const configuredOrigin =
-    process.env.ROUTA_INTERNAL_API_ORIGIN
+  const configuredOrigin = process.env.ROUTA_INTERNAL_API_ORIGIN
     ?? process.env.ROUTA_BASE_URL
     ?? process.env.NEXT_PUBLIC_APP_URL
     ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
 
   if (configuredOrigin) {
-    return `${configuredOrigin.replace(/\/$/, "")}/api/schedules/tick`;
+    return `${stripTrailingSlash(configuredOrigin)}/api/schedules/tick`;
   }
 
   const port = process.env.PORT ?? "3000";
