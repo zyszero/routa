@@ -273,32 +273,40 @@ fn render_fitness_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
                 ),
             ]));
         }
-        let trend = cache.fitness_trend();
-        if trend.len() >= 2 && !compact_height {
-            let latest = trend.last().copied().unwrap_or(0.0);
-            let prev = trend
-                .get(trend.len().saturating_sub(2))
-                .copied()
-                .unwrap_or(0.0);
-            let delta = latest - prev;
-            let delta_text = if delta >= 0.0 {
-                format!("+{delta:.1}")
-            } else {
-                format!("{delta:.1}")
-            };
-            let delta_color = if delta >= 0.0 { ACTIVE } else { STOPPED };
-            lines.push(Line::from(vec![
-                Span::styled("Trend:", Style::default().fg(colors.text)),
-                Span::raw(" "),
-                render_score_sparkline(trend),
-                Span::raw(" "),
-                Span::styled(format!("({delta_text})"), Style::default().fg(delta_color)),
-                Span::raw(" "),
-                Span::styled(
-                    format!("n={}", trend.len()),
+        if !compact_height && !snapshot.failing_metrics.is_empty() {
+            lines.push(Line::from(vec![Span::styled(
+                "Failures:",
+                Style::default()
+                    .fg(colors.text)
+                    .add_modifier(Modifier::BOLD),
+            )]));
+            let failing_limit = if medium_height { 2 } else { 3 };
+            for metric in snapshot.failing_metrics.iter().take(failing_limit) {
+                let mut row = vec![
+                    Span::styled(
+                        format!("[{}]", metric.state),
+                        Style::default().fg(metric_color(metric)),
+                    ),
+                    Span::raw(" "),
+                    Span::styled(metric.name.clone(), Style::default().fg(colors.text)),
+                ];
+                if metric.hard_gate {
+                    row.push(Span::raw(" "));
+                    row.push(Span::styled("hard-gate", Style::default().fg(STOPPED)));
+                }
+                row.push(Span::raw(" "));
+                row.push(Span::styled(
+                    format!("{:.1}ms", metric.duration_ms),
                     Style::default().fg(colors.muted),
-                ),
-            ]));
+                ));
+                lines.push(Line::from(row));
+                if let Some(excerpt) = &metric.output_excerpt {
+                    lines.push(Line::from(vec![
+                        Span::styled("  > ", Style::default().fg(colors.muted)),
+                        Span::styled(excerpt.clone(), Style::default().fg(colors.muted)),
+                    ]));
+                }
+            }
         }
 
         lines.push(Line::from(vec![Span::styled(
@@ -371,40 +379,32 @@ fn render_fitness_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
         }
 
         if !compact_height {
-            if !snapshot.failing_metrics.is_empty() {
-                lines.push(Line::from(vec![Span::styled(
-                    "Blocking diagnostics:",
-                    Style::default()
-                        .fg(colors.text)
-                        .add_modifier(Modifier::BOLD),
-                )]));
-                let failing_limit = if medium_height { 2 } else { 3 };
-                for metric in snapshot.failing_metrics.iter().take(failing_limit) {
-                    let mut row = vec![
-                        Span::styled(
-                            format!("[{}]", metric.state),
-                            Style::default().fg(metric_color(metric)),
-                        ),
-                        Span::raw(" "),
-                        Span::styled(metric.name.clone(), Style::default().fg(colors.text)),
-                    ];
-                    if metric.hard_gate {
-                        row.push(Span::raw(" "));
-                        row.push(Span::styled("hard-gate", Style::default().fg(STOPPED)));
-                    }
-                    row.push(Span::raw(" "));
-                    row.push(Span::styled(
-                        format!("{:.1}ms", metric.duration_ms),
+            let trend = cache.fitness_trend();
+            if !snapshot.hard_gate_blocked && !snapshot.score_blocked && trend.len() >= 2 {
+                let latest = trend.last().copied().unwrap_or(0.0);
+                let prev = trend
+                    .get(trend.len().saturating_sub(2))
+                    .copied()
+                    .unwrap_or(0.0);
+                let delta = latest - prev;
+                let delta_text = if delta >= 0.0 {
+                    format!("+{delta:.1}")
+                } else {
+                    format!("{delta:.1}")
+                };
+                let delta_color = if delta >= 0.0 { ACTIVE } else { STOPPED };
+                lines.push(Line::from(vec![
+                    Span::styled("Trend:", Style::default().fg(colors.text)),
+                    Span::raw(" "),
+                    render_score_sparkline(trend),
+                    Span::raw(" "),
+                    Span::styled(format!("({delta_text})"), Style::default().fg(delta_color)),
+                    Span::raw(" "),
+                    Span::styled(
+                        format!("n={}", trend.len()),
                         Style::default().fg(colors.muted),
-                    ));
-                    lines.push(Line::from(row));
-                    if let Some(excerpt) = &metric.output_excerpt {
-                        lines.push(Line::from(vec![
-                            Span::styled("  > ", Style::default().fg(colors.muted)),
-                            Span::styled(excerpt.clone(), Style::default().fg(colors.muted)),
-                        ]));
-                    }
-                }
+                    ),
+                ]));
             }
             lines.push(Line::from(vec![
                 Span::styled("Slowest:", Style::default().fg(colors.text)),
@@ -585,7 +585,11 @@ fn metric_color(metric: &fitness::FitnessMetricSummary) -> Color {
 }
 
 fn dimension_failure_count(dimension: &fitness::FitnessDimensionSummary) -> usize {
-    dimension.metrics.iter().filter(|metric| !metric.passed).count()
+    dimension
+        .metrics
+        .iter()
+        .filter(|metric| !metric.passed)
+        .count()
 }
 
 fn truncate_short(value: &str, max_len: usize) -> String {

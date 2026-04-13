@@ -834,7 +834,9 @@ fn hard_gate_failure_blocks_selected_run() {
                         state: "fail".to_string(),
                         hard_gate: false,
                         duration_ms: 380.0,
-                        output_excerpt: Some("src/ui/render.rs exceeds file size budget".to_string()),
+                        output_excerpt: Some(
+                            "src/ui/render.rs exceeds file size budget".to_string(),
+                        ),
                     },
                     fitness::FitnessMetricSummary {
                         name: "ts_typecheck_pass".to_string(),
