@@ -588,7 +588,17 @@ fn render_runs_panel(
         .constraints([Constraint::Length(2), Constraint::Min(1)])
         .split(inner);
 
-    let active_runs = sessions.iter().filter(|s| s.status == "active").count();
+    let visible_runs = sessions
+        .iter()
+        .filter(|session| !session.is_all_runs_bucket)
+        .collect::<Vec<_>>();
+    let active_runs = visible_runs
+        .iter()
+        .filter(|session| {
+            let model = build_run_operator_model(state, cache, session);
+            semantic_run_status(session, &model) == "active"
+        })
+        .count();
     let summary_line = Line::from(vec![
         Span::styled(
             format!(" {} active", active_runs),
@@ -599,7 +609,7 @@ fn render_runs_panel(
             }),
         ),
         Span::styled(
-            format!("  {} total", sessions.len()),
+            format!("  {} total", visible_runs.len()),
             Style::default().fg(colors.text),
         ),
         Span::styled(

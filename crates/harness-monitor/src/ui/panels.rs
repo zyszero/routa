@@ -43,7 +43,7 @@ pub(super) fn render_details_panel(
     frame: &mut Frame,
     area: Rect,
     state: &RuntimeState,
-    cache: &AppCache,
+    cache: &mut AppCache,
 ) {
     let colors = palette(state.theme_mode);
     if state.focus == FocusPane::Runs {
@@ -534,7 +534,7 @@ pub(super) fn render_agent_stats_line(state: &RuntimeState, colors: UiPalette) -
 
 fn render_run_details(
     state: &RuntimeState,
-    cache: &AppCache,
+    cache: &mut AppCache,
     width: u16,
     colors: UiPalette,
 ) -> Vec<Line<'static>> {
@@ -594,13 +594,7 @@ fn render_run_details(
                 .fg(colors.text)
                 .add_modifier(Modifier::BOLD),
         )),
-        Line::from(vec![
-            Span::styled(run.client.clone(), Style::default().fg(colors.accent)),
-            Span::raw("  "),
-            Span::styled(model.role.as_str(), Style::default().fg(colors.text)),
-            Span::raw("  "),
-            Span::styled(origin_label, Style::default().fg(colors.accent)),
-        ]),
+        render_run_meta_line(run, &model, origin_label, width, colors),
     ];
 
     if let Some(task_title) = run
@@ -617,20 +611,17 @@ fn render_run_details(
         ]));
     }
 
-    if let Some(model_name) = &run.model {
+    let prompt_history = recent_prompt_history_for_run(state, cache, run, 3);
+    if !prompt_history.is_empty() {
         lines.push(Line::from(vec![
-            Span::styled("Model: ", Style::default().fg(colors.muted)),
+            Span::styled("Recent: ", Style::default().fg(colors.muted)),
             Span::styled(
-                shorten_path(model_name, width.saturating_sub(12) as usize),
+                shorten_path(
+                    &prompt_history.join("  |  "),
+                    width.saturating_sub(12) as usize,
+                ),
                 Style::default().fg(colors.text),
             ),
-        ]));
-    }
-
-    if run.recovered_from_transcript {
-        lines.push(Line::from(vec![
-            Span::styled("Prompt: ", Style::default().fg(colors.muted)),
-            Span::styled("recovered-from-transcript", Style::default().fg(INFERRED)),
         ]));
     }
 
@@ -717,6 +708,94 @@ fn render_run_details(
     }
 
     lines
+}
+
+fn render_run_meta_line(
+    run: &crate::ui::state::SessionListItem,
+    model: &RunOperatorModel,
+    origin_label: &str,
+    width: u16,
+    colors: UiPalette,
+) -> Line<'static> {
+    let mut spans = vec![
+        Span::styled(run.client.clone(), Style::default().fg(colors.accent)),
+        Span::raw("  "),
+        Span::styled(model.role.as_str(), Style::default().fg(colors.text)),
+        Span::raw("  "),
+        Span::styled(origin_label.to_string(), Style::default().fg(colors.accent)),
+    ];
+
+    if let Some(model_name) = &run.model {
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled(
+            shorten_path(model_name, width.saturating_sub(24) as usize),
+            Style::default().fg(colors.text),
+        ));
+    }
+
+    if run.recovered_from_transcript {
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled("transcript", Style::default().fg(INFERRED)));
+    }
+
+    Line::from(spans)
+}
+
+fn recent_prompt_history_for_run(
+    state: &RuntimeState,
+    cache: &mut AppCache,
+    run: &crate::ui::state::SessionListItem,
+    limit: usize,
+) -> Vec<String> {
+    if limit == 0 || run.is_all_runs_bucket || run.is_unknown_bucket || run.is_synthetic_agent_run {
+        return Vec::new();
+    }
+
+    let mut prompts = state
+        .sessions
+        .get(&run.session_id)
+        .and_then(|session| session.transcript_path.as_deref())
+        .map(|transcript_path| cache.transcript_prompt_history(transcript_path, limit + 1))
+        .unwrap_or_default();
+
+    if prompts.is_empty() {
+        let mut task_prompts = state
+            .tasks
+            .values()
+            .filter(|task| task.session_id == run.session_id)
+            .filter_map(|task| {
+                task.prompt_preview
+                    .clone()
+                    .or_else(|| Some(task.title.clone()))
+                    .filter(|prompt| !prompt.trim().is_empty())
+                    .map(|prompt| (task.updated_at_ms, prompt))
+            })
+            .collect::<Vec<_>>();
+        task_prompts.sort_by(|a, b| b.0.cmp(&a.0));
+        prompts = task_prompts
+            .into_iter()
+            .map(|(_, prompt)| prompt)
+            .collect::<Vec<_>>();
+    }
+
+    let current_prompt = normalize_prompt_preview(run.primary_label());
+    let mut deduped = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    for prompt in prompts {
+        let normalized = normalize_prompt_preview(&prompt);
+        if normalized.is_empty() || normalized == current_prompt || !seen.insert(normalized) {
+            continue;
+        }
+        deduped.push(prompt);
+        if deduped.len() >= limit {
+            break;
+        }
+    }
+    deduped
+}
+
+fn normalize_prompt_preview(prompt: &str) -> String {
+    prompt.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn render_process_scan_run_details(

@@ -642,8 +642,7 @@ fn run_details_surface_run_centric_operator_context() {
     let snapshot = render_snapshot(&state, &mut cache, 180, 40);
 
     assert!(snapshot.contains("Fix harness monitor task journey"));
-    assert!(snapshot.contains("fixer  hook"));
-    assert!(snapshot.contains("Model: gpt-5.4"));
+    assert!(snapshot.contains("codex  fixer  hook  gpt-5.4"));
     assert!(snapshot.contains("Last: PostToolUse"));
     assert!(snapshot.contains("Files: "));
     assert!(snapshot.contains("Commits: "));
@@ -810,6 +809,49 @@ fn semantic_run_status_prefers_recovered_and_attention_labels() {
         .expect("review bucket");
     let review_model = build_run_operator_model(&state, &cache, review);
     assert_eq!(semantic_run_status(review, &review_model), "attention");
+}
+
+#[test]
+fn run_details_surface_recent_transcript_prompts_and_compact_meta() {
+    let dir = tempdir().expect("tempdir");
+    let transcript = dir.path().join("session.jsonl");
+    std::fs::write(
+        &transcript,
+        concat!(
+            "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"turn-1\"}}\n",
+            "{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"message\":\"first prompt\"}}\n",
+            "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"turn-1\"}}\n",
+            "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"turn-2\"}}\n",
+            "{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"message\":\"second prompt\"}}\n",
+            "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"turn-2\"}}\n",
+            "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"turn-3\"}}\n",
+            "{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"message\":\"third prompt\"}}\n"
+        ),
+    )
+    .expect("write transcript");
+
+    let mut state = sample_state();
+    let session = state
+        .sessions
+        .get_mut("live-hook-check")
+        .expect("live session");
+    session.transcript_path = Some(transcript.to_string_lossy().to_string());
+    session.active_task_title = Some("third prompt".to_string());
+    session.last_prompt_preview = Some("third prompt".to_string());
+    session.active_task_recovered_from_transcript = true;
+    state.focus = FocusPane::Runs;
+    state.selected_run = state
+        .runs()
+        .iter()
+        .position(|run| run.session_id == "live-hook-check")
+        .unwrap_or(1);
+    state.refresh_views();
+
+    let mut cache = sample_cache(&state);
+    let snapshot = render_snapshot(&state, &mut cache, 180, 40);
+
+    assert!(snapshot.contains("codex  builder  hook  gpt-5.4  transcript"));
+    assert!(snapshot.contains("Recent: second prompt  |  first prompt"));
 }
 
 #[test]

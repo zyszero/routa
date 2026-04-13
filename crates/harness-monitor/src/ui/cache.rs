@@ -1,6 +1,7 @@
 use super::fitness;
 use super::review::{RepoReviewHint, ReviewHint, ReviewTriggerCache};
 use super::*;
+use crate::observe::codex_transcript::recent_prompt_previews_from_transcript;
 use crate::ui::state::FitnessViewMode;
 use ratatui::text::Text;
 use serde::{Deserialize, Serialize};
@@ -132,6 +133,7 @@ pub(super) struct AppCache {
     pub(super) preview_cache: BTreeMap<String, DetailCacheEntry>,
     pub(super) diff_cache: BTreeMap<String, DetailCacheEntry>,
     pub(super) facts_cache: BTreeMap<String, FileFactsEntry>,
+    prompt_history_cache: BTreeMap<String, Vec<String>>,
     highlighted_detail_cache: BTreeMap<String, Text<'static>>,
     pending_stats_signature: Option<String>,
     pending_preview_key: Option<String>,
@@ -196,6 +198,7 @@ impl AppCache {
             preview_cache: BTreeMap::new(),
             diff_cache: BTreeMap::new(),
             facts_cache: BTreeMap::new(),
+            prompt_history_cache: BTreeMap::new(),
             highlighted_detail_cache: BTreeMap::new(),
             pending_stats_signature: None,
             pending_preview_key: None,
@@ -689,6 +692,34 @@ impl AppCache {
 
     pub(super) fn review_hint(&self, file: &crate::shared::models::FileView) -> Option<ReviewHint> {
         self.review_triggers.review_hint(file)
+    }
+
+    pub(super) fn transcript_prompt_history(
+        &mut self,
+        transcript_path: &str,
+        limit: usize,
+    ) -> Vec<String> {
+        if limit == 0 {
+            return Vec::new();
+        }
+
+        let modified_ms = std::fs::metadata(transcript_path)
+            .ok()
+            .and_then(|meta| meta.modified().ok())
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|dur| dur.as_millis() as i64)
+            .unwrap_or_default();
+        let cache_key = format!("{transcript_path}:{modified_ms}:{limit}");
+
+        if !self.prompt_history_cache.contains_key(&cache_key) {
+            let prompts = recent_prompt_previews_from_transcript(transcript_path, limit);
+            self.prompt_history_cache.insert(cache_key.clone(), prompts);
+        }
+
+        self.prompt_history_cache
+            .get(&cache_key)
+            .cloned()
+            .unwrap_or_default()
     }
 
     pub(super) fn test_mapping(
