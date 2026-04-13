@@ -1204,7 +1204,7 @@ mod tests {
     fn git_dirty_paths_reads_real_worktree_status() {
         let temp = tempfile::tempdir().unwrap();
         std::process::Command::new("git")
-            .arg("init")
+            .args(["init", "--no-bare"])
             .arg(temp.path())
             .output()
             .expect("init git repo");

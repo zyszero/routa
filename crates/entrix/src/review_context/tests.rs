@@ -1160,7 +1160,7 @@ fn parity_with_python_entrix_for_history_core_fields() {
     let root = temp.path();
 
     Command::new("git")
-        .args(["init"])
+        .args(["init", "--no-bare"])
         .current_dir(root)
         .status()
         .unwrap();

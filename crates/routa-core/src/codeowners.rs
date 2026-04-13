@@ -756,7 +756,7 @@ mod tests {
         std::fs::write(github_dir.join("CODEOWNERS"), "src/** @dev-team\n").unwrap();
 
         Command::new("git")
-            .args(["init"])
+            .args(["init", "--no-bare"])
             .current_dir(temp.path())
             .output()
             .unwrap();
@@ -830,7 +830,7 @@ mod tests {
         .unwrap();
 
         Command::new("git")
-            .args(["init"])
+            .args(["init", "--no-bare"])
             .current_dir(temp.path())
             .output()
             .unwrap();

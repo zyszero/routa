@@ -234,7 +234,7 @@ fn submodule_diff_preview_lists_nested_dirty_entries() {
     let dir = tempdir().expect("tempdir");
     let repo_root = dir.path();
     std::process::Command::new("git")
-        .arg("init")
+        .args(["init", "--no-bare"])
         .arg(repo_root)
         .output()
         .expect("init repo");
@@ -243,7 +243,7 @@ fn submodule_diff_preview_lists_nested_dirty_entries() {
     std::fs::create_dir_all(submodule_root.join("entrix").join("reporters"))
         .expect("create submodule dirs");
     std::process::Command::new("git")
-        .arg("init")
+        .args(["init", "--no-bare"])
         .arg(&submodule_root)
         .output()
         .expect("init submodule repo");
@@ -281,7 +281,7 @@ fn nested_submodule_file_diff_uses_submodule_repo() {
     let dir = tempdir().expect("tempdir");
     let repo_root = dir.path();
     std::process::Command::new("git")
-        .arg("init")
+        .args(["init", "--no-bare"])
         .arg(repo_root)
         .output()
         .expect("init repo");
@@ -289,7 +289,7 @@ fn nested_submodule_file_diff_uses_submodule_repo() {
     let submodule_root = repo_root.join("tools").join("entrix");
     std::fs::create_dir_all(submodule_root.join("entrix")).expect("create submodule dirs");
     std::process::Command::new("git")
-        .arg("init")
+        .args(["init", "--no-bare"])
         .arg(&submodule_root)
         .output()
         .expect("init submodule repo");

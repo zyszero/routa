@@ -370,7 +370,7 @@ mod tests {
     fn detects_git_submodules_from_index_mode() {
         let dir = tempdir().expect("tempdir");
         Command::new("git")
-            .arg("init")
+            .args(["init", "--no-bare"])
             .arg(dir.path())
             .output()
             .expect("init repo");
@@ -399,7 +399,7 @@ mod tests {
     fn expands_dirty_submodule_children() {
         let dir = tempdir().expect("tempdir");
         Command::new("git")
-            .arg("init")
+            .args(["init", "--no-bare"])
             .arg(dir.path())
             .output()
             .expect("init repo");
@@ -407,7 +407,7 @@ mod tests {
         std::fs::create_dir_all(submodule_root.join("entrix").join("reporters"))
             .expect("create nested dirs");
         Command::new("git")
-            .arg("init")
+            .args(["init", "--no-bare"])
             .arg(&submodule_root)
             .output()
             .expect("init submodule repo");

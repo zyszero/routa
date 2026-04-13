@@ -1296,7 +1296,7 @@ fn refresh_repo_snapshot_clears_committed_files_from_git_status() {
     let repo_root = dir.path().join("repo");
     std::fs::create_dir_all(&repo_root).expect("repo root");
     assert!(Command::new("git")
-        .arg("init")
+        .args(["init", "--no-bare"])
         .arg(&repo_root)
         .status()
         .expect("git init")

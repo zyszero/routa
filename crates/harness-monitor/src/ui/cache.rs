@@ -1603,7 +1603,7 @@ mod scc_tests {
     fn git_submodule_paths_reads_gitlinks() {
         let dir = tempdir().expect("tempdir");
         let init = Command::new("git")
-            .arg("init")
+            .args(["init", "--no-bare"])
             .arg(dir.path())
             .output()
             .expect("init repo");

@@ -23,7 +23,7 @@ impl GitRepoFixture {
         fs::create_dir_all(&repo_path).expect("repo dir should exist");
 
         let init = Command::new("git")
-            .args(["init", "-b", "main"])
+            .args(["init", "--no-bare", "-b", "main"])
             .current_dir(&repo_path)
             .output()
             .expect("git init should run");
