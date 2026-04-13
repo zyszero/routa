@@ -856,12 +856,11 @@ fn render_files(
             let review_hint = cache.review_hint(file);
             let test_mapping = cache.test_mapping(file);
             let changed_test_file = cache.is_changed_test_file(file);
-            let (file_name, parent_dir) = split_display_path(file);
-            let display_name = display_file_name(state, file, &file_name);
+            let display_path = display_file_path(state, file);
             let rows = match density {
                 FileRowDensity::SingleLine => vec![render_file_single_line(
                     selected,
-                    &display_name,
+                    &display_path,
                     file,
                     &diff_stat,
                     review_hint.as_ref(),
@@ -875,7 +874,7 @@ fn render_files(
                     if file.entry_kind.is_submodule() {
                         vec![render_file_single_line(
                             selected,
-                            &display_name,
+                            &display_path,
                             file,
                             &diff_stat,
                             review_hint.as_ref(),
@@ -890,8 +889,8 @@ fn render_files(
                             format!(
                                 "{} {}",
                                 if selected { ">" } else { " " },
-                                shorten_path(
-                                    &display_name,
+                                compact_rel_path(
+                                    &display_path,
                                     split[1].width.saturating_sub(6) as usize
                                 )
                             ),
@@ -900,12 +899,10 @@ fn render_files(
                         )]);
                         let secondary = render_file_meta_line(
                             file,
-                            &parent_dir,
                             &diff_stat,
                             review_hint.as_ref(),
                             test_mapping,
                             changed_test_file,
-                            split[1].width as usize,
                             colors,
                         );
                         vec![primary, secondary]
@@ -1090,21 +1087,13 @@ fn render_file_secondary_line(
 #[allow(clippy::too_many_arguments)]
 fn render_file_meta_line(
     file: &crate::shared::models::FileView,
-    parent_dir: &str,
     diff_stat: &DiffStatSummary,
     review_hint: Option<&crate::ui::tui::review::ReviewHint>,
     test_mapping: Option<&TestMappingEntry>,
     changed_test_file: bool,
-    area_width: usize,
     colors: UiPalette,
 ) -> Line<'static> {
-    let parent_width = area_width.saturating_sub(28).clamp(16, 30);
-    let mut spans = Vec::new();
-    spans.push(Span::styled(
-        format!("  {}", shorten_path(parent_dir, parent_width)),
-        Style::default().fg(colors.muted),
-    ));
-    spans.push(Span::styled("  ", Style::default().fg(colors.muted)));
+    let mut spans = vec![Span::raw("  ")];
     spans.extend(
         render_file_secondary_line(
             file,
@@ -1122,7 +1111,7 @@ fn render_file_meta_line(
 #[allow(clippy::too_many_arguments)]
 fn render_file_single_line(
     selected: bool,
-    file_name: &str,
+    display_path: &str,
     file: &crate::shared::models::FileView,
     diff_stat: &DiffStatSummary,
     review_hint: Option<&crate::ui::tui::review::ReviewHint>,
@@ -1132,32 +1121,15 @@ fn render_file_single_line(
     focused: bool,
     area_width: usize,
 ) -> Line<'static> {
-    let (_, parent_dir) = split_display_path(file);
-    let folder_label = compact_folder_label(&parent_dir);
-    let folder_width = if folder_label == "/" {
-        0
-    } else {
-        area_width.saturating_sub(40).clamp(8, 14)
-    };
-    let name_width = area_width.saturating_sub(25 + folder_width).clamp(20, 52);
+    let path_width = area_width.saturating_sub(25).clamp(20, 64);
     let mut spans = vec![Span::styled(
         format!(
             "{} {}",
             if selected { ">" } else { " " },
-            pad_right(&shorten_path(file_name, name_width), name_width + 1)
+            pad_right(&compact_rel_path(display_path, path_width), path_width + 1)
         ),
         row_style(selected, focused, colors).add_modifier(Modifier::BOLD),
     )];
-    if folder_width > 0 {
-        spans.push(Span::styled(
-            pad_right(
-                &format!("{}/", shorten_path(&folder_label, folder_width)),
-                folder_width + 2,
-            ),
-            Style::default().fg(colors.muted),
-        ));
-        spans.push(Span::raw(" "));
-    }
     spans.extend(
         render_file_secondary_line(
             file,
@@ -1270,29 +1242,18 @@ pub(super) fn split_display_path(file: &crate::shared::models::FileView) -> (Str
     (file_name, parent)
 }
 
-fn compact_folder_label(parent_dir: &str) -> String {
-    if parent_dir == "/" {
-        return "/".to_string();
+fn display_file_path(state: &RuntimeState, file: &crate::shared::models::FileView) -> String {
+    let mut rel_path = file.rel_path.clone();
+    if file.entry_kind.is_container() && !rel_path.ends_with('/') {
+        rel_path.push('/');
     }
-    Path::new(parent_dir)
-        .file_name()
-        .map(|name| name.to_string_lossy().to_string())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| parent_dir.to_string())
-}
-
-fn display_file_name(
-    state: &RuntimeState,
-    file: &crate::shared::models::FileView,
-    file_name: &str,
-) -> String {
     if file.entry_kind.is_submodule() {
-        return file_name.to_string();
+        return rel_path;
     }
     if nearest_submodule_parent_path(state, file).is_some() {
-        return format!("  {file_name}");
+        return format!("  {rel_path}");
     }
-    file_name.to_string()
+    rel_path
 }
 
 fn nearest_submodule_parent_path(
@@ -1407,6 +1368,59 @@ pub(super) fn shorten_path(path: &str, max_len: usize) -> String {
         .rev()
         .collect::<String>();
     format!("...{tail}")
+}
+
+pub(super) fn compact_rel_path(path: &str, max_len: usize) -> String {
+    if max_len == 0 {
+        return String::new();
+    }
+    if path.chars().count() <= max_len {
+        return path.to_string();
+    }
+
+    let normalized = path.trim_matches('/');
+    let segments = normalized
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    if segments.is_empty() {
+        return shorten_path(path, max_len);
+    }
+    if segments.len() == 1 {
+        return shorten_path(path, max_len);
+    }
+
+    let file_name = segments.last().copied().unwrap_or(path);
+    if file_name.chars().count() + 4 >= max_len {
+        return shorten_path(file_name, max_len);
+    }
+
+    let mut tail_segments = vec![file_name];
+    for segment in segments[..segments.len() - 1].iter().rev() {
+        let candidate = format!(".../{}", tail_segments.join("/"));
+        let with_segment = format!(".../{segment}/{}", tail_segments.join("/"));
+        if with_segment.chars().count() > max_len {
+            break;
+        }
+        tail_segments.insert(0, segment);
+        if candidate.chars().count() >= max_len {
+            break;
+        }
+    }
+
+    let omitted_middle = tail_segments.len() < segments.len();
+    let mut result = format!(".../{}", tail_segments.join("/"));
+    if let Some(first) = segments.first().copied() {
+        let candidate = if omitted_middle {
+            format!("{first}/.../{}", tail_segments.join("/"))
+        } else {
+            format!("{first}/{}", tail_segments.join("/"))
+        };
+        if candidate.chars().count() <= max_len {
+            result = candidate;
+        }
+    }
+    result
 }
 
 #[cfg(test)]

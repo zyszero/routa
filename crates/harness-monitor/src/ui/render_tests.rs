@@ -1,4 +1,6 @@
-use super::{render_diff_stat_spans, shorten_path, split_display_path, truncate_short};
+use super::{
+    compact_rel_path, render_diff_stat_spans, shorten_path, split_display_path, truncate_short,
+};
 use crate::shared::models::{AttributionConfidence, EntryKind, FileView};
 use crate::ui::tui::{display_status_code, DiffStatSummary};
 use std::collections::BTreeSet;
@@ -83,6 +85,14 @@ fn shorten_path_handles_multibyte_text_without_panicking() {
     let shortened = shorten_path(value, 20);
     assert!(shortened.starts_with("..."));
     assert!(shortened.chars().count() <= 20);
+}
+
+#[test]
+fn compact_rel_path_preserves_filename_and_tail_segments() {
+    let value = "apps/desktop/src-tauri/gen/frontend/.placeholder";
+
+    let shortened = compact_rel_path(value, 30);
+    assert_eq!(shortened, ".../gen/frontend/.placeholder");
 }
 
 #[test]
