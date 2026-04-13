@@ -46,7 +46,7 @@ entrix run --tier normal   # when behavior/shared modules/APIs/workflow orchestr
 
 - If a check fails, fix and re-run; do not skip.
 - Skip source-code validation only when changes are strictly non-code (`*.md`, `*.yml`, `*.yaml`, `.github/`, `docs/`, etc.).
-- Build if needed: `cargo build -p routa-entrix`.
+- Build if needed: `cargo build -p entrix`.
 
 ## Git Discipline
 
@@ -105,7 +105,7 @@ Co-authored-by: gemini-cli (...) <218195315+gemini-cli@users.noreply.github.com>
 - `docs/references/`: Distilled external references for frequent dependencies.
 - `docs/release-guide.md`: Full release guide for CLI/Desktop/distribution.
 - `docs/RELEASE_CHECKLIST.md`: Quick release checklist.
-- `crates/routa-entrix/`: Entrix runtime and CLI implementation.
+- `crates/entrix/`: Entrix runtime and CLI implementation.
 
 ## Reading Order
 

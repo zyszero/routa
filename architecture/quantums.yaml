@@ -19,4 +19,4 @@ quantums:
   - id: tools_fitness
     description: Rust fitness engine, loaders, policies, and CLI surface
     roots:
-      - crates/routa-entrix/**
+      - crates/entrix/**

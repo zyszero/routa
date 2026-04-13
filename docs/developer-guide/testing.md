@@ -23,7 +23,7 @@ orchestration changed.
 ## Install
 
 ```bash
-cargo build -p routa-entrix
+cargo build -p entrix
 ```
 
 ## What The Tiers Mean
