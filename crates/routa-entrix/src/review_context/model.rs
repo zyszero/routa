@@ -1,5 +1,4 @@
 use serde::Serialize;
-
 #[derive(Debug, Clone)]
 pub struct ParsedReviewGraph {
     pub changed_nodes: Vec<ChangedNode>,

@@ -109,7 +109,7 @@ fn parse_method(relative_path: &str, source: &[u8], node: Node<'_>) -> Option<Ch
     let receiver_name = node
         .child_by_field_name("receiver")
         .and_then(|receiver| receiver.utf8_text(source).ok())
-        .map(|text| simplify_receiver(text))
+        .map(simplify_receiver)
         .filter(|name| !name.is_empty());
     let is_test = name.starts_with("Test");
     let qualified_name = if let Some(receiver_name) = receiver_name.as_deref() {

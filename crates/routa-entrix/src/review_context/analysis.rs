@@ -291,7 +291,9 @@ pub fn query_current_graph(
     let query = if matches!(pattern, "imports_of" | "importers_of") {
         query_file_imports(repo_root, target, pattern == "importers_of")
     } else {
-        let graph = if target.contains(':') {
+        let graph = if matches!(pattern, "callers_of" | "callees_of") || !target.contains(':') {
+            parse_repo_graph(repo_root)
+        } else if target.contains(':') {
             let file_path = target.split(':').next().unwrap_or(target).to_string();
             parse_changed_files(repo_root, &[file_path])
         } else {

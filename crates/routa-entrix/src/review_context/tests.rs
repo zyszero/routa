@@ -891,6 +891,74 @@ fn parity_with_python_entrix_for_test_radius_core_fields() {
     );
 }
 
+#[test]
+fn query_current_graph_limits_call_edges_to_imported_symbols() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(
+        root.join("src/dep.ts"),
+        "export function run() { return 1; }\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/other.ts"),
+        "export function run() { return 2; }\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/consumer.ts"),
+        "import { run } from './dep';\nexport function consume() { return run(); }\n",
+    )
+    .unwrap();
+
+    let result = query_current_graph(
+        root,
+        "src/consumer.ts:consume",
+        "callees_of",
+        ReviewBuildMode::Auto,
+    );
+
+    assert_eq!(result.status, "ok");
+    assert_eq!(result.results.len(), 1);
+    assert!(matches!(
+        &result.results[0],
+        GraphNodePayload::Symbol(node) if node.qualified_name == "src/dep.ts:run"
+    ));
+}
+
+#[test]
+fn query_current_graph_avoids_ambiguous_global_call_matches() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(
+        root.join("src/first.ts"),
+        "export function helper() { return 1; }\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/second.ts"),
+        "export function helper() { return 2; }\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/consumer.ts"),
+        "export function consume() { return helper(); }\n",
+    )
+    .unwrap();
+
+    let result = query_current_graph(
+        root,
+        "src/consumer.ts:consume",
+        "callees_of",
+        ReviewBuildMode::Auto,
+    );
+
+    assert_eq!(result.status, "ok");
+    assert!(result.results.is_empty());
+}
+
 fn python_entrix_adapter_json(repo_root: &Path, action: &str, args: &[&str]) -> Option<Value> {
     python_entrix_json("adapter", repo_root, action, args)
 }

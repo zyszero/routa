@@ -17,6 +17,7 @@ pub fn parse_changed_files(repo_root: &Path, changed_files: &[String]) -> Parsed
     let mut changed_nodes = Vec::new();
     let mut related_test_nodes = Vec::new();
     let mut impacted_nodes = Vec::new();
+    let mut file_imports = BTreeMap::new();
     let mut files_updated = 0usize;
     let mut languages = BTreeSet::new();
     let mut related_test_files = BTreeSet::new();
@@ -54,6 +55,8 @@ pub fn parse_changed_files(repo_root: &Path, changed_files: &[String]) -> Parsed
         let Some(tree) = parser.parse(&source, None) else {
             continue;
         };
+        let imports = (language.parse_imports)(repo_root, relative_path, &source, tree.root_node());
+        file_imports.insert(relative_path.clone(), imports);
 
         let mut file_nodes = (language.parse_nodes)(relative_path, &source, tree.root_node());
         changed_nodes.append(&mut file_nodes);
@@ -79,6 +82,13 @@ pub fn parse_changed_files(repo_root: &Path, changed_files: &[String]) -> Parsed
                 let Some(test_tree) = parser.parse(&test_source, None) else {
                     continue;
                 };
+                let imports = (test_language.parse_imports)(
+                    repo_root,
+                    &candidate,
+                    &test_source,
+                    test_tree.root_node(),
+                );
+                file_imports.insert(candidate.clone(), imports);
                 let mut test_nodes =
                     (test_language.parse_nodes)(&candidate, &test_source, test_tree.root_node());
                 impacted_nodes.extend(test_nodes.iter().cloned());
@@ -88,7 +98,12 @@ pub fn parse_changed_files(repo_root: &Path, changed_files: &[String]) -> Parsed
     }
 
     let target_tests = derive_target_tests(&changed_nodes, &related_test_nodes);
-    let graph_edges = derive_graph_edges(&changed_nodes, &related_test_nodes, &target_tests);
+    let graph_edges = derive_graph_edges(
+        &changed_nodes,
+        &related_test_nodes,
+        &file_imports,
+        &target_tests,
+    );
     let total_edges = graph_edges.len();
 
     ParsedReviewGraph {
@@ -194,6 +209,7 @@ fn derive_target_tests(
 fn derive_graph_edges(
     changed_nodes: &[ChangedNode],
     related_test_nodes: &[ChangedNode],
+    file_imports: &BTreeMap<String, Vec<String>>,
     target_tests: &[(String, String)],
 ) -> Vec<GraphEdge> {
     let mut edges = Vec::new();
@@ -273,15 +289,12 @@ fn derive_graph_edges(
                     },
                 );
             }
-            let matches = source
-                .mentions
-                .iter()
-                .any(|mention| mention == &target.name)
-                || source
-                    .references
-                    .iter()
-                    .any(|reference| reference == &target.name);
-            if matches {
+        }
+    }
+
+    for source in &symbol_nodes {
+        for reference in source.references.iter().chain(source.mentions.iter()) {
+            for target in resolve_call_targets(&symbol_nodes, file_imports, source, reference) {
                 let kind = if !source.is_test && !target.is_test {
                     "CALLS"
                 } else {
@@ -304,6 +317,76 @@ fn derive_graph_edges(
     }
 
     edges
+}
+
+fn resolve_call_targets<'a>(
+    symbol_nodes: &'a [&ChangedNode],
+    file_imports: &BTreeMap<String, Vec<String>>,
+    source: &ChangedNode,
+    reference: &str,
+) -> Vec<&'a ChangedNode> {
+    let mut candidates = BTreeMap::<String, &ChangedNode>::new();
+
+    for candidate in symbol_nodes.iter().copied() {
+        if candidate.qualified_name == source.qualified_name || candidate.is_test {
+            continue;
+        }
+        if candidate.file_path == source.file_path && candidate.name == reference {
+            candidates.insert(candidate.qualified_name.clone(), candidate);
+        }
+    }
+
+    for imported in file_imports
+        .get(&source.file_path)
+        .into_iter()
+        .flat_map(|imports| imports.iter())
+    {
+        for candidate in symbol_nodes.iter().copied() {
+            if candidate.is_test {
+                continue;
+            }
+            if &candidate.file_path == imported && candidate.name == reference {
+                candidates.insert(candidate.qualified_name.clone(), candidate);
+            }
+        }
+    }
+
+    if !candidates.is_empty() {
+        return candidates.into_values().collect();
+    }
+
+    let global_candidates = symbol_nodes
+        .iter()
+        .copied()
+        .filter(|candidate| {
+            !candidate.is_test
+                && candidate.name == reference
+                && candidate.qualified_name != source.qualified_name
+        })
+        .collect::<Vec<_>>();
+    if global_candidates.len() == 1 && !is_generic_symbol_name(reference) {
+        return global_candidates;
+    }
+    Vec::new()
+}
+
+fn is_generic_symbol_name(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "new"
+            | "default"
+            | "get"
+            | "set"
+            | "save"
+            | "load"
+            | "run"
+            | "main"
+            | "from"
+            | "into"
+            | "clone"
+            | "update"
+            | "create"
+    )
 }
 
 fn push_edge(
