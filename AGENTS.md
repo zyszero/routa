@@ -23,6 +23,10 @@ The project is intentionally not "two separate products". Web and desktop differ
 
 - General coding style guidance lives in `docs/coding-style.md`; keep this file focused on routing and repo-level guardrails.
 - Source of truth for executable gates is `docs/fitness/` + `entrix`; do not restate tool-level checks here.
+- Frontend and desktop API calls in `src/app` and `src/client` should use `resolveApiPath` + `desktopAwareFetch` for统一的后端路径组装：
+  - `resolveApiPath`（`src/client/config/backend.ts`）：统一补全 `/api` 前缀并在需要时拼接后端 base URL。
+  - `desktopAwareFetch`（`src/client/utils/diagnostics.ts`）：在 Tauri 桌面静态运行时自动落到 `http://127.0.0.1:3210` 或配置的后端地址。
+  - 避免在前端/桌面再次直接写 `fetch('/api/...')`。
 - For long behavior-heavy files, prefer **orchestration shell + domain hooks** over UI-only slicing.
 - Apply the same pattern to oversized API routes: thin top-level route, extract workflow branches (session creation, streaming, provider dispatch, etc.).
 - Split route refactors by workflow branch before shared helpers; avoid premature generic `utils`.
