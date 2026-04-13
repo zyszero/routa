@@ -1,10 +1,12 @@
 use super::model::{
-    GraphEdge, GraphQueryReport, ImpactAnalysisReport, ImpactOptions, ParsedReviewGraph,
-    QueryFailure, ReviewBuildInfo, ReviewBuildMode, ReviewTarget, SymbolGraphNode,
-    TestRadiusOptions, TestRadiusReport, UntestedTarget,
+    CommitHistoryEntry, GraphBuildReport, GraphEdge, GraphHistoryReport, GraphQueryReport,
+    GraphStatsReport, ImpactAnalysisReport, ImpactOptions, ParsedReviewGraph, QueryFailure,
+    ReviewBuildInfo, ReviewBuildMode, ReviewTarget, SymbolGraphNode, TestRadiusOptions,
+    TestRadiusReport, UntestedTarget,
 };
-use super::tree_sitter::{node_to_payload, parse_changed_files, query_graph, QueryResult};
+use super::tree_sitter::{node_to_payload, parse_changed_files, parse_repo_graph, query_graph, QueryResult};
 use std::collections::{BTreeMap, BTreeSet};
+use std::process::Command;
 use std::path::Path;
 
 pub fn analyze_impact(
@@ -42,6 +44,63 @@ pub fn analyze_impact(
 
     let graph = parse_changed_files(repo_root, changed_files);
     build_impact_report(changed_files, options, &graph)
+}
+
+pub fn build_graph(repo_root: &Path, build_mode: ReviewBuildMode) -> GraphBuildReport {
+    if build_mode == ReviewBuildMode::Skip {
+        return GraphBuildReport {
+            status: "skipped".to_string(),
+            backend: None,
+            build_type: None,
+            summary: "Graph build skipped.".to_string(),
+            files_updated: None,
+            changed_files: None,
+            stale_files: None,
+            total_nodes: None,
+            total_edges: None,
+            languages: None,
+        };
+    }
+
+    let graph = parse_repo_graph(repo_root);
+    GraphBuildReport {
+        status: "ok".to_string(),
+        backend: Some("builtin-tree-sitter".to_string()),
+        build_type: Some(if build_mode == ReviewBuildMode::Full {
+            "full".to_string()
+        } else {
+            "auto".to_string()
+        }),
+        summary: format!(
+            "Full build: parsed {} file(s), {} nodes, {} edges.",
+            graph.files_updated,
+            graph.changed_nodes.len() + graph.impacted_nodes.len(),
+            graph.total_edges
+        ),
+        files_updated: Some(graph.files_updated),
+        changed_files: None,
+        stale_files: Some(Vec::new()),
+        total_nodes: Some(graph.changed_nodes.len() + graph.impacted_nodes.len()),
+        total_edges: Some(graph.total_edges),
+        languages: Some(graph.languages),
+    }
+}
+
+pub fn graph_stats(repo_root: &Path) -> GraphStatsReport {
+    let graph = parse_repo_graph(repo_root);
+    let files = graph
+        .changed_nodes
+        .iter()
+        .filter(|node| node.kind == "File")
+        .count();
+    GraphStatsReport {
+        status: "ok".to_string(),
+        nodes: graph.changed_nodes.len() + graph.impacted_nodes.len(),
+        edges: graph.total_edges,
+        files,
+        languages: graph.languages,
+        backend: "builtin-tree-sitter".to_string(),
+    }
 }
 
 pub fn analyze_test_radius(
@@ -220,6 +279,60 @@ pub fn query_current_graph(
             results: Vec::new(),
             edges: Vec::new(),
         },
+    }
+}
+
+pub fn analyze_history(
+    repo_root: &Path,
+    count: usize,
+    git_ref: &str,
+    build_mode: ReviewBuildMode,
+    max_depth: usize,
+    max_targets: usize,
+) -> GraphHistoryReport {
+    let build = build_graph(repo_root, build_mode);
+    let commits = git_recent_commits(repo_root, count, git_ref)
+        .into_iter()
+        .map(|(commit, short_commit, subject)| {
+            let changed_files = git_commit_changed_files(repo_root, &commit);
+            let radius = analyze_test_radius(
+                repo_root,
+                &changed_files,
+                TestRadiusOptions {
+                    base: git_ref,
+                    build_mode: ReviewBuildMode::Skip,
+                    max_depth,
+                    max_targets,
+                    max_impacted_files: 200,
+                },
+            );
+            CommitHistoryEntry {
+                commit,
+                short_commit,
+                subject,
+                changed_file_count: changed_files.len(),
+                changed_files,
+                target_count: radius.target_nodes.len(),
+                test_file_count: radius.test_files.len(),
+                untested_target_count: radius.untested_targets.len(),
+                wide_blast_radius: radius.wide_blast_radius,
+                summary: radius.summary,
+                test_files: radius.test_files,
+                untested_targets: radius.untested_targets,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    GraphHistoryReport {
+        status: "ok".to_string(),
+        analysis_mode: "retrospective_current_graph".to_string(),
+        summary: format!(
+            "Estimated test radius for {} recent commit(s) using the current graph.",
+            commits.len()
+        ),
+        r#ref: git_ref.to_string(),
+        build,
+        commits,
     }
 }
 
@@ -404,4 +517,55 @@ fn is_test_file(path: &str) -> bool {
         || lowered.ends_with("_test.go")
         || lowered.contains(".test.")
         || lowered.contains(".spec.")
+}
+
+fn git_recent_commits(repo_root: &Path, count: usize, git_ref: &str) -> Vec<(String, String, String)> {
+    let output = Command::new("git")
+        .args([
+            "log",
+            "--format=%H%x09%h%x09%s",
+            &format!("-n{count}"),
+            git_ref,
+        ])
+        .current_dir(repo_root)
+        .output();
+    let Ok(output) = output else {
+        return Vec::new();
+    };
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            let mut parts = line.splitn(3, '\t');
+            Some((
+                parts.next()?.to_string(),
+                parts.next()?.to_string(),
+                parts.next()?.to_string(),
+            ))
+        })
+        .collect()
+}
+
+fn git_commit_changed_files(repo_root: &Path, commit: &str) -> Vec<String> {
+    let output = Command::new("git")
+        .args(["show", "--pretty=", "--name-only", "--diff-filter=ACMR", commit])
+        .current_dir(repo_root)
+        .output();
+    let Ok(output) = output else {
+        return Vec::new();
+    };
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .filter(|line| {
+            matches!(
+                std::path::Path::new(line)
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .unwrap_or_default(),
+                "rs" | "ts" | "tsx" | "js" | "jsx" | "java" | "go"
+            )
+        })
+        .map(ToString::to_string)
+        .collect()
 }

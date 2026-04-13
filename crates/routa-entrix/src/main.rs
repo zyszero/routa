@@ -3,8 +3,9 @@ use routa_entrix::file_budgets::{
     evaluate_paths, is_tracked_source_file, load_config, resolve_paths,
 };
 use routa_entrix::review_context::{
-    analyze_impact, analyze_test_radius, build_review_context, query_current_graph, ImpactOptions,
-    ReviewBuildMode, ReviewContextOptions, TestRadiusOptions,
+    analyze_history, analyze_impact, analyze_test_radius, build_graph, build_review_context,
+    graph_stats, query_current_graph, ImpactOptions, ReviewBuildMode, ReviewContextOptions,
+    TestRadiusOptions,
 };
 use routa_entrix::review_trigger::{
     collect_changed_files, collect_diff_stats, evaluate_review_triggers, load_review_triggers,
@@ -81,16 +82,32 @@ struct HookFileLengthArgs {
 
 #[derive(Subcommand, Debug)]
 enum GraphCommand {
+    #[command(name = "build")]
+    Build(GraphBuildArgs),
+    #[command(name = "stats")]
+    Stats,
     #[command(name = "impact")]
     Impact(GraphImpactArgs),
     #[command(name = "test-radius")]
     TestRadius(GraphTestRadiusArgs),
     #[command(name = "query")]
     Query(GraphQueryArgs),
+    #[command(name = "history")]
+    History(GraphHistoryArgs),
     #[command(name = "test-mapping")]
     TestMapping(GraphTestMappingArgs),
     #[command(name = "review-context")]
     ReviewContext(GraphReviewContextArgs),
+}
+
+#[derive(Args, Debug)]
+struct GraphBuildArgs {
+    #[arg(long, default_value = "HEAD")]
+    base: String,
+    #[arg(long, default_value = "auto")]
+    build_mode: String,
+    #[arg(long)]
+    json: bool,
 }
 
 #[derive(Args, Debug)]
@@ -131,6 +148,22 @@ struct GraphQueryArgs {
     target: String,
     #[arg(long, default_value = "HEAD")]
     base: String,
+    #[arg(long, default_value = "auto")]
+    build_mode: String,
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(Args, Debug)]
+struct GraphHistoryArgs {
+    #[arg(long, default_value_t = 10)]
+    count: usize,
+    #[arg(long = "ref", default_value = "HEAD")]
+    git_ref: String,
+    #[arg(long, default_value_t = 2)]
+    depth: usize,
+    #[arg(long, default_value_t = 25)]
+    max_targets: usize,
     #[arg(long, default_value = "auto")]
     build_mode: String,
     #[arg(long)]
@@ -189,9 +222,12 @@ fn main() {
             HookCommand::FileLength(args) => cmd_hook_file_length(args),
         },
         Command::Graph(args) => match args.command {
+            GraphCommand::Build(args) => cmd_graph_build(args),
+            GraphCommand::Stats => cmd_graph_stats(),
             GraphCommand::Impact(args) => cmd_graph_impact(args),
             GraphCommand::TestRadius(args) => cmd_graph_test_radius(args),
             GraphCommand::Query(args) => cmd_graph_query(args),
+            GraphCommand::History(args) => cmd_graph_history(args),
             GraphCommand::TestMapping(args) => cmd_graph_test_mapping(args),
             GraphCommand::ReviewContext(args) => cmd_graph_review_context(args),
         },
@@ -324,6 +360,24 @@ fn cmd_graph_impact(args: GraphImpactArgs) -> i32 {
     0
 }
 
+fn cmd_graph_build(args: GraphBuildArgs) -> i32 {
+    let repo_root = find_project_root();
+    let result = build_graph(&repo_root, parse_build_mode(&args.build_mode));
+    if args.json {
+        print_json(&result);
+    } else {
+        println!("{}", result.summary);
+    }
+    0
+}
+
+fn cmd_graph_stats() -> i32 {
+    let repo_root = find_project_root();
+    let result = graph_stats(&repo_root);
+    print_json(&result);
+    0
+}
+
 fn cmd_graph_test_radius(args: GraphTestRadiusArgs) -> i32 {
     let repo_root = find_project_root();
     let files = if args.files.is_empty() {
@@ -360,6 +414,24 @@ fn cmd_graph_query(args: GraphQueryArgs) -> i32 {
         parse_build_mode(&args.build_mode),
     );
 
+    if args.json {
+        print_json(&result);
+    } else {
+        println!("{}", result.summary);
+    }
+    0
+}
+
+fn cmd_graph_history(args: GraphHistoryArgs) -> i32 {
+    let repo_root = find_project_root();
+    let result = analyze_history(
+        &repo_root,
+        args.count,
+        &args.git_ref,
+        parse_build_mode(&args.build_mode),
+        args.depth,
+        args.max_targets,
+    );
     if args.json {
         print_json(&result);
     } else {

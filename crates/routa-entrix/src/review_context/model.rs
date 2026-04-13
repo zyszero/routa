@@ -103,6 +103,56 @@ pub struct GraphQueryReport {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct GraphBuildReport {
+    pub status: String,
+    pub backend: Option<String>,
+    pub build_type: Option<String>,
+    pub summary: String,
+    pub files_updated: Option<usize>,
+    pub changed_files: Option<Vec<String>>,
+    pub stale_files: Option<Vec<String>>,
+    pub total_nodes: Option<usize>,
+    pub total_edges: Option<usize>,
+    pub languages: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct GraphStatsReport {
+    pub status: String,
+    pub nodes: usize,
+    pub edges: usize,
+    pub files: usize,
+    pub languages: Vec<String>,
+    pub backend: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CommitHistoryEntry {
+    pub commit: String,
+    pub short_commit: String,
+    pub subject: String,
+    pub changed_files: Vec<String>,
+    pub changed_file_count: usize,
+    pub target_count: usize,
+    pub test_file_count: usize,
+    pub untested_target_count: usize,
+    pub wide_blast_radius: bool,
+    pub summary: String,
+    pub test_files: Vec<String>,
+    pub untested_targets: Vec<UntestedTarget>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct GraphHistoryReport {
+    pub status: String,
+    pub analysis_mode: String,
+    pub summary: String,
+    pub r#ref: String,
+    pub build: GraphBuildReport,
+    pub commits: Vec<CommitHistoryEntry>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct ReviewContextPayload {
     pub changed_files: Vec<String>,
     pub impacted_files: Vec<String>,

@@ -102,6 +102,11 @@ pub fn parse_changed_files(repo_root: &Path, changed_files: &[String]) -> Parsed
     }
 }
 
+pub fn parse_repo_graph(repo_root: &Path) -> ParsedReviewGraph {
+    let files = collect_repo_files(repo_root);
+    parse_changed_files(repo_root, &files)
+}
+
 pub fn node_to_payload(node: &ChangedNode) -> GraphNodePayload {
     if node.kind == "File" {
         return GraphNodePayload::File(FileGraphNode {
@@ -629,6 +634,40 @@ fn file_name(path: &str) -> String {
         .and_then(|name| name.to_str())
         .unwrap_or(path)
         .to_string()
+}
+
+fn collect_repo_files(repo_root: &Path) -> Vec<String> {
+    let mut files = Vec::new();
+    collect_repo_files_inner(repo_root, repo_root, &mut files);
+    files.sort();
+    files
+}
+
+fn collect_repo_files_inner(root: &Path, dir: &Path, out: &mut Vec<String>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            let name = path.file_name().and_then(|value| value.to_str()).unwrap_or_default();
+            if matches!(
+                name,
+                ".git" | "target" | "node_modules" | ".next" | "dist" | "build"
+            ) {
+                continue;
+            }
+            collect_repo_files_inner(root, &path, out);
+            continue;
+        }
+        let Ok(relative) = path.strip_prefix(root) else {
+            continue;
+        };
+        let rel = relative.to_string_lossy().replace('\\', "/");
+        if language_config_for_path(&rel).is_some() {
+            out.push(rel);
+        }
+    }
 }
 
 struct LanguageConfig {
