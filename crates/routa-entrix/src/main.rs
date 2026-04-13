@@ -1,16 +1,16 @@
 use clap::{Args, Parser, Subcommand};
-use routa_entrix::file_budgets::{
+use entrix::file_budgets::{
     evaluate_paths, is_tracked_source_file, load_config, resolve_paths,
 };
-use routa_entrix::review_context::{
+use entrix::review_context::{
     analyze_file, analyze_history, analyze_impact, analyze_test_radius, build_graph,
     build_review_context, graph_stats, query_current_graph, ImpactOptions, ReviewBuildMode,
     ReviewContextOptions, TestRadiusOptions,
 };
-use routa_entrix::review_trigger::{
+use entrix::review_trigger::{
     collect_changed_files, collect_diff_stats, evaluate_review_triggers, load_review_triggers,
 };
-use routa_entrix::test_mapping;
+use entrix::test_mapping;
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
@@ -607,7 +607,7 @@ fn print_json<T: serde::Serialize>(value: &T) {
     }
 }
 
-fn print_review_trigger_report(report: &routa_entrix::review_trigger::ReviewTriggerReport) {
+fn print_review_trigger_report(report: &entrix::review_trigger::ReviewTriggerReport) {
     println!(
         "human review required: {}",
         if report.human_review_required {

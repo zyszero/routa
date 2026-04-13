@@ -92,7 +92,7 @@ export function resolveEntrixShellCommand(args: string[], cwd = process.cwd()): 
     "run",
     "-q",
     "-p",
-    "routa-entrix",
+    "entrix",
     "--",
     ...args.map(shellQuote),
   ].join(" ");
@@ -109,7 +109,7 @@ export function resolveEntrixExec(cwd = process.cwd()): { command: string; args:
   }
   return {
     command: "cargo",
-    args: ["run", "-q", "-p", "routa-entrix", "--"],
+    args: ["run", "-q", "-p", "entrix", "--"],
   };
 }
 

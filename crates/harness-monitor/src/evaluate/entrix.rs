@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Context, Result};
-use routa_entrix::evidence::load_dimensions;
-use routa_entrix::governance::{filter_dimensions, GovernancePolicy};
-use routa_entrix::model::{Dimension, ExecutionScope, Metric, MetricResult, Tier};
-use routa_entrix::runner::ShellRunner;
-use routa_entrix::scoring::{score_dimension, score_report};
+use entrix::evidence::load_dimensions;
+use entrix::governance::{filter_dimensions, GovernancePolicy};
+use entrix::model::{Dimension, ExecutionScope, Metric, MetricResult, Tier};
+use entrix::runner::ShellRunner;
+use entrix::scoring::{score_dimension, score_report};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;

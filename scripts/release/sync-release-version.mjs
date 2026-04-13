@@ -69,7 +69,7 @@ async function updateTomlVersion(relativePath, version, options = {}) {
 
   // Update workspace dependencies if specified
   if (options.updateWorkspaceDeps) {
-    const crateNames = ["routa-core", "routa-rpc", "routa-scanner", "routa-server", "routa-entrix"];
+    const crateNames = ["routa-core", "routa-rpc", "routa-scanner", "routa-server", "entrix"];
     for (const crateName of crateNames) {
       // Match: routa-core = { version = "0.2.9", path = "../routa-core" }
       const depPattern = new RegExp(

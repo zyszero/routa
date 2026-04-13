@@ -454,7 +454,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_run_timeout_kills_background_processes() {
-        let leak_path = format!("/tmp/routa-entrix-timeout-{}.txt", std::process::id());
+        let leak_path = format!("/tmp/entrix-timeout-{}.txt", std::process::id());
         let _ = std::fs::remove_file(&leak_path);
 
         let runner = ShellRunner::new(Path::new("/tmp")).with_timeout(1);

@@ -111,16 +111,16 @@ jobs:
         if: ${{ !inputs.dry_run && github.event.inputs.dry_run != 'true' && github.event.inputs.dry_run != true }}
         run: sleep 30
 
-      - name: Publish routa-entrix
+      - name: Publish entrix
         run: |
           cd crates/routa-entrix
           if [[ "$DRY_RUN" == "true" ]]; then
             cargo publish --dry-run
           else
-            cargo publish --no-verify || echo "routa-entrix may already be published"
+            cargo publish --no-verify || echo "entrix may already be published"
           fi
 
-      - name: Wait for crates.io index update after routa-entrix
+      - name: Wait for crates.io index update after entrix
         if: ${{ !inputs.dry_run && github.event.inputs.dry_run != 'true' && github.event.inputs.dry_run != true }}
         run: sleep 30
 
@@ -153,5 +153,6 @@ jobs:
           echo "Install via cargo:" >> "$GITHUB_STEP_SUMMARY"
           echo '```bash' >> "$GITHUB_STEP_SUMMARY"
           echo "cargo install routa-cli@$version" >> "$GITHUB_STEP_SUMMARY"
+          echo "cargo install entrix@$version" >> "$GITHUB_STEP_SUMMARY"
           echo "cargo install harness-monitor@$version" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"

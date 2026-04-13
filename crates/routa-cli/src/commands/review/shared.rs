@@ -408,7 +408,7 @@ fn entrix_command(repo_root: &Path) -> Command {
         Command::new(debug_binary)
     } else {
         let mut command = Command::new("cargo");
-        command.args(["run", "-q", "-p", "routa-entrix", "--"]);
+        command.args(["run", "-q", "-p", "entrix", "--"]);
         command
     }
 }
