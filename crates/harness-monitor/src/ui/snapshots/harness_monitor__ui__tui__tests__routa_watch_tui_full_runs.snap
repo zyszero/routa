@@ -1,6 +1,5 @@
 ---
 source: crates/harness-monitor/src/ui/tests.rs
-assertion_line: 625
 expression: "render_snapshot(&state, &mut cache, 180, 28)"
 ---
 routa.js  2 dirty  1 unassigned  lines: --  loc: --  fitness: fast  transport: socket
@@ -30,4 +29,4 @@ routa.js  2 dirty  1 unassigned  lines: --  loc: --  fitness: fast  transport: s
 │<ts>  HOOK   live-hook-check Edit Write                                                                                                                                       │
 │<ts>  GIT    post-commit main                                                                                                                                                 │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-Tab Runs/Files/Detail/Fitness  ↑↓ select  S run sort  v run filter  u unassigned  d preview/diff  Pg scroll  f follow:on  T theme  Esc clear  g refresh fitness  m fast/full  q quit
+Tab Runs/Files/Detail/Fitness  ↑↓ select  S run sort  v run filter  u unassigned  d preview/diff  Pg scroll  f follow:on  T theme  Esc clear  g refresh all  m fast/full  q quit

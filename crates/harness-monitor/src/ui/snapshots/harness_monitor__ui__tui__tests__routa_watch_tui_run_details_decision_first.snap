@@ -45,4 +45,4 @@ routa.js  2 dirty  1 unassigned  lines: --  loc: --  fitness: fast  transport: s
 │<ts>  HOOK   live-hook-check Edit Write                                                                                                                                       │
 │<ts>  GIT    post-commit main                                                                                                                                                 │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-Tab Runs/Files/Detail/Fitness  ↑↓ select  S run sort  v run filter  u unassigned  d preview/diff  Pg scroll  f follow:on  T theme  Esc clear  g refresh fitness  m fast/full  q quit
+Tab Runs/Files/Detail/Fitness  ↑↓ select  S run sort  v run filter  u unassigned  d preview/diff  Pg scroll  f follow:on  T theme  Esc clear  g refresh all  m fast/full  q quit

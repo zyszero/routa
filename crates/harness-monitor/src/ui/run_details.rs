@@ -417,7 +417,10 @@ fn render_run_meta_line(
         ));
     }
 
-    spans.insert(0, Span::styled("Context: ", Style::default().fg(colors.muted)));
+    spans.insert(
+        0,
+        Span::styled("Context: ", Style::default().fg(colors.muted)),
+    );
     Line::from(spans)
 }
 
@@ -445,7 +448,10 @@ fn render_run_decision_line(
     }
 
     spans.push(Span::raw("  "));
-    spans.push(Span::styled("Approval: ", Style::default().fg(colors.muted)));
+    spans.push(Span::styled(
+        "Approval: ",
+        Style::default().fg(colors.muted),
+    ));
     spans.push(Span::styled(
         model.approval_label.clone(),
         Style::default().fg(approval_label_color(&model.approval_label)),
@@ -474,7 +480,10 @@ fn eval_summary_color(summary: &str) -> Color {
 }
 
 fn evidence_summary_color(evidence: &[EvidenceRequirementStatus]) -> Color {
-    if evidence.iter().any(|item| item.requirement.required && !item.satisfied) {
+    if evidence
+        .iter()
+        .any(|item| item.requirement.required && !item.satisfied)
+    {
         INFERRED
     } else {
         ACTIVE

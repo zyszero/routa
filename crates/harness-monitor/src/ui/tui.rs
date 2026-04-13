@@ -61,6 +61,13 @@ struct RepoStatusSummary {
     ahead_count: Option<usize>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UiLoopAction {
+    Continue,
+    Quit,
+    RefreshAll,
+}
+
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct BranchResolution {
     branch: Option<String>,
@@ -137,16 +144,28 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
 
     loop {
         while event::poll(Duration::from_millis(0)).context("poll terminal events")? {
-            if handle_event(&mut state, &mut cache)? {
-                return Ok(());
+            match handle_event(&mut state, &mut cache)? {
+                UiLoopAction::Quit => return Ok(()),
+                UiLoopAction::RefreshAll => {
+                    refresh_repo_snapshot(&ctx, &mut state)?;
+                    if let Ok(agents) = crate::observe::detect::scan_agents(&state.repo_root) {
+                        state.set_detected_agents(agents);
+                    }
+                    let now = Instant::now();
+                    last_poll = now;
+                    last_repo_status_refresh = now;
+                    last_agent_refresh = now;
+                }
+                UiLoopAction::Continue => {}
             }
         }
 
         let mut force_scan = false;
         if last_poll.elapsed() >= Duration::from_millis(poll_interval_ms) {
-            let dirty = observe::scan_repo(&ctx)?;
-            state.sync_dirty_files(dirty);
-            last_poll = Instant::now();
+            refresh_repo_snapshot(&ctx, &mut state)?;
+            let now = Instant::now();
+            last_poll = now;
+            last_repo_status_refresh = now;
         }
 
         for message in feed.read_new()? {
@@ -186,10 +205,10 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
             state.prune_stale_sessions();
         }
         if force_scan {
-            let dirty = observe::scan_repo(&ctx)?;
-            state.sync_dirty_files(dirty);
-            apply_repo_status(&mut state, read_repo_status(&ctx).ok());
-            last_poll = Instant::now();
+            refresh_repo_snapshot(&ctx, &mut state)?;
+            let now = Instant::now();
+            last_poll = now;
+            last_repo_status_refresh = now;
         }
         state.prune_stale_sessions();
 
@@ -238,16 +257,27 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
         state.sync_focus_for_width(terminal.size()?.width);
         terminal.draw(|frame| render(frame, &state, &feed, &mut cache))?;
 
-        if event::poll(Duration::from_millis(100)).context("poll terminal events")?
-            && handle_event(&mut state, &mut cache)?
-        {
-            break;
+        if event::poll(Duration::from_millis(100)).context("poll terminal events")? {
+            match handle_event(&mut state, &mut cache)? {
+                UiLoopAction::Quit => break,
+                UiLoopAction::RefreshAll => {
+                    refresh_repo_snapshot(&ctx, &mut state)?;
+                    if let Ok(agents) = crate::observe::detect::scan_agents(&state.repo_root) {
+                        state.set_detected_agents(agents);
+                    }
+                    let now = Instant::now();
+                    last_poll = now;
+                    last_repo_status_refresh = now;
+                    last_agent_refresh = now;
+                }
+                UiLoopAction::Continue => {}
+            }
         }
     }
     Ok(())
 }
 
-fn handle_event(state: &mut RuntimeState, cache: &mut AppCache) -> Result<bool> {
+fn handle_event(state: &mut RuntimeState, cache: &mut AppCache) -> Result<UiLoopAction> {
     match event::read().context("read terminal event")? {
         Event::Key(key) => {
             let viewport_width = crossterm::terminal::size()
@@ -267,10 +297,10 @@ fn handle_event(state: &mut RuntimeState, cache: &mut AppCache) -> Result<bool> 
                     }
                     _ => {}
                 }
-                return Ok(false);
+                return Ok(UiLoopAction::Continue);
             }
             match key.code {
-                KeyCode::Char('q') => return Ok(true),
+                KeyCode::Char('q') => return Ok(UiLoopAction::Quit),
                 KeyCode::BackTab => state.cycle_focus_backward_for_width(viewport_width),
                 KeyCode::Tab => state.cycle_focus_for_width(viewport_width),
                 KeyCode::Char('j') | KeyCode::Down => state.move_selection_down(),
@@ -287,6 +317,7 @@ fn handle_event(state: &mut RuntimeState, cache: &mut AppCache) -> Result<bool> 
                         fitness_run_mode_for(state),
                     );
                     cache.request_scc_refresh(state.repo_root.clone(), true);
+                    return Ok(UiLoopAction::RefreshAll);
                 }
                 KeyCode::Char('m') | KeyCode::Char('M') => {
                     state.toggle_fitness_view_mode();
@@ -319,7 +350,7 @@ fn handle_event(state: &mut RuntimeState, cache: &mut AppCache) -> Result<bool> 
                 KeyCode::PageDown => state.page_down(),
                 KeyCode::PageUp => state.page_up(),
                 KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    return Ok(true);
+                    return Ok(UiLoopAction::Quit);
                 }
                 _ => {}
             }
@@ -327,7 +358,7 @@ fn handle_event(state: &mut RuntimeState, cache: &mut AppCache) -> Result<bool> 
         Event::Resize(width, _) => state.sync_focus_for_width(width),
         _ => {}
     }
-    Ok(false)
+    Ok(UiLoopAction::Continue)
 }
 
 fn fitness_run_mode_for(state: &RuntimeState) -> fitness::FitnessRunMode {
@@ -362,6 +393,14 @@ fn apply_repo_status(state: &mut RuntimeState, repo_status: Option<RepoStatusSum
     let repo_status = repo_status.unwrap_or_default();
     state.branch = repo_status.branch.unwrap_or_else(|| "-".to_string());
     state.set_ahead_count(repo_status.ahead_count);
+}
+
+fn refresh_repo_snapshot(ctx: &RepoContext, state: &mut RuntimeState) -> Result<()> {
+    let dirty = observe::scan_repo(ctx)?;
+    state.sync_dirty_files(dirty);
+    apply_repo_status(state, read_repo_status(ctx).ok());
+    state.set_worktree_count(current_worktree_count(ctx).ok());
+    Ok(())
 }
 
 fn read_repo_status(ctx: &RepoContext) -> Result<RepoStatusSummary> {
