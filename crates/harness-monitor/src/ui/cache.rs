@@ -3,7 +3,7 @@ use super::review::{RepoReviewHint, ReviewHint, ReviewTriggerCache};
 use super::*;
 use crate::observe::auggie_session::recent_prompt_previews_from_auggie_session;
 use crate::observe::codex_transcript::recent_prompt_previews_from_transcript;
-use crate::ui::state::FitnessViewMode;
+use crate::ui::state::{FitnessViewMode, FocusPane};
 use ratatui::text::Text;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -69,7 +69,7 @@ pub(super) struct FileFactsEntry {
     pub(super) line_count: usize,
     pub(super) byte_size: u64,
     pub(super) child_count: Option<usize>,
-    pub(super) git_change_count: usize,
+    pub(super) git_change_count: Option<usize>,
 }
 
 #[derive(Debug)]
@@ -91,6 +91,12 @@ enum MetadataCommand {
         files: Vec<(String, String, i64, crate::shared::models::EntryKind)>,
     },
     LoadFacts {
+        repo_root: String,
+        rel_path: String,
+        version: i64,
+        entry_kind: crate::shared::models::EntryKind,
+    },
+    LoadGitHistoryCount {
         repo_root: String,
         rel_path: String,
         version: i64,
@@ -123,6 +129,10 @@ enum BackgroundResult {
     Facts {
         entry: FileFactsEntry,
     },
+    GitHistoryCount {
+        key: String,
+        count: Option<usize>,
+    },
     Fitness {
         result: Box<Result<fitness::FitnessSnapshot, String>>,
     },
@@ -143,6 +153,7 @@ struct PendingPreviewCommands {
 struct PendingMetadataCommands {
     stats: Option<PendingStats>,
     facts: Option<PendingFacts>,
+    git_history: Option<PendingFacts>,
     fitness: Option<(String, String, fitness::FitnessRunMode)>,
     test_mapping: Option<(String, Vec<String>, String)>,
     scc: Option<String>,
@@ -166,6 +177,7 @@ pub(super) struct AppCache {
     pending_preview_request: Option<(String, FilePreviewScope)>,
     pending_diff_key: Option<String>,
     pending_facts_key: Option<String>,
+    pending_git_history_key: Option<String>,
     pending_fitness: bool,
     pending_test_mapping_key: Option<String>,
     test_mapping_not_before_ms: Option<i64>,
@@ -235,6 +247,7 @@ impl AppCache {
             pending_preview_request: None,
             pending_diff_key: None,
             pending_facts_key: None,
+            pending_git_history_key: None,
             pending_fitness: false,
             pending_test_mapping_key: None,
             test_mapping_not_before_ms: Some(
@@ -359,6 +372,14 @@ impl AppCache {
                     self.facts_cache.insert(entry.key.clone(), entry);
                     self.pending_facts_key = None;
                 }
+                BackgroundResult::GitHistoryCount { key, count } => {
+                    if let Some(entry) = self.facts_cache.get_mut(&key) {
+                        entry.git_change_count = count;
+                    }
+                    if self.pending_git_history_key.as_deref() == Some(key.as_str()) {
+                        self.pending_git_history_key = None;
+                    }
+                }
                 BackgroundResult::Fitness { result } => {
                     let result = *result;
                     self.fitness_is_running = false;
@@ -454,6 +475,7 @@ impl AppCache {
             self.pending_preview_request = None;
             self.pending_diff_key = None;
             self.pending_facts_key = None;
+            self.pending_git_history_key = None;
             return;
         };
         let active_key = detail_cache_key(
@@ -506,7 +528,25 @@ impl AppCache {
                 version: file.last_modified_at_ms,
                 entry_kind: file.entry_kind,
             });
-            self.pending_facts_key = Some(facts_key);
+            self.pending_facts_key = Some(facts_key.clone());
+        }
+
+        if state.focus == FocusPane::Detail
+            && self
+                .facts_cache
+                .get(&facts_key)
+                .is_some_and(|facts| facts.git_change_count.is_none())
+            && self.pending_git_history_key.as_deref() != Some(facts_key.as_str())
+        {
+            let _ = self
+                .metadata_worker_tx
+                .send(MetadataCommand::LoadGitHistoryCount {
+                    repo_root: state.repo_root.clone(),
+                    rel_path: file.rel_path.clone(),
+                    version: file.last_modified_at_ms,
+                    entry_kind: file.entry_kind,
+                });
+            self.pending_git_history_key = Some(facts_key);
         }
     }
 
@@ -1258,6 +1298,12 @@ fn metadata_worker(rx: Receiver<MetadataCommand>, tx: Sender<BackgroundResult>) 
                 entry: load_file_facts(&repo_root, &rel_path, version, entry_kind),
             });
         }
+        if let Some((repo_root, rel_path, version, entry_kind)) = pending.git_history.take() {
+            let _ = tx.send(BackgroundResult::GitHistoryCount {
+                key: facts_cache_key(&rel_path, version, entry_kind),
+                count: git_file_change_count(&repo_root, &rel_path),
+            });
+        }
         if let Some((repo_root, cache_key, mode)) = pending.fitness.take() {
             let result = fitness::run_fitness(&repo_root, mode).map_err(|error| error.to_string());
             let _ = cache_key;
@@ -1311,6 +1357,14 @@ fn queue_metadata_command(pending: &mut PendingMetadataCommands, command: Metada
             entry_kind,
         } => {
             pending.facts = Some((repo_root, rel_path, version, entry_kind));
+        }
+        MetadataCommand::LoadGitHistoryCount {
+            repo_root,
+            rel_path,
+            version,
+            entry_kind,
+        } => {
+            pending.git_history = Some((repo_root, rel_path, version, entry_kind));
         }
         MetadataCommand::RefreshFitness {
             repo_root,
@@ -1426,7 +1480,7 @@ fn load_file_facts(
         line_count,
         byte_size,
         child_count,
-        git_change_count: git_file_change_count(repo_root, rel_path).unwrap_or(0),
+        git_change_count: None,
     }
 }
 

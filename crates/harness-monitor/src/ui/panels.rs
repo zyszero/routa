@@ -107,7 +107,10 @@ pub(super) fn render_details_panel(
             lines.push(Line::from(vec![
                 Span::styled("Git changes: ", Style::default().fg(colors.muted)),
                 Span::styled(
-                    facts.git_change_count.to_string(),
+                    facts
+                        .git_change_count
+                        .map(|count| count.to_string())
+                        .unwrap_or_else(|| "...".to_string()),
                     Style::default().fg(colors.accent),
                 ),
             ]));

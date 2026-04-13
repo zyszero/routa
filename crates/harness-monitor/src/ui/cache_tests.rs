@@ -1,13 +1,13 @@
 use super::{
-    detail_cache_key, display_status_code, fitness, load_diff_text, load_file_preview, AppCache,
-    FilePreviewScope, FitnessHistoryEntry, FitnessHistoryRecord, FITNESS_HISTORY_FILE,
-    FITNESS_HISTORY_SCHEMA_VERSION,
+    detail_cache_key, display_status_code, facts_cache_key, fitness, load_diff_text,
+    load_file_preview, AppCache, FileFactsEntry, FilePreviewScope, FitnessHistoryEntry,
+    FitnessHistoryRecord, FITNESS_HISTORY_FILE, FITNESS_HISTORY_SCHEMA_VERSION,
 };
 use crate::observe as repo;
 use crate::shared::models::{
     AttributionConfidence, EntryKind, FileView, FitnessEvent, RuntimeMessage,
 };
-use crate::ui::state::{DetailMode, RuntimeState};
+use crate::ui::state::{DetailMode, FocusPane, RuntimeState};
 use std::collections::BTreeSet;
 use tempfile::tempdir;
 
@@ -447,6 +447,44 @@ fn warm_selected_detail_promotes_scrolled_file_preview_to_full() {
         cache.pending_preview_request,
         Some((detail_key, FilePreviewScope::Full))
     );
+}
+
+#[test]
+fn warm_selected_detail_does_not_request_git_history_outside_detail_focus() {
+    let mut state = sample_runtime_state_with_dirty_file();
+    state.focus = FocusPane::Files;
+    let mut cache = AppCache::new(&state.repo_root);
+
+    cache.warm_selected_detail(&state);
+
+    assert_eq!(
+        cache.pending_facts_key,
+        Some(facts_cache_key("src/lib.rs", 1, EntryKind::File))
+    );
+    assert_eq!(cache.pending_git_history_key, None);
+}
+
+#[test]
+fn warm_selected_detail_requests_git_history_once_detail_is_focused() {
+    let mut state = sample_runtime_state_with_dirty_file();
+    state.focus = FocusPane::Detail;
+    let mut cache = AppCache::new(&state.repo_root);
+    let facts_key = facts_cache_key("src/lib.rs", 1, EntryKind::File);
+    cache.facts_cache.insert(
+        facts_key.clone(),
+        FileFactsEntry {
+            key: facts_key.clone(),
+            entry_kind: EntryKind::File,
+            line_count: 12,
+            byte_size: 120,
+            child_count: None,
+            git_change_count: None,
+        },
+    );
+
+    cache.warm_selected_detail(&state);
+
+    assert_eq!(cache.pending_git_history_key, Some(facts_key));
 }
 
 #[test]
