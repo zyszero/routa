@@ -13,7 +13,13 @@ if [ -z "$changed_files" ]; then
 fi
 
 echo "📏 Checking file budgets for the latest commit..."
-if ! PYTHONPATH=tools/entrix python3 -m entrix hook file-length \
+if ! command -v entrix >/dev/null 2>&1; then
+  echo "⚠️  entrix command not found; skipping file budget check."
+  echo "    Install/build the Rust entrix CLI to restore this post-commit guard."
+  exit 0
+fi
+
+if ! entrix hook file-length \
   --config tools/entrix/file_budgets.pre_commit.json \
   --strict-limit \
   $changed_files; then
