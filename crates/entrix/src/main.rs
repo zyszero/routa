@@ -2,6 +2,7 @@ use clap::{Args, Parser, Subcommand};
 use entrix::evidence::{load_dimensions, validate_weights};
 use entrix::file_budgets::{evaluate_paths, is_tracked_source_file, load_config, resolve_paths};
 use entrix::governance::{enforce, filter_dimensions, GovernancePolicy};
+use entrix::long_file::{analyze_long_files, default_comment_review_commit_threshold};
 use entrix::model::{ExecutionScope, Tier};
 use entrix::reporting::{report_to_dict, write_report_output};
 use entrix::review_context::{
@@ -30,6 +31,7 @@ struct Cli {
 enum Command {
     Run(RunArgs),
     Validate(ValidateArgs),
+    Analyze(AnalyzeArgs),
     #[command(name = "review-trigger")]
     ReviewTrigger(ReviewTriggerArgs),
     Hook(HookArgs),
@@ -64,6 +66,38 @@ struct RunArgs {
 
 #[derive(Args, Debug)]
 struct ValidateArgs {
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(Args, Debug)]
+struct AnalyzeArgs {
+    #[command(subcommand)]
+    command: AnalyzeCommand,
+}
+
+#[derive(Subcommand, Debug)]
+enum AnalyzeCommand {
+    #[command(name = "long-file")]
+    LongFile(AnalyzeLongFileArgs),
+}
+
+#[derive(Args, Debug)]
+struct AnalyzeLongFileArgs {
+    #[arg()]
+    paths: Vec<String>,
+    #[arg(long)]
+    files: Vec<String>,
+    #[arg(long, default_value = "HEAD")]
+    base: String,
+    #[arg(long)]
+    config: Option<String>,
+    #[arg(long)]
+    strict_limit: bool,
+    #[arg(long, default_value_t = 60)]
+    min_lines: usize,
+    #[arg(long, default_value_t = default_comment_review_commit_threshold())]
+    comment_review_commit_threshold: usize,
     #[arg(long)]
     json: bool,
 }
@@ -267,6 +301,9 @@ fn main() {
     let exit_code = match cli.command {
         Command::Run(args) => cmd_run(args),
         Command::Validate(args) => cmd_validate(args),
+        Command::Analyze(args) => match args.command {
+            AnalyzeCommand::LongFile(args) => cmd_analyze_long_file(args),
+        },
         Command::ReviewTrigger(args) => cmd_review_trigger(args),
         Command::Hook(args) => match args.command {
             HookCommand::FileLength(args) => cmd_hook_file_length(args),
@@ -383,6 +420,51 @@ fn cmd_validate(args: ValidateArgs) -> i32 {
     }
 }
 
+fn cmd_analyze_long_file(args: AnalyzeLongFileArgs) -> i32 {
+    let repo_root = find_project_root();
+    let explicit_files = args
+        .files
+        .iter()
+        .chain(args.paths.iter())
+        .cloned()
+        .collect::<Vec<_>>();
+    let config_path = args.config.as_deref().map(Path::new);
+    let report = analyze_long_files(
+        &repo_root,
+        if explicit_files.is_empty() {
+            None
+        } else {
+            Some(explicit_files)
+        },
+        config_path,
+        &args.base,
+        !args.strict_limit,
+        args.comment_review_commit_threshold,
+    );
+
+    if report.status == "unavailable" {
+        eprintln!(
+            "{}",
+            report
+                .summary
+                .as_deref()
+                .unwrap_or("Long-file analysis unavailable")
+        );
+        return 1;
+    }
+
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).expect("serialize long-file analysis")
+        );
+    } else {
+        print_long_file_report(&report, args.min_lines);
+    }
+
+    0
+}
+
 fn print_report_text(report: &entrix::model::FitnessReport, verbose: bool) {
     let status = if report.hard_gate_blocked || report.score_blocked {
         "FAIL"
@@ -411,6 +493,46 @@ fn print_report_text(report: &entrix::model::FitnessReport, verbose: bool) {
                     result.duration_ms
                 );
             }
+        }
+    }
+}
+
+fn print_long_file_report(report: &entrix::long_file::LongFileAnalysisReport, min_lines: usize) {
+    if report.files.is_empty() {
+        println!("No oversized or explicit files matched for long-file analysis.");
+        return;
+    }
+
+    for file in &report.files {
+        if file.line_count < min_lines {
+            continue;
+        }
+        println!(
+            "{} [{}] {} lines (budget {}, commits {})",
+            file.file_path, file.language, file.line_count, file.budget_limit, file.commit_count
+        );
+        if !file.budget_reason.is_empty() {
+            println!("  budget reason: {}", file.budget_reason);
+        }
+        for class in &file.classes {
+            println!(
+                "  class {} [{}-{}] methods={}",
+                class.qualified_name, class.start_line, class.end_line, class.method_count
+            );
+        }
+        for function in &file.functions {
+            println!(
+                "  {} {} [{}-{}] comments={} commits={}",
+                function.kind,
+                function.qualified_name,
+                function.start_line,
+                function.end_line,
+                function.comment_count,
+                function.commit_count
+            );
+        }
+        for warning in &file.warnings {
+            println!("  warning {}: {}", warning.code, warning.summary);
         }
     }
 }

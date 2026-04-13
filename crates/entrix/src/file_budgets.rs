@@ -195,7 +195,7 @@ fn retain_override_paths(paths: &mut Vec<String>, config: &FileBudgetConfig) {
     paths.retain(|path| overrides.contains(path.as_str()));
 }
 
-fn resolve_budget(relative_path: &str, config: &FileBudgetConfig) -> (usize, String) {
+pub fn resolve_budget(relative_path: &str, config: &FileBudgetConfig) -> (usize, String) {
     if let Some(entry) = config
         .overrides
         .iter()
@@ -215,7 +215,7 @@ fn resolve_budget(relative_path: &str, config: &FileBudgetConfig) -> (usize, Str
     (config.default_max_lines, String::new())
 }
 
-fn count_lines(file_path: &Path) -> usize {
+pub fn count_lines(file_path: &Path) -> usize {
     match std::fs::read_to_string(file_path) {
         Ok(content) if !content.is_empty() => content.lines().count(),
         Ok(_) => 0,
@@ -223,7 +223,7 @@ fn count_lines(file_path: &Path) -> usize {
     }
 }
 
-fn count_head_lines(repo_root: &Path, relative_path: &str) -> Option<usize> {
+pub fn count_head_lines(repo_root: &Path, relative_path: &str) -> Option<usize> {
     let output = Command::new("git")
         .args(["show", &format!("HEAD:{relative_path}")])
         .current_dir(repo_root)
@@ -257,7 +257,7 @@ fn collect_all_files(repo_root: &Path, base: &Path, collected: &mut Vec<String>)
     }
 }
 
-fn normalize_repo_path(path: &Path, repo_root: &Path) -> String {
+pub fn normalize_repo_path(path: &Path, repo_root: &Path) -> String {
     path.strip_prefix(repo_root)
         .unwrap_or(path)
         .to_string_lossy()

@@ -20,6 +20,7 @@ use resolver::{
     resolve_relative_import as resolve_relative_import_impl,
     resolve_rust_import as resolve_rust_import_impl,
 };
+use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
@@ -287,6 +288,7 @@ pub fn analyze_single_file(repo_root: &Path, target: &str) -> Option<SingleFileA
     let mut parser = Parser::new();
     parser.set_language(&language.ts_language()).ok()?;
     let tree = parser.parse(&source, None)?;
+    let comments = collect_comments(&source, tree.root_node());
     let symbols = (language.parse_nodes)(&relative_path, &source, tree.root_node())
         .into_iter()
         .filter(|node| node.kind != "File")
@@ -298,10 +300,46 @@ pub fn analyze_single_file(repo_root: &Path, target: &str) -> Option<SingleFileA
         language: language.name.to_string(),
         is_test_file: (language.is_test_file)(&relative_path),
         imports,
-        comments: Vec::new(),
+        comments,
         symbols,
         source_basename: normalized_source_basename(&relative_path),
     })
+}
+
+fn collect_comments(source: &str, root: tree_sitter::Node<'_>) -> Vec<serde_json::Value> {
+    let mut comments = Vec::new();
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        if node.kind() == "comment" {
+            let start_line = node.start_position().row + 1;
+            let end_line = node.end_position().row + 1;
+            let text = node
+                .utf8_text(source.as_bytes())
+                .ok()
+                .unwrap_or_default()
+                .to_string();
+            comments.push(json!({
+                "startLine": start_line,
+                "endLine": end_line,
+                "lineCount": end_line.saturating_sub(start_line) + 1,
+                "text": text,
+            }));
+            continue;
+        }
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            stack.push(child);
+        }
+    }
+
+    comments.sort_by_key(|comment| {
+        comment
+            .get("startLine")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0)
+    });
+    comments
 }
 
 pub struct SingleFileAnalysis {

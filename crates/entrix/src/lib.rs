@@ -6,6 +6,7 @@
 pub mod evidence;
 pub mod file_budgets;
 pub mod governance;
+pub mod long_file;
 pub mod model;
 pub mod reporting;
 pub mod review_context;
