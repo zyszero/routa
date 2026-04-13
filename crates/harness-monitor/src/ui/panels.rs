@@ -594,8 +594,70 @@ fn render_run_details(
                 .fg(colors.text)
                 .add_modifier(Modifier::BOLD),
         )),
-        render_run_meta_line(state, run, &model, origin_label, width, colors),
+        render_run_decision_line(run, &model, colors),
     ];
+
+    if let Some(block_reason) = &model.block_reason {
+        lines.push(Line::from(vec![
+            Span::styled("Block: ", Style::default().fg(colors.muted)),
+            Span::styled(
+                shorten_path(block_reason, width.saturating_sub(12) as usize),
+                Style::default().fg(STOPPED),
+            ),
+        ]));
+    }
+
+    lines.push(Line::from(vec![
+        Span::styled("Next: ", Style::default().fg(colors.muted)),
+        Span::styled(
+            shorten_path(&model.next_action, width.saturating_sub(12) as usize),
+            Style::default().fg(colors.accent),
+        ),
+    ]));
+
+    if let Some(handoff) = &model.handoff_summary {
+        lines.push(Line::from(vec![
+            Span::styled("Handoff: ", Style::default().fg(colors.muted)),
+            Span::styled(
+                shorten_path(handoff, width.saturating_sub(14) as usize),
+                Style::default().fg(colors.text),
+            ),
+        ]));
+    }
+
+    if !model.evidence.is_empty() {
+        lines.push(Line::from(vec![
+            Span::styled("Evidence: ", Style::default().fg(colors.muted)),
+            Span::styled(
+                shorten_path(
+                    &evidence_inline_summary(&model.evidence),
+                    width.saturating_sub(15) as usize,
+                ),
+                Style::default().fg(evidence_summary_color(&model.evidence)),
+            ),
+        ]));
+    }
+
+    if model.policy_decision != crate::run::policy::PolicyDecisionKind::Allow
+        || model
+            .effect_classes
+            .iter()
+            .any(|effect| *effect != crate::run::policy::EffectClass::ReadOnly)
+    {
+        lines.push(Line::from(vec![
+            Span::styled("Policy: ", Style::default().fg(colors.muted)),
+            Span::styled(
+                model.policy_decision.as_str(),
+                Style::default().fg(policy_decision_color(&model.policy_decision)),
+            ),
+            Span::raw("  "),
+            Span::styled("Effects: ", Style::default().fg(colors.muted)),
+            Span::styled(
+                effect_classes_summary(&model.effect_classes),
+                Style::default().fg(colors.text),
+            ),
+        ]));
+    }
 
     if let Some(task_title) = run
         .task_title
@@ -611,6 +673,15 @@ fn render_run_details(
         ]));
     }
 
+    lines.push(render_run_meta_line(
+        state,
+        run,
+        &model,
+        origin_label,
+        width,
+        colors,
+    ));
+
     let prompt_history = recent_prompt_history_for_run(state, cache, run, 3);
     if !prompt_history.is_empty() {
         lines.push(Line::from(vec![
@@ -624,6 +695,19 @@ fn render_run_details(
             ),
         ]));
     }
+
+    lines.push(Line::from(vec![
+        Span::styled("Workspace: ", Style::default().fg(colors.muted)),
+        Span::styled(
+            model.workspace_state.as_str(),
+            Style::default().fg(workspace_state_color(&model.workspace_state)),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            shorten_path(&model.workspace_path, width.saturating_sub(24) as usize),
+            Style::default().fg(colors.text),
+        ),
+    ]));
 
     if let Some(event) = &run.last_event_name {
         let tool = run
@@ -707,6 +791,29 @@ fn render_run_details(
         }
     }
 
+    if let Some(integrity_warning) = &model.integrity_warning {
+        lines.push(Line::from(vec![
+            Span::styled("Integrity: ", Style::default().fg(colors.muted)),
+            Span::styled(
+                shorten_path(integrity_warning, width.saturating_sub(16) as usize),
+                Style::default().fg(INFERRED),
+            ),
+        ]));
+    }
+
+    if !model.recovery_hints.is_empty() {
+        lines.push(Line::from(vec![
+            Span::styled("Recovery: ", Style::default().fg(colors.muted)),
+            Span::styled(
+                shorten_path(
+                    &model.recovery_hints.join("  |  "),
+                    width.saturating_sub(15) as usize,
+                ),
+                Style::default().fg(INFERRED),
+            ),
+        ]));
+    }
+
     lines
 }
 
@@ -756,7 +863,87 @@ fn render_run_meta_line(
         ));
     }
 
+    spans.insert(0, Span::styled("Context: ", Style::default().fg(colors.muted)));
     Line::from(spans)
+}
+
+fn render_run_decision_line(
+    run: &crate::ui::state::SessionListItem,
+    model: &RunOperatorModel,
+    colors: UiPalette,
+) -> Line<'static> {
+    let semantic_status = semantic_run_status(run, model);
+    let mut spans = vec![
+        Span::styled("State: ", Style::default().fg(colors.muted)),
+        Span::styled(
+            display_run_status_label(semantic_status),
+            Style::default().fg(run_status_color(semantic_status)),
+        ),
+    ];
+
+    if let Some(eval_summary) = &model.eval_summary {
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled("Eval: ", Style::default().fg(colors.muted)));
+        spans.push(Span::styled(
+            eval_summary.clone(),
+            Style::default().fg(eval_summary_color(eval_summary)),
+        ));
+    }
+
+    spans.push(Span::raw("  "));
+    spans.push(Span::styled("Approval: ", Style::default().fg(colors.muted)));
+    spans.push(Span::styled(
+        model.approval_label.clone(),
+        Style::default().fg(approval_label_color(&model.approval_label)),
+    ));
+
+    Line::from(spans)
+}
+
+fn approval_label_color(label: &str) -> Color {
+    match label {
+        "not_required" => ACTIVE,
+        "waiting_on_evidence" => INFERRED,
+        "required" | "blocked" => STOPPED,
+        _ => IDLE,
+    }
+}
+
+fn eval_summary_color(summary: &str) -> Color {
+    if summary.contains("blocked") {
+        STOPPED
+    } else if summary.contains("pass") {
+        ACTIVE
+    } else {
+        IDLE
+    }
+}
+
+fn evidence_summary_color(evidence: &[EvidenceRequirementStatus]) -> Color {
+    if evidence.iter().any(|item| item.requirement.required && !item.satisfied) {
+        INFERRED
+    } else {
+        ACTIVE
+    }
+}
+
+fn policy_decision_color(decision: &crate::run::policy::PolicyDecisionKind) -> Color {
+    match decision {
+        crate::run::policy::PolicyDecisionKind::Allow => ACTIVE,
+        crate::run::policy::PolicyDecisionKind::AllowWithEvidence
+        | crate::run::policy::PolicyDecisionKind::DryRunOnly => INFERRED,
+        crate::run::policy::PolicyDecisionKind::RequireApproval
+        | crate::run::policy::PolicyDecisionKind::Deny => STOPPED,
+    }
+}
+
+fn workspace_state_color(state: &WorkspaceState) -> Color {
+    match state {
+        WorkspaceState::Ready | WorkspaceState::Validated => ACTIVE,
+        WorkspaceState::Dirty | WorkspaceState::Archived => INFERRED,
+        WorkspaceState::Provisioning => IDLE,
+        WorkspaceState::Corrupted => STOPPED,
+    }
 }
 
 fn recent_prompt_history_for_run(

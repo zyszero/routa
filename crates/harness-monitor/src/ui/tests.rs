@@ -642,10 +642,28 @@ fn run_details_surface_run_centric_operator_context() {
     let snapshot = render_snapshot(&state, &mut cache, 180, 40);
 
     assert!(snapshot.contains("Fix harness monitor task journey"));
-    assert!(snapshot.contains("codex  fixer  hook  gpt-5.4"));
-    assert!(snapshot.contains("Last: PostToolUse"));
-    assert!(snapshot.contains("Files: "));
-    assert!(snapshot.contains("Commits: "));
+    assert!(snapshot.contains("State: active"));
+    assert!(snapshot.contains("Approval: waiting_on_evidence"));
+    assert!(snapshot.contains("Block: missing coverage_report"));
+    assert!(snapshot.contains("Next: generate coverage evidence"));
+    assert!(snapshot.contains("Evidence:"));
+}
+
+#[test]
+fn tui_snapshot_run_details_decision_first() {
+    let mut state = sample_state();
+    state.focus = FocusPane::Runs;
+    state.selected_run = state
+        .runs()
+        .iter()
+        .position(|run| run.session_id == "live-hook-check")
+        .expect("live run");
+    let mut cache = sample_cache(&state);
+
+    insta::assert_snapshot!(
+        "routa_watch_tui_run_details_decision_first",
+        render_snapshot(&state, &mut cache, 180, 34)
+    );
 }
 
 #[test]
@@ -696,10 +714,10 @@ fn hard_gate_failure_blocks_selected_run() {
 
     let snapshot = render_snapshot(&state, &mut cache, 180, 40);
 
-    assert!(!snapshot.contains("State: "));
-    assert!(!snapshot.contains("Status: failed"));
-    assert!(!snapshot.contains("Next: "));
-    assert!(snapshot.contains("Last: PostToolUse"));
+    assert!(snapshot.contains("State: blocked"));
+    assert!(snapshot.contains("Block: hard gate failure"));
+    assert!(snapshot.contains("Next: fix failing hard gates and rerun fast eval"));
+    assert!(snapshot.contains("Eval: fast blocked(hard) 62.0%"));
 }
 
 #[test]
