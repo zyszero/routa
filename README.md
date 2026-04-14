@@ -31,6 +31,17 @@ Routa is a workspace-first multi-agent coordination platform for software delive
 
 ![Routa Kanban Overview](https://github.com/user-attachments/assets/8fdf7934-f8ba-469f-a8b8-70e215637a45)
 
+## Community
+
+- [Docs Site](https://phodal.github.io/routa/)
+- [Slack Community](https://join.slack.com/t/routa-group/shared_invite/zt-3txzzfxm8-tnRFwNpPvdfjAVoSD6MTJg)
+- [Releases](https://github.com/phodal/routa/releases)
+- [Issues](https://github.com/phodal/routa/issues)
+
+### WeChat Group
+
+<img src="https://github.com/user-attachments/assets/78270d2e-e512-4e6a-8116-a88b13b80fa0" alt="Routa WeChat Group QR Code" width="480" />
+
 ## Architecture
 
 ### System Architecture
@@ -139,17 +150,6 @@ Routa makes those responsibilities explicit:
 - Use schedules, webhooks, background tasks, and workflow runs for automation beyond one-off prompts
 - Review changes with findings, severity, traces, harness signals, and fitness reports
 - Run the product in a local-first desktop mode or a self-hosted web mode
-
-## Community
-
-- [Docs Site](https://phodal.github.io/routa/)
-- [Slack Community](https://join.slack.com/t/routa-group/shared_invite/zt-3txzzfxm8-tnRFwNpPvdfjAVoSD6MTJg)
-- [Releases](https://github.com/phodal/routa/releases)
-- [Issues](https://github.com/phodal/routa/issues)
-
-### WeChat Group
-
-<img src="https://github.com/user-attachments/assets/78270d2e-e512-4e6a-8116-a88b13b80fa0" alt="Routa WeChat Group QR Code" width="480" />
 
 ## Quick Start
 
