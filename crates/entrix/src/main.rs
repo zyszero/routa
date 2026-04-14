@@ -1,7 +1,8 @@
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use crate::cli_output::{
-    print_hook_long_file_summary, print_json, print_long_file_report, print_release_trigger_report,
-    print_report_text, print_review_trigger_report,
+    print_graph_history, print_graph_impact, print_graph_query, print_graph_review_context,
+    print_graph_test_radius, print_hook_long_file_summary, print_json, print_long_file_report,
+    print_release_trigger_report, print_report_text, print_review_trigger_report,
 };
 use crate::cli_runtime::{
     build_runner_env, build_runtime_fitness_snapshot, collect_run_files, domains_from_files,
@@ -1109,7 +1110,11 @@ fn cmd_graph_impact(args: GraphImpactArgs) -> i32 {
     if args.json {
         print_json(&result);
     } else {
-        println!("{}", result.summary);
+        if result.status == "unavailable" {
+            println!("{}", result.summary);
+            return 1;
+        }
+        print_graph_impact(&result);
     }
     status_exit_code(&result.status)
 }
@@ -1181,7 +1186,11 @@ fn cmd_graph_test_radius(args: GraphTestRadiusArgs) -> i32 {
     if args.json {
         print_json(&result);
     } else {
-        println!("{}", result.summary);
+        if result.status == "unavailable" {
+            println!("{}", result.summary);
+            return 1;
+        }
+        print_graph_test_radius(&result);
     }
     status_exit_code(&result.status)
 }
@@ -1198,7 +1207,11 @@ fn cmd_graph_query(args: GraphQueryArgs) -> i32 {
     if args.json {
         print_json(&result);
     } else {
-        println!("{}", result.summary);
+        if result.status == "unavailable" {
+            println!("{}", result.summary);
+            return 1;
+        }
+        print_graph_query(&result);
     }
     status_exit_code(&result.status)
 }
@@ -1216,7 +1229,11 @@ fn cmd_graph_history(args: GraphHistoryArgs) -> i32 {
     if args.json {
         print_json(&result);
     } else {
-        println!("{}", result.summary);
+        if result.status == "unavailable" {
+            println!("{}", result.summary);
+            return 1;
+        }
+        print_graph_history(&result);
     }
     status_exit_code(&result.status)
 }
@@ -1258,7 +1275,11 @@ fn cmd_graph_review_context(args: GraphReviewContextArgs) -> i32 {
         }
         print_json(&payload);
     } else {
-        println!("{}", payload.summary);
+        if payload.status == "unavailable" {
+            println!("{}", payload.summary);
+            return 1;
+        }
+        print_graph_review_context(&payload);
     }
 
     status_exit_code(&payload.status)
