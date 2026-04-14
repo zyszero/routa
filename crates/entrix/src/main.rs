@@ -30,7 +30,10 @@ use entrix::runner::{OutputCallback, ProgressCallback, ShellRunner};
 use entrix::sarif::SarifRunner;
 use entrix::scoring::{score_dimension, score_report};
 use entrix::server;
-use entrix::terminal::{AsciiReporter, ShellOutputController, StreamMode, TerminalReporter};
+use entrix::terminal::{
+    AsciiReporter, RichLiveProgressReporter, RichReporter, ShellOutputController, StreamMode,
+    TerminalReporter,
+};
 use entrix::test_mapping;
 use serde_json::json;
 use std::collections::BTreeSet;
@@ -510,6 +513,8 @@ fn cmd_run(args: RunArgs) -> i32 {
     let runner_env = build_runner_env(&changed_files, &args.base);
     let reporter = (!args.json && args.format == "text")
         .then(|| Arc::new(TerminalReporter::new(args.verbose, stream_mode)));
+    let live_reporter = (!args.json && args.format == "rich")
+        .then(|| Arc::new(RichLiveProgressReporter::new(18, args.progress_refresh)));
     if let Some(reporter) = &reporter {
         reporter.print_header(
             policy.dry_run,
@@ -517,22 +522,40 @@ fn cmd_run(args: RunArgs) -> i32 {
             policy.parallel,
         );
     }
+    if let Some(live_reporter) = &live_reporter {
+        let metrics = dimensions
+            .iter()
+            .flat_map(|dimension| dimension.metrics.iter().cloned())
+            .collect::<Vec<_>>();
+        live_reporter.setup(&metrics);
+    }
 
     let output_controller = reporter
         .as_ref()
         .map(|reporter| Arc::new(ShellOutputController::new(Arc::clone(reporter))));
 
     let progress_callback: Option<ProgressCallback> =
-        output_controller.as_ref().map(|controller| {
-            let controller = Arc::clone(controller);
-            Box::new(
+        if let Some(live_reporter) = &live_reporter {
+            let live_reporter = Arc::clone(live_reporter);
+            Some(Box::new(
                 move |event: &str,
                       metric: &entrix::model::Metric,
                       result: Option<&entrix::model::MetricResult>| {
-                    controller.handle_progress(event, metric, result);
+                    live_reporter.handle_progress(event, metric, result);
                 },
-            ) as ProgressCallback
-        });
+            ) as ProgressCallback)
+        } else {
+            output_controller.as_ref().map(|controller| {
+                let controller = Arc::clone(controller);
+                Box::new(
+                    move |event: &str,
+                          metric: &entrix::model::Metric,
+                          result: Option<&entrix::model::MetricResult>| {
+                        controller.handle_progress(event, metric, result);
+                    },
+                ) as ProgressCallback
+            })
+        };
     let output_callback: Option<OutputCallback> =
         output_controller.as_ref().and_then(|controller| {
             if !controller.should_capture_output() {
@@ -582,7 +605,12 @@ fn cmd_run(args: RunArgs) -> i32 {
         } else {
             match args.format.as_str() {
                 "ascii" => AsciiReporter::new(18).report(&report),
-                "rich" => entrix::terminal::RichReporter::new(18).report(&report),
+                "rich" => {
+                    if let Some(live_reporter) = &live_reporter {
+                        live_reporter.force_render();
+                    }
+                    RichReporter::new(18).report(&report)
+                }
                 _ => {
                     if let Some(reporter) = &reporter {
                         reporter.report(&report, show_tier);

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use crate::model::Metric;
 use crate::model::{DimensionScore, FitnessReport, MetricResult, ResultState};
@@ -273,6 +274,26 @@ pub struct RichReporter {
     width: usize,
 }
 
+pub struct RichLiveProgressReporter {
+    width: usize,
+    refresh_interval: Duration,
+    state: Mutex<RichLiveProgressState>,
+}
+
+struct RichLiveProgressState {
+    order: Vec<String>,
+    entries: HashMap<String, RichLiveMetricState>,
+    tail: Vec<String>,
+    last_render: Option<Instant>,
+}
+
+struct RichLiveMetricState {
+    tier: String,
+    hard_gate: bool,
+    status: &'static str,
+    duration_ms: Option<f64>,
+}
+
 impl AsciiReporter {
     pub fn new(width: usize) -> Self {
         Self { width }
@@ -387,6 +408,223 @@ impl RichReporter {
             println!("Failing metrics: {}", failures.join(", "));
         }
     }
+}
+
+impl RichLiveProgressReporter {
+    pub fn new(width: usize, refresh_per_second: usize) -> Self {
+        let refresh_per_second = refresh_per_second.max(1) as u64;
+        Self {
+            width,
+            refresh_interval: Duration::from_millis(1000 / refresh_per_second),
+            state: Mutex::new(RichLiveProgressState {
+                order: Vec::new(),
+                entries: HashMap::new(),
+                tail: Vec::new(),
+                last_render: None,
+            }),
+        }
+    }
+
+    pub fn setup(&self, metrics: &[Metric]) {
+        let mut state = self.state.lock().unwrap();
+        state.order.clear();
+        state.entries.clear();
+        state.tail.clear();
+        state.last_render = None;
+        for metric in metrics {
+            state.order.push(metric.name.clone());
+            state.entries.insert(
+                metric.name.clone(),
+                RichLiveMetricState {
+                    tier: metric.tier.as_str().to_string(),
+                    hard_gate: metric.gate == crate::model::Gate::Hard,
+                    status: "queued",
+                    duration_ms: None,
+                },
+            );
+        }
+        drop(state);
+        self.force_render();
+    }
+
+    pub fn handle_progress(&self, event: &str, metric: &Metric, result: Option<&MetricResult>) {
+        let mut state = self.state.lock().unwrap();
+        let Some(entry) = state.entries.get_mut(&metric.name) else {
+            return;
+        };
+
+        if event == "start" {
+            entry.status = "running";
+            entry.duration_ms = None;
+        } else if let Some(result) = result {
+            let status = match result.state {
+                ResultState::Pass => "passed",
+                ResultState::Fail => "failed",
+                ResultState::Unknown => "unknown",
+                ResultState::Skipped => "skipped",
+                ResultState::Waived => "waived",
+            };
+            entry.status = status;
+            entry.duration_ms = (result.duration_ms > 0.0).then_some(result.duration_ms);
+            let hard_gate = entry.hard_gate;
+
+            if matches!(result.state, ResultState::Fail | ResultState::Skipped | ResultState::Unknown)
+            {
+                let status_label = status.to_uppercase();
+                for line in result.output.lines().map(str::trim).filter(|line| !line.is_empty()).take(3) {
+                    let marker = if hard_gate { "HARD" } else { "SOFT" };
+                    state.tail.push(format!(
+                        "[{}|{}|{}] {}",
+                        metric.name,
+                        marker,
+                        status_label,
+                        truncate_tail_line(line),
+                    ));
+                }
+                if state.tail.len() > 6 {
+                    let drain = state.tail.len() - 6;
+                    state.tail.drain(0..drain);
+                }
+            }
+        }
+
+        let now = Instant::now();
+        let should_render = state
+            .last_render
+            .map(|last| now.duration_since(last) >= self.refresh_interval)
+            .unwrap_or(true);
+        if should_render {
+            state.last_render = Some(now);
+            let snapshot = render_live_snapshot(self.width, &state);
+            drop(state);
+            print!("{snapshot}");
+        }
+    }
+
+    pub fn force_render(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.last_render = Some(Instant::now());
+        let snapshot = render_live_snapshot(self.width, &state);
+        drop(state);
+        print!("{snapshot}");
+    }
+}
+
+fn truncate_tail_line(line: &str) -> String {
+    let mut clean = line.replace('\n', " ");
+    if clean.chars().count() > 200 {
+        clean = clean.chars().take(197).collect::<String>() + "...";
+    }
+    clean
+}
+
+fn render_live_snapshot(width: usize, state: &RichLiveProgressState) -> String {
+    let mut queued = 0;
+    let mut running = 0;
+    let mut passed = 0;
+    let mut failed = 0;
+    let mut hard_failures = 0;
+    for name in &state.order {
+        if let Some(entry) = state.entries.get(name) {
+            match entry.status {
+                "queued" => queued += 1,
+                "running" => running += 1,
+                "passed" => passed += 1,
+                "failed" => {
+                    failed += 1;
+                    if entry.hard_gate {
+                        hard_failures += 1;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let mut out = String::new();
+    out.push('\n');
+    out.push_str(&format!(
+        "{}\n",
+        "Fitness Live Progress".chars().take(74).collect::<String>()
+    ));
+    out.push_str(&format!(
+        "passed={} failed={} hard_failures={} running={} queued={}\n",
+        passed, failed, hard_failures, running, queued
+    ));
+    out.push_str(&format!(
+        "┏{0:━<4}┳{0:━<28}┳{0:━<10}┳{0:━<8}┳{0:━<6}┳{0:━<8}┓\n",
+        ""
+    ));
+    out.push_str(&format!(
+        "┃ {:>2} ┃ {:<26} ┃ {:<8} ┃ {:<6} ┃ {:<4} ┃ {:>6} ┃\n",
+        "#", "Metric", "State", "Tier", "Gate", "Time"
+    ));
+    out.push_str(&format!(
+        "┡{0:━<4}╇{0:━<28}╇{0:━<10}╇{0:━<8}╇{0:━<6}╇{0:━<8}┩\n",
+        ""
+    ));
+    for (idx, name) in state.order.iter().enumerate() {
+        if let Some(entry) = state.entries.get(name) {
+            let display_name = name.chars().take(26).collect::<String>();
+            let gate = if entry.hard_gate { "HARD" } else { "SOFT" };
+            let time = entry
+                .duration_ms
+                .map(|ms| format!("{:.1}s", ms / 1000.0))
+                .unwrap_or_default();
+            out.push_str(&format!(
+                "│ {:>2} │ {:<26} │ {:<8} │ {:<6} │ {:<4} │ {:>6} ┃\n",
+                idx + 1,
+                display_name,
+                live_status_label(entry.status),
+                entry.tier,
+                gate,
+                time
+            ));
+        }
+    }
+    out.push_str(&format!(
+        "└{0:─<4}┴{0:─<28}┴{0:─<10}┴{0:─<8}┴{0:─<6}┴{0:─<8}┘\n",
+        ""
+    ));
+    if !state.tail.is_empty() {
+        out.push_str("tail:\n");
+        for line in &state.tail {
+            out.push_str("- ");
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    out.push_str(&format!("bar: {}\n", bar(progress_score(state), width)));
+    out
+}
+
+fn live_status_label(status: &str) -> &'static str {
+    match status {
+        "queued" => "WAIT",
+        "running" => "RUN",
+        "passed" => "PASS",
+        "failed" => "FAIL",
+        "skipped" => "SKIP",
+        "waived" => "WAIVE",
+        _ => "UNK",
+    }
+}
+
+fn progress_score(state: &RichLiveProgressState) -> f64 {
+    let total = state.order.len();
+    if total == 0 {
+        return 0.0;
+    }
+    let done = state
+        .order
+        .iter()
+        .filter(|name| {
+            state.entries.get(*name).is_some_and(|entry| {
+                matches!(entry.status, "passed" | "failed" | "skipped" | "waived" | "unknown")
+            })
+        })
+        .count();
+    (done as f64 / total as f64) * 100.0
 }
 
 fn status_for_score(score: f64, scorable: bool) -> &'static str {
