@@ -97,6 +97,7 @@ pub struct SecretScope {
 
 /// A single policy decision recorded against a tool call or action.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct PolicyDecision {
     pub run_id: RunId,
     pub checkpoint: String,

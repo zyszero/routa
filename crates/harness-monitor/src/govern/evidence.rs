@@ -34,6 +34,7 @@ impl EvidenceType {
 
 /// An evidence artifact produced during or after a run.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct Evidence {
     pub id: EvidenceId,
     pub task_id: TaskId,
