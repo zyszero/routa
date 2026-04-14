@@ -94,6 +94,7 @@ impl ShellRunner {
         // Build the environment
         let mut env: HashMap<String, String> = std::env::vars().collect();
         env.extend(self.env_overrides.clone());
+        augment_runner_path(&mut env);
 
         // Use a thread to implement timeout
         let command_str = metric.command.clone();
@@ -142,10 +143,12 @@ impl ShellRunner {
                     };
                     let state = if passed {
                         ResultState::Pass
-                    } else if !output.status.success()
-                        && !metric.pattern.is_empty()
-                        && !pattern_matched
-                    {
+                    } else if is_infra_failure(
+                        metric,
+                        &combined,
+                        returncode,
+                        !output.status.success() && !metric.pattern.is_empty() && !pattern_matched,
+                    ) {
                         ResultState::Unknown
                     } else {
                         ResultState::Fail
@@ -230,6 +233,74 @@ impl ShellRunner {
                 .collect()
         })
     }
+}
+
+fn augment_runner_path(env: &mut HashMap<String, String>) {
+    let Ok(current_exe) = std::env::current_exe() else {
+        return;
+    };
+    let Some(bin_dir) = current_exe.parent() else {
+        return;
+    };
+
+    let current_path = env
+        .get("PATH")
+        .cloned()
+        .unwrap_or_else(|| std::env::var("PATH").unwrap_or_default());
+    let bin_dir_str = bin_dir.to_string_lossy().to_string();
+    let path_sep = if cfg!(windows) { ";" } else { ":" };
+
+    let already_present = current_path
+        .split(path_sep)
+        .any(|entry| !entry.is_empty() && entry == bin_dir_str);
+    if already_present {
+        return;
+    }
+
+    let updated = if current_path.is_empty() {
+        bin_dir_str
+    } else {
+        format!("{bin_dir_str}{path_sep}{current_path}")
+    };
+    env.insert("PATH".to_string(), updated);
+}
+
+fn is_infra_failure(
+    metric: &Metric,
+    output: &str,
+    returncode: i32,
+    pattern_exit_mismatch: bool,
+) -> bool {
+    if pattern_exit_mismatch {
+        return true;
+    }
+
+    let lowered_command = metric.command.to_lowercase();
+    let lowered_output = output.to_lowercase();
+
+    if returncode == 127
+        || lowered_output.contains("command not found")
+        || lowered_output.contains("not recognized as an internal or external command")
+    {
+        return true;
+    }
+
+    if lowered_command.contains("npm audit")
+        && [
+            "getaddrinfo enotfound",
+            "eai_again",
+            "econreset",
+            "etimedout",
+            "network request failed",
+            "audit endpoint returned an error",
+        ]
+        .iter()
+        .any(|needle| lowered_output.contains(needle))
+    {
+        return true;
+    }
+
+    false
 }
 
 /// Safely truncate a string to a maximum number of bytes at a valid UTF-8 boundary.
@@ -620,6 +691,27 @@ mod tests {
         assert!(!result.passed);
         assert_eq!(result.state, ResultState::Unknown);
         assert!(result.is_infra_error());
+    }
+
+    #[test]
+    fn test_run_command_not_found_is_unknown() {
+        let runner = ShellRunner::new(&tmp_dir());
+        let metric = Metric::new("missing_tool", "definitely-not-a-real-command-xyz");
+        let result = runner.run(&metric, false);
+        assert!(!result.passed);
+        assert_eq!(result.state, ResultState::Unknown);
+        assert!(result.is_infra_error());
+    }
+
+    #[test]
+    fn test_run_npm_audit_dns_failure_is_unknown() {
+        let runner = ShellRunner::new(&tmp_dir());
+        let metric = Metric::new(
+            "npm_audit_critical",
+            "npm audit --omit=dev --audit-level=critical",
+        );
+        let output = "npm warn audit request to https://registry.npmjs.org/-/npm/v1/security/audits/quick failed, reason: getaddrinfo ENOTFOUND registry.npmjs.org\nnpm error audit endpoint returned an error\n";
+        assert!(is_infra_failure(&metric, output, 1, false));
     }
 
     #[test]
