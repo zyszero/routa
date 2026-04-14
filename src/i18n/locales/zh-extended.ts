@@ -707,6 +707,7 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     descriptionHint: "捕获此卡片的上下文、约束和验收说明。",
     structuredStory: "结构化故事",
     structuredStoryHint: "由上游规划 specialist 产出的 Canonical YAML 合同。",
+    closeCardDetail: "关闭卡片详情",
     enterFullscreen: "进入全屏",
     exitFullscreen: "退出全屏",
     storyReadiness: "故事就绪度",

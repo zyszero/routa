@@ -707,6 +707,7 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     descriptionHint: "Capture the context, constraints, and acceptance notes for this card.",
     structuredStory: "Structured Story",
     structuredStoryHint: "Canonical YAML contract emitted by upstream planning specialists.",
+    closeCardDetail: "Close card detail",
     enterFullscreen: "Enter Fullscreen",
     exitFullscreen: "Exit Fullscreen",
     storyReadiness: "Story Readiness",

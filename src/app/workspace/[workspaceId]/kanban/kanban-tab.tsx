@@ -1735,6 +1735,7 @@ export function KanbanTab({
     workspaceId,
     isTaskDetailFullscreen,
     onToggleTaskDetailFullscreen: setIsTaskDetailFullscreen,
+    closeTaskDetail,
   } : undefined;
 
   const createTaskModalProps = {

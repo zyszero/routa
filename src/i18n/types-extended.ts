@@ -712,6 +712,7 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     descriptionHint: string;
     structuredStory: string;
     structuredStoryHint: string;
+    closeCardDetail: string;
     enterFullscreen: string;
     exitFullscreen: string;
     storyReadiness: string;

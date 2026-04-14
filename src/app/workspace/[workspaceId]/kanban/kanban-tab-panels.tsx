@@ -708,6 +708,7 @@ export function KanbanTaskDetailOverlay({
   workspaceId,
   isTaskDetailFullscreen,
   onToggleTaskDetailFullscreen,
+  closeTaskDetail,
 }: {
   activeSessionId: string | null;
   activeTaskId: string | null;
@@ -738,6 +739,7 @@ export function KanbanTaskDetailOverlay({
   workspaceId: string;
   isTaskDetailFullscreen?: boolean;
   onToggleTaskDetailFullscreen?: (nextFullscreen: boolean) => void;
+  closeTaskDetail: () => void;
 }) {
   const isOverlayOpen = Boolean(activeSessionId || activeTaskId);
   const showEmptySessionPane = Boolean(
@@ -873,6 +875,7 @@ export function KanbanTaskDetailOverlay({
                   }}
                   isFullscreen={isTaskDetailFullscreen}
                   onToggleFullscreen={onToggleTaskDetailFullscreen}
+                  onClose={closeTaskDetail}
                   canShowSessionPane={canShowSessionPane}
                   isSessionPaneVisible={hasSessionPane}
                   onShowSessionPane={() => setHiddenSessionPaneTaskId(null)}

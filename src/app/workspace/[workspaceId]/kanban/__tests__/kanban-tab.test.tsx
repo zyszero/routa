@@ -2538,6 +2538,64 @@ describe.skip("KanbanTab card detail manual runs", () => {
     expect(screen.getByText("Card Detail")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Show session pane/i })).toBeTruthy();
   });
+
+  it("closes the card detail from the detail header close button", async () => {
+    vi.stubGlobal("scrollIntoView", vi.fn());
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+
+    const acp = {
+      connected: true,
+      sessionId: null,
+      updates: [],
+      providers: [{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }],
+      selectedProvider: "claude",
+      loading: false,
+      error: null,
+      authError: null,
+      dockerConfigError: null,
+      connect: vi.fn(),
+      createSession: vi.fn(),
+      resumeSession: vi.fn(),
+      forkSession: vi.fn(),
+      selectSession: vi.fn(),
+      setProvider: vi.fn(),
+      setMode: vi.fn(),
+      prompt: vi.fn(),
+      promptSession: vi.fn(),
+      respondToUserInput: vi.fn(),
+      respondToUserInputForSession: vi.fn(),
+      writeTerminal: vi.fn(),
+      resizeTerminal: vi.fn(),
+      cancel: vi.fn(),
+      disconnect: vi.fn(),
+      clearAuthError: vi.fn(),
+      clearDockerConfigError: vi.fn(),
+      listProviderModels: vi.fn(),
+    } satisfies Partial<UseAcpState & UseAcpActions> as UseAcpState & UseAcpActions;
+
+    render(
+      <KanbanTab
+        workspaceId="workspace-1"
+        boards={[board]}
+        tasks={[createTask("task-1", "Story One")]}
+        sessions={[]}
+        providers={[]}
+        specialists={[]}
+        codebases={[]}
+        onRefresh={vi.fn()}
+        acp={acp}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Story One" }));
+    await screen.findByText("Card Detail");
+
+    fireEvent.click(screen.getByRole("button", { name: /Close card detail/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Card Detail")).toBeNull();
+    });
+  });
 });
 
 describe("KanbanTab quick ACP assignment", () => {

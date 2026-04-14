@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { Maximize2, Minimize2 } from "lucide-react";
+import { Maximize2, Minimize2, X } from "lucide-react";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
 import { Select } from "@/client/components/select";
@@ -64,6 +64,7 @@ export interface KanbanCardDetailProps {
   onSelectSession?: (sessionId: string) => void;
   isFullscreen?: boolean;
   onToggleFullscreen?: (next: boolean) => void;
+  onClose?: () => void;
   canShowSessionPane?: boolean;
   isSessionPaneVisible?: boolean;
   onShowSessionPane?: () => void;
@@ -245,6 +246,7 @@ export function KanbanCardDetail({
   onSelectSession,
   isFullscreen = false,
   onToggleFullscreen,
+  onClose,
   canShowSessionPane = false,
   isSessionPaneVisible = false,
   onShowSessionPane,
@@ -321,6 +323,18 @@ export function KanbanCardDetail({
               {t.kanbanDetail.cardDetail}
             </div>
             <div className="flex items-center gap-1.5">
+              {onClose ? (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600 transition-colors hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 dark:border-slate-700 dark:bg-[#0d1018] dark:text-slate-300 dark:hover:border-amber-700 dark:hover:bg-amber-900/20 dark:hover:text-amber-200"
+                  aria-label={t.kanbanDetail.closeCardDetail}
+                  title={t.kanbanDetail.closeCardDetail}
+                >
+                  <X className="h-3 w-3" />
+                  <span>{t.kanbanDetail.closeCardDetail}</span>
+                </button>
+              ) : null}
               {canShowSessionPane && !isSessionPaneVisible && onShowSessionPane ? (
                 <button
                   type="button"
