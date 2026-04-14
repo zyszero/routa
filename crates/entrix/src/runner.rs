@@ -70,6 +70,7 @@ impl ShellRunner {
                     hard_gate: metric.gate == Gate::Hard,
                     duration_ms: 0.0,
                     state: ResultState::Waived,
+                    returncode: None,
                 };
             }
         }
@@ -83,6 +84,7 @@ impl ShellRunner {
                 hard_gate: metric.gate == Gate::Hard,
                 duration_ms: 0.0,
                 state: ResultState::Pass,
+                returncode: None,
             };
         }
 
@@ -125,22 +127,41 @@ impl ShellRunner {
                         .with_hard_gate(metric.gate == Gate::Hard)
                         .with_duration_ms(elapsed)
                 } else {
-                    let passed = if !metric.pattern.is_empty() {
+                    let returncode = output.status.code().unwrap_or(-1);
+                    let pattern_matched = if !metric.pattern.is_empty() {
                         Regex::new(&metric.pattern)
                             .map(|re| re.is_match(&combined))
                             .unwrap_or(false)
                     } else {
+                        false
+                    };
+                    let passed = if !metric.pattern.is_empty() {
+                        output.status.success() && pattern_matched
+                    } else {
                         output.status.success()
+                    };
+                    let state = if passed {
+                        ResultState::Pass
+                    } else if !output.status.success()
+                        && !metric.pattern.is_empty()
+                        && !pattern_matched
+                    {
+                        ResultState::Unknown
+                    } else {
+                        ResultState::Fail
                     };
 
                     MetricResult::new(metric.name.clone(), passed, output_truncated, metric.tier)
+                        .with_state(state)
                         .with_hard_gate(metric.gate == Gate::Hard)
                         .with_duration_ms(elapsed)
+                        .with_returncode(returncode)
                 }
             }
             Err(e) => {
                 let elapsed = start.elapsed().as_secs_f64() * 1000.0;
                 MetricResult::new(metric.name.clone(), false, e.to_string(), metric.tier)
+                    .with_state(ResultState::Unknown)
                     .with_hard_gate(metric.gate == Gate::Hard)
                     .with_duration_ms(elapsed)
             }
@@ -583,6 +604,22 @@ mod tests {
         m.pattern = r"Tests\s+\d+\s+passed".to_string();
         let result = runner.run(&m, false);
         assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_run_pattern_non_zero_exit_is_unknown() {
+        let runner = ShellRunner::new(&tmp_dir());
+        let cmd = if cfg!(windows) {
+            "echo checker crashed && cmd /c exit 1"
+        } else {
+            "echo 'checker crashed'; exit 1"
+        };
+        let mut metric = Metric::new("pattern_unknown", cmd);
+        metric.pattern = "all good".to_string();
+        let result = runner.run(&metric, false);
+        assert!(!result.passed);
+        assert_eq!(result.state, ResultState::Unknown);
+        assert!(result.is_infra_error());
     }
 
     #[test]

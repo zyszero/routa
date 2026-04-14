@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::model::Metric;
+use crate::model::{Dimension, Metric};
 use crate::model::{DimensionScore, FitnessReport, MetricResult, ResultState};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -158,17 +158,38 @@ impl TerminalReporter {
 
     pub fn report(&self, report: &FitnessReport, show_tier: bool) {
         for dimension in &report.dimensions {
-            self.print_dimension(dimension, show_tier);
+            self.print_dimension(dimension, None, show_tier);
         }
         self.print_footer(report);
     }
 
-    fn print_dimension(&self, dimension: &DimensionScore, show_tier: bool) {
+    pub fn report_with_dimensions(
+        &self,
+        report: &FitnessReport,
+        dimensions: &[Dimension],
+        show_tier: bool,
+    ) {
+        for (index, dimension) in report.dimensions.iter().enumerate() {
+            let source_file = dimensions.get(index).map(|item| item.source_file.as_str());
+            self.print_dimension(dimension, source_file, show_tier);
+        }
+        self.print_footer(report);
+    }
+
+    fn print_dimension(
+        &self,
+        dimension: &DimensionScore,
+        source_file: Option<&str>,
+        show_tier: bool,
+    ) {
         println!(
             "\n## {} (weight: {}%)",
             dimension.dimension.to_uppercase(),
             dimension.weight
         );
+        if let Some(source_file) = source_file.filter(|value| !value.is_empty()) {
+            println!("   Source: {source_file}");
+        }
         for result in &dimension.results {
             self.print_result(result, show_tier);
         }
@@ -194,7 +215,10 @@ impl TerminalReporter {
         println!("   - {}: {}{}{}", result.metric_name, status, hard, tier);
 
         let should_print_output = matches!(result.state, ResultState::Fail | ResultState::Unknown)
-            && (self.verbose || result.hard_gate || self.stream_mode == StreamMode::Off);
+            && (self.verbose
+                || result.hard_gate
+                || result.is_infra_error()
+                || self.stream_mode == StreamMode::Off);
         if !should_print_output {
             return;
         }
@@ -236,6 +260,18 @@ impl TerminalReporter {
             .iter()
             .filter(|dimension| dimension.weight > 0 && dimension.total > 0)
             .count();
+        let infra_errors = report
+            .dimensions
+            .iter()
+            .flat_map(|dimension| dimension.results.iter())
+            .filter(|result| result.is_infra_error())
+            .map(|result| result.metric_name.clone())
+            .collect::<Vec<_>>();
+
+        if !infra_errors.is_empty() {
+            println!("INFRA ERRORS: {}", infra_errors.join(", "));
+            println!("These failures are likely checker/tooling problems, not code defects.");
+        }
 
         if report.hard_gate_blocked {
             let failures = report
@@ -346,18 +382,12 @@ impl RichReporter {
 
     pub fn report(&self, report: &FitnessReport) {
         println!("\n{:^74}", "Fitness Scorecard");
-        println!(
-            "┏{0:━<19}┳{0:━<27}┳{0:━<8}┳{0:━<9}┳{0:━<8}┓",
-            ""
-        );
+        println!("┏{0:━<19}┳{0:━<27}┳{0:━<8}┳{0:━<9}┳{0:━<8}┓", "");
         println!(
             "┃ {:<17} ┃ {:<25} ┃ {:>6} ┃ {:>7} ┃ {:<6} ┃",
             "Dimension", "Score", "Weight", "Metrics", "Status"
         );
-        println!(
-            "┡{0:━<19}╇{0:━<27}╇{0:━<8}╇{0:━<9}╇{0:━<8}┩",
-            ""
-        );
+        println!("┡{0:━<19}╇{0:━<27}╇{0:━<8}╇{0:━<9}╇{0:━<8}┩", "");
 
         for dimension in &report.dimensions {
             let scorable = dimension.weight > 0 && dimension.total > 0;
@@ -368,7 +398,12 @@ impl RichReporter {
             };
             println!(
                 "│ {:<17} │ {} {} │ {:>6}% │ {:>7} │ {:<6} │",
-                dimension.dimension.to_uppercase().chars().take(17).collect::<String>(),
+                dimension
+                    .dimension
+                    .to_uppercase()
+                    .chars()
+                    .take(17)
+                    .collect::<String>(),
                 bar(dimension.score, self.width),
                 score_text,
                 dimension.weight,
@@ -377,10 +412,7 @@ impl RichReporter {
             );
         }
 
-        println!(
-            "└{0:─<19}┴{0:─<27}┴{0:─<8}┴{0:─<9}┴{0:─<8}┘",
-            ""
-        );
+        println!("└{0:─<19}┴{0:─<27}┴{0:─<8}┴{0:─<9}┴{0:─<8}┘", "");
         println!(
             "\nFINAL SCORE {} {:>5.1}% {}",
             bar(report.final_score, self.width),
@@ -468,10 +500,18 @@ impl RichLiveProgressReporter {
             entry.duration_ms = (result.duration_ms > 0.0).then_some(result.duration_ms);
             let hard_gate = entry.hard_gate;
 
-            if matches!(result.state, ResultState::Fail | ResultState::Skipped | ResultState::Unknown)
-            {
+            if matches!(
+                result.state,
+                ResultState::Fail | ResultState::Skipped | ResultState::Unknown
+            ) {
                 let status_label = status.to_uppercase();
-                for line in result.output.lines().map(str::trim).filter(|line| !line.is_empty()).take(3) {
+                for line in result
+                    .output
+                    .lines()
+                    .map(str::trim)
+                    .filter(|line| !line.is_empty())
+                    .take(3)
+                {
                     let marker = if hard_gate { "HARD" } else { "SOFT" };
                     state.tail.push(format!(
                         "[{}|{}|{}] {}",
@@ -620,7 +660,10 @@ fn progress_score(state: &RichLiveProgressState) -> f64 {
         .iter()
         .filter(|name| {
             state.entries.get(*name).is_some_and(|entry| {
-                matches!(entry.status, "passed" | "failed" | "skipped" | "waived" | "unknown")
+                matches!(
+                    entry.status,
+                    "passed" | "failed" | "skipped" | "waived" | "unknown"
+                )
             })
         })
         .count();
