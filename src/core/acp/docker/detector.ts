@@ -22,7 +22,6 @@ async function findDockerOnWindows(bridge: ReturnType<typeof getServerBridge>): 
 
   const candidates = [
     "\\Docker\\Docker\\resources\\bin\\docker.exe",
-    "\\Docker\\Docker\\resources\\bin\\docker-compose.exe",
   ];
 
   for (const base of programFilesDirs) {
@@ -67,7 +66,10 @@ function execDockerInfo(bridge: ReturnType<typeof getServerBridge>, dockerPath: 
         if (code === 0) resolve(stdout);
         else reject(new Error(stderr || `docker exited with code ${code}`));
       });
-      handle.on("error", reject);
+      handle.on("error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
     } else if (isWindows) {
       // On Windows with no resolved path, use shell so cmd.exe searches PATH
       const handle = bridge.process.spawn("docker", ["info", "--format", "{{json .}}"], {
@@ -92,7 +94,10 @@ function execDockerInfo(bridge: ReturnType<typeof getServerBridge>, dockerPath: 
         if (code === 0) resolve(stdout);
         else reject(new Error(stderr || `docker exited with code ${code}`));
       });
-      handle.on("error", reject);
+      handle.on("error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
     } else {
       // Unix: PATH should be inherited correctly
       bridge.process.exec("docker info --format '{{json .}}'", { timeout: DEFAULT_TIMEOUT_MS })
@@ -266,8 +271,9 @@ export class DockerDetector {
   private sanitizeErrorMessage(raw: string): string {
     if (!raw) return "Docker unavailable";
     const lastLine = raw.split("\n").map((l) => l.trim()).filter(Boolean).pop() ?? raw;
-    // If it looks like encoded Chinese/GBK noise (contains high-byte chars), use a clean fallback
-    if (lastLine.length > 0 && lastLine.length < 20 && /[^a-zA-Z0-9 .,!?'-]/.test(lastLine)) {
+    // Preserve short, valid Docker errors like "dial tcp: EOF" and only
+    // collapse messages that contain non-ASCII / replacement characters.
+    if (/[^\u0020-\u007E]|�/u.test(lastLine)) {
       return "Docker unavailable";
     }
     return lastLine;
