@@ -25,6 +25,15 @@ vi.mock("@/client/components/repo-picker", () => ({
   RepoPicker: () => <div data-testid="repo-picker-mock" />,
 }));
 
+vi.mock("../use-runtime-fitness-status", () => ({
+  useRuntimeFitnessStatus: () => ({
+    data: null,
+    loading: false,
+    error: null,
+    refresh: () => {},
+  }),
+}));
+
 const board: KanbanBoardInfo = {
   id: "board-1",
   workspaceId: "workspace-1",
