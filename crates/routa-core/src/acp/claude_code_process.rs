@@ -198,7 +198,22 @@ impl ClaudeCodeProcess {
         let resolved_command = crate::shell_env::which(&self.config.command)
             .unwrap_or_else(|| self.config.command.clone());
 
-        let mut cmd = Command::new(&resolved_command);
+        // On Windows, batch files (.cmd/.bat) cannot be spawned directly —
+        // they must be run through cmd.exe. Paths with spaces (e.g.
+        // "C:\Program Files\nodejs\claude.CMD") cause "batch file arguments
+        // are invalid" errors otherwise.
+        let needs_shell = cfg!(windows) && {
+            let lower = resolved_command.to_lowercase();
+            lower.ends_with(".cmd") || lower.ends_with(".bat")
+        };
+
+        let mut cmd = if needs_shell {
+            let mut c = Command::new("cmd.exe");
+            c.args(["/c", &resolved_command]);
+            c
+        } else {
+            Command::new(&resolved_command)
+        };
         cmd.arg("-p");
         cmd.args(["--output-format", "stream-json"]);
         cmd.args(["--input-format", "stream-json"]);

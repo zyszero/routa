@@ -70,7 +70,21 @@ impl AcpProcess {
         let resolved_command =
             crate::shell_env::which(command).unwrap_or_else(|| command.to_string());
 
-        let mut command_builder = tokio::process::Command::new(&resolved_command);
+        // On Windows, batch files (.cmd/.bat) cannot be spawned directly —
+        // they must be run through cmd.exe to avoid "batch file arguments
+        // are invalid" errors when the path contains spaces.
+        let needs_shell = cfg!(windows) && {
+            let lower = resolved_command.to_lowercase();
+            lower.ends_with(".cmd") || lower.ends_with(".bat")
+        };
+
+        let mut command_builder = if needs_shell {
+            let mut c = tokio::process::Command::new("cmd.exe");
+            c.args(["/c", &resolved_command]);
+            c
+        } else {
+            tokio::process::Command::new(&resolved_command)
+        };
         command_builder
             .args(args)
             .current_dir(cwd)
