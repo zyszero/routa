@@ -36,7 +36,7 @@ function parseRefs(repoPath: string): GitRef[] {
   // Local branches
   try {
     const output = gitExec(
-      `git for-each-ref --format='%(refname:short)%09%(objectname)' refs/heads/`,
+      `git for-each-ref --format=%(refname:short)%09%(objectname) refs/heads/`,
       repoPath,
     );
     for (const line of output.split("\n").filter(Boolean)) {
@@ -55,7 +55,7 @@ function parseRefs(repoPath: string): GitRef[] {
   // Remote branches
   try {
     const output = gitExec(
-      `git for-each-ref --format='%(refname:short)%09%(objectname)' refs/remotes/`,
+      `git for-each-ref --format=%(refname:short)%09%(objectname) refs/remotes/`,
       repoPath,
     );
     for (const line of output.split("\n").filter(Boolean)) {
@@ -71,7 +71,7 @@ function parseRefs(repoPath: string): GitRef[] {
   // Tags
   try {
     const output = gitExec(
-      `git for-each-ref --format='%(refname:short)%09%(*objectname)%09%(objectname)' refs/tags/`,
+      `git for-each-ref --format=%(refname:short)%09%(*objectname)%09%(objectname) refs/tags/`,
       repoPath,
     );
     for (const line of output.split("\n").filter(Boolean)) {

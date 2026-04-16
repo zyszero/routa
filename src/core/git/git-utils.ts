@@ -81,7 +81,19 @@ function gitExecSync(command: string, cwd: string): string {
   return bridge.process.execSync(command, { cwd }).trimEnd();
 }
 
+/**
+ * Quote a value for safe interpolation into a shell command string.
+ *
+ * Uses POSIX single-quotes on Unix and double-quotes on Windows (cmd.exe
+ * does not recognise single-quote quoting and would pass the quotes
+ * literally to git, creating refs whose *names* contain quote characters).
+ */
 export function shellQuote(value: string): string {
+  if (process.platform === "win32") {
+    // cmd.exe: use double-quotes and escape embedded double-quotes.
+    return `"${value.replace(/"/g, '\\"')}"`;
+  }
+  // Unix (bash/zsh): use strong single-quote quoting.
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
@@ -241,7 +253,7 @@ export function getCurrentBranch(repoPath: string): string | null {
  */
 export function listBranches(repoPath: string): string[] {
   try {
-    const output = gitExecSync("git branch --format='%(refname:short)'", repoPath);
+    const output = gitExecSync("git branch --format=%(refname:short)", repoPath);
     return output
       .split("\n")
       .map((b) => b.trim().replace(/^'|'$/g, ""))
@@ -935,7 +947,7 @@ export function listClonedRepos(): ClonedRepoInfo[] {
  */
 export function listRemoteBranches(repoPath: string): string[] {
   try {
-    const output = gitExecSync("git branch -r --format='%(refname:short)'", repoPath);
+    const output = gitExecSync("git branch -r --format=%(refname:short)", repoPath);
     return output
       .split("\n")
       .map((b) => b.trim().replace(/^'|'$/g, ""))

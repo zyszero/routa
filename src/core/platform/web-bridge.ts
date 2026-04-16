@@ -33,6 +33,17 @@ import type {
   UnlistenFn,
 } from "./interfaces";
 
+/**
+ * Quote a value for safe interpolation into a shell command.
+ * Uses double-quotes on Windows (cmd.exe) and single-quotes on Unix.
+ */
+function platformQuote(value: string): string {
+  if (process.platform === "win32") {
+    return `"${value.replace(/"/g, '\\"')}"`;
+  }
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 // ─── Web Process (Node.js child_process) ──────────────────────────────────
 
 class WebProcess implements IPlatformProcess {
@@ -339,12 +350,13 @@ class WebGit implements IPlatformGit {
   }
 
   async pull(repoPath: string, branch?: string): Promise<void> {
-    const cmd = branch ? `git pull origin ${branch}` : "git pull";
+    const quoted = branch ? platformQuote(branch) : undefined;
+    const cmd = quoted ? `git pull origin ${quoted}` : "git pull";
     await this.processAdapter.exec(cmd, { cwd: repoPath });
   }
 
   async checkout(repoPath: string, branch: string): Promise<void> {
-    await this.processAdapter.exec(`git checkout ${branch}`, { cwd: repoPath });
+    await this.processAdapter.exec(`git checkout ${platformQuote(branch)}`, { cwd: repoPath });
   }
 }
 
