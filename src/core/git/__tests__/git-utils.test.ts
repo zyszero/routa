@@ -24,7 +24,14 @@ const {
   parseGitHubUrl,
   getRepoDeliveryStatus,
   getBranchStatus,
+  listBranches,
+  listRemoteBranches,
 } = await import("../git-utils");
+
+// Determine the quoting style shellQuote() will produce on this platform.
+const q = (v: string) => process.platform === "win32"
+  ? `"${v.replace(/"/g, '\\"')}"`
+  : `'${v.replace(/'/g, `'\\''`)}'`;
 
 describe("parseGitStatusPorcelain", () => {
   beforeEach(() => {
@@ -118,8 +125,8 @@ describe("delivery and branch status helpers", () => {
       if (command === "git status --porcelain -uall") return "";
       if (command === "git rev-list --left-right --count HEAD...@{upstream}") return "2 0\n";
       if (command === "git remote get-url origin") return "https://github.com/phodal/routa-js.git\n";
-      if (command === "git rev-parse --verify 'origin/main'") return "abc123\n";
-      if (command === "git rev-list --count 'origin/main'..HEAD") return "3\n";
+      if (command === `git rev-parse --verify ${q("origin/main")}`) return "abc123\n";
+      if (command === `git rev-list --count ${q("origin/main")}..HEAD`) return "3\n";
       if (command === "git rev-parse --git-dir") return ".git\n";
       if (command === "git rev-parse --is-bare-repository") return "false\n";
       throw new Error(`Unexpected command: ${command}`);
@@ -145,7 +152,7 @@ describe("delivery and branch status helpers", () => {
 
   it("computes branch ahead/behind status and uncommitted changes", () => {
     execSyncMock.mockImplementation((command: string) => {
-      if (command === "git rev-list --left-right --count 'feature/login'...'origin/feature/login'") {
+      if (command === `git rev-list --left-right --count ${q("feature/login")}...${q("origin/feature/login")}`) {
         return "4 1\n";
       }
       if (command === "git rev-parse --git-dir") return ".git\n";
@@ -159,5 +166,27 @@ describe("delivery and branch status helpers", () => {
       behind: 1,
       hasUncommittedChanges: true,
     });
+  });
+
+  it("preserves apostrophes in local branch names", () => {
+    execSyncMock.mockImplementation((command: string) => {
+      if (command === "git branch --format=%(refname:short)") {
+        return "main\nuser's-branch\n";
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    expect(listBranches("/tmp/repo")).toEqual(["main", "user's-branch"]);
+  });
+
+  it("preserves apostrophes in remote branch names", () => {
+    execSyncMock.mockImplementation((command: string) => {
+      if (command === "git branch -r --format=%(refname:short)") {
+        return "origin/main\norigin/user's-branch\n";
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    expect(listRemoteBranches("/tmp/repo")).toEqual(["main", "user's-branch"]);
   });
 });
