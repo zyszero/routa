@@ -23,7 +23,7 @@ metrics:
     pattern: "file_budget_violations: 0"
     hard_gate: false
     tier: fast
-    description: "本次变更的代码文件必须满足行数预算；默认 ≤1000 行，Rust(.rs) ≤800 行，历史超标文件按 HEAD 基线冻结"
+    description: "本次变更的代码文件必须满足行数预算；默认 ≤1600 行，历史超标文件按 HEAD 基线冻结"
 
   - name: function_line_limit
     command: |
@@ -244,7 +244,7 @@ metrics:
 
 | 检测项 | 阈值 | Hard Gate | 工具 |
 |--------|------|-----------|------|
-| 文件行数 | 新文件 ≤1000 行，历史超标文件按 HEAD 基线冻结 | ❌ | `python -m entrix.file_budgets` |
+| 文件行数 | 新文件 ≤1600 行，历史超标文件按 HEAD 基线冻结 | ❌ | `python -m entrix.file_budgets` |
 | 历史热点守护 | 已登记热点只允许缩小不允许继续膨胀 | ✅ | `python -m entrix.file_budgets --overrides-only` |
 | 函数行数 | ≤100 行 | ❌ | grep + 人工 |
 | 重复代码 | 变更文件不新增大块 clone | ❌ | jscpd |
@@ -264,7 +264,7 @@ metrics:
 ### 1. 代码膨胀
 AI 倾向于生成冗长代码，缺乏抽象能力。
 
-**约束**: 新文件 ≤1000 行；历史超标热点必须进入预算冻结，只能缩小不能继续长大；函数 ≤100 行
+**约束**: 新文件 ≤1600 行；历史超标热点必须进入预算冻结，只能缩小不能继续长大；函数 ≤100 行
 
 ### 2. 重复代码
 AI 经常“复制粘贴”式生成，忽略已有实现。

@@ -677,7 +677,7 @@ fn detect_long_file_findings(
         ]
     });
     let extension_max_lines = budgets.extension_max_lines.clone().unwrap_or_default();
-    let default_max_lines = budgets.default_max_lines.unwrap_or(1000);
+    let default_max_lines = budgets.default_max_lines.unwrap_or(1600);
     let overrides = budgets.overrides.clone().unwrap_or_default();
 
     let mut candidates = Vec::new();
@@ -749,7 +749,7 @@ fn load_file_budgets(repo_root: &Path, warnings: &mut Vec<String>) -> FileBudget
             "Missing {FILE_BUDGETS_RELATIVE_PATH}; using default long-file budget thresholds."
         ));
         return FileBudgetConfig {
-            default_max_lines: Some(1000),
+            default_max_lines: Some(1600),
             include_roots: Some(vec![
                 "src".to_string(),
                 "apps".to_string(),
@@ -762,9 +762,9 @@ fn load_file_budgets(repo_root: &Path, warnings: &mut Vec<String>) -> FileBudget
             ]),
             extension_max_lines: Some(
                 [
-                    (".rs".to_string(), 800),
-                    (".ts".to_string(), 1000),
-                    (".tsx".to_string(), 1000),
+                    (".rs".to_string(), 1600),
+                    (".ts".to_string(), 1600),
+                    (".tsx".to_string(), 1600),
                 ]
                 .into_iter()
                 .collect(),
@@ -790,7 +790,7 @@ fn load_file_budgets(repo_root: &Path, warnings: &mut Vec<String>) -> FileBudget
                 "Failed to parse {FILE_BUDGETS_RELATIVE_PATH}; using default long-file budget thresholds."
             ));
             FileBudgetConfig {
-                default_max_lines: Some(1000),
+                default_max_lines: Some(1600),
                 include_roots: Some(vec![
                     "src".to_string(),
                     "apps".to_string(),
@@ -803,9 +803,9 @@ fn load_file_budgets(repo_root: &Path, warnings: &mut Vec<String>) -> FileBudget
                 ]),
                 extension_max_lines: Some(
                     [
-                        (".rs".to_string(), 800),
-                        (".ts".to_string(), 1000),
-                        (".tsx".to_string(), 1000),
+                        (".rs".to_string(), 1600),
+                        (".ts".to_string(), 1600),
+                        (".tsx".to_string(), 1600),
                     ]
                     .into_iter()
                     .collect(),

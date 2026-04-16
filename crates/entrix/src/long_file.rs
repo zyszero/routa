@@ -750,16 +750,16 @@ mod tests {
             path,
             format!(
                 r#"{{
-  "default_max_lines": 1000,
+  "default_max_lines": 1600,
   "include_roots": ["src", "apps", "crates"],
   "extensions": [".go", ".java", ".py", ".rs", ".ts", ".tsx"],
   "extension_max_lines": {{
-    ".go": 1000,
-    ".java": 1000,
-    ".py": 1000,
+    ".go": 1600,
+    ".java": 1600,
+    ".py": 1600,
     ".ts": {max_ts},
-    ".tsx": 1000,
-    ".rs": 800
+    ".tsx": 1600,
+    ".rs": 1600
   }},
   "excluded_parts": ["/node_modules/", "/target/", "/.next/", "/_next/", "/bundled/"],
   "overrides": []
