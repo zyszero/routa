@@ -751,7 +751,16 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     date: string;
     reportedBy: string;
     github: string;
+    githubLinked: string;
+    connectedIssues: string;
+    description: string;
     file: string;
+    issueLinks: string;
+    linkedFrom: string;
+    noLinkedIssues: string;
+    noBacklinks: string;
+    selectIssue: string;
+    selectIssueBody: string;
     noIssues: string;
     failedToLoad: string;
     githubStateUnknown: string;
