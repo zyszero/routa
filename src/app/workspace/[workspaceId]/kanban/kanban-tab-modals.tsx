@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import Link from "next/link";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
 import { RepoPicker, type RepoSelection } from "@/client/components/repo-picker";
@@ -97,7 +97,7 @@ export function KanbanCodebaseModal({
     [codebases],
   );
   const githubCodebaseCount = useMemo(
-    () => codebases.filter((codebase) => isGitHubCodebase(codebase)).length,
+    () => codebases.filter((codebase) => getCodebaseSourceType(codebase) === "github").length,
     [codebases],
   );
   const localCodebaseCount = codebases.length - githubCodebaseCount;
@@ -127,6 +127,7 @@ export function KanbanCodebaseModal({
   const fallbackBranches = selectedCodebase?.branch ? [selectedCodebase.branch] : [];
   const sortedBranches = Array.from(new Set([...repoBranches, ...fallbackBranches].filter(Boolean)))
     .sort((left, right) => compareBranches(left, right, currentBranch, worktreeBranchSet));
+  const selectedCodebaseSourceType = selectedCodebase ? getCodebaseSourceType(selectedCodebase) : "local";
   const issueBranches = sortedBranches.filter((branch) => isIssueBranch(branch));
   const removableIssueBranches = issueBranches.filter(
     (branch) => branch !== currentBranch && !worktreeBranchSet.has(branch),
@@ -139,57 +140,75 @@ export function KanbanCodebaseModal({
   const allWorktreesSelected = sortedWorktrees.length > 0 && selectedWorktrees.length === sortedWorktrees.length;
   const bulkActionBusy = deletingWorktreeIds.length > 0;
 
-  useEffect(() => {
-    setSelectedWorktreeIds([]);
-  }, [open, selectedCodebase?.id]);
-
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="flex max-h-[90vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-[#1c1f2e] dark:bg-[#12141c]" data-testid="codebase-detail-modal">
-        <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 dark:border-slate-800">
+    <div className="fixed inset-0 z-50 bg-black/50 px-3 py-4">
+      <div
+        className="desktop-theme mx-auto flex h-full max-h-[92vh] w-full max-w-[1400px] flex-col overflow-hidden rounded-sm border border-desktop-border bg-desktop-bg-primary shadow-2xl"
+        data-testid="codebase-detail-modal"
+      >
+        <div className="border-b border-desktop-border bg-desktop-bg-primary px-4 py-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                {t.kanbanModals.repositoriesOverview}
-              </h3>
-              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-                <span>{`${codebases.length} ${t.kanbanBoard.repos}`}</span>
-                <span>
-                  {`${t.kanbanModals.currentRepository} ${selectedCodebaseLabel ?? t.kanbanBoard.noReposLinked}`}
-                </span>
-                <span>
-                  {`${t.kanbanModals.healthIssuesLabel} ${healthIssuesCount}`}
-                </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-[13px] font-semibold text-desktop-text-primary">
+                  {t.kanbanModals.repositoriesOverview}
+                </h3>
+                {selectedCodebaseLabel ? (
+                  <span className="truncate text-[11px] text-desktop-text-secondary">
+                    {`${t.kanbanModals.currentRepository} ${selectedCodebaseLabel}`}
+                  </span>
+                ) : null}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <CompactStat label={t.kanbanBoard.repos} value={String(codebases.length)} />
+                <CompactStat
+                  label={t.kanbanModals.defaultRepositoryLabel}
+                  value={defaultCodebase ? getCodebaseDisplayName(defaultCodebase) : "—"}
+                />
+                <CompactStat label={t.kanbanModals.localSourcesLabel} value={String(localCodebaseCount)} />
+                <CompactStat label={t.kanbanModals.githubSourcesLabel} value={String(githubCodebaseCount)} />
+                <CompactStat
+                  label={t.kanbanModals.healthIssuesLabel}
+                  value={String(healthIssuesCount)}
+                  tone={healthIssuesCount > 0 ? "warning" : "neutral"}
+                />
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {selectedCodebase && !editingCodebase && (
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              {selectedCodebase && !editingCodebase ? (
                 <>
                   <Link
                     href={`/workspace/${selectedCodebase.workspaceId}/codebases/${selectedCodebase.id}/reposlide`}
-                    className="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+                    className={toolbarButtonClassName("default")}
                   >
                     {t.kanbanModals.openRepoSlide}
                   </Link>
                   <button
-                    onClick={onRequestRemoveCodebase}
-                    className="text-sm text-rose-500 hover:text-rose-600 dark:text-rose-400 dark:hover:text-rose-300"
-                  >
-                    {t.common.remove}
-                  </button>
-                  <button
+                    type="button"
                     onClick={onStartEditCodebase}
-                    className="text-sm text-amber-500 hover:text-amber-600 dark:text-amber-400 dark:hover:text-amber-300"
+                    className={toolbarButtonClassName("default")}
                   >
                     {t.common.edit}
                   </button>
+                  <button
+                    type="button"
+                    onClick={onRequestRemoveCodebase}
+                    className={toolbarButtonClassName("danger")}
+                  >
+                    {t.common.remove}
+                  </button>
                 </>
-              )}
+              ) : null}
               <button
-                onClick={onClose}
-                className="text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                type="button"
+                onClick={() => {
+                  setSelectedWorktreeIds([]);
+                  onClose();
+                }}
+                className={toolbarButtonClassName("default")}
               >
                 {t.common.close}
               </button>
@@ -197,141 +216,17 @@ export function KanbanCodebaseModal({
           </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[320px,minmax(0,1fr)]">
-          <aside className="min-h-0 space-y-4 overflow-y-auto pr-1">
-            <div className="grid grid-cols-2 gap-3">
-              <SummaryCard label={t.kanbanBoard.repos} value={String(codebases.length)} />
-              <SummaryCard
-                label={t.kanbanModals.defaultRepositoryLabel}
-                value={defaultCodebase ? getCodebaseDisplayName(defaultCodebase) : "—"}
-              />
-              <SummaryCard label={t.kanbanModals.localSourcesLabel} value={String(localCodebaseCount)} />
-              <SummaryCard label={t.kanbanModals.githubSourcesLabel} value={String(githubCodebaseCount)} />
-            </div>
-
-            {repoHealth && healthIssuesCount > 0 && (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 dark:border-amber-900/40 dark:bg-amber-900/10">
-                <div className="flex items-start gap-3">
-                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium text-amber-900 dark:text-amber-200">
-                      {t.kanbanModals.workspaceHealthTitle}
-                    </div>
-                    <div className="text-xs text-amber-700 dark:text-amber-300">
-                      {`${repoHealth.missingRepoTasks} ${t.kanban.missing} · ${repoHealth.cwdMismatchTasks} ${t.kanban.sessionMismatch}`}
-                    </div>
-                  </div>
-                </div>
+        <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[320px,minmax(0,1fr)]">
+          <aside className="flex min-h-0 flex-col border-b border-desktop-border bg-desktop-bg-secondary/60 xl:border-b-0 xl:border-r">
+            <div className="border-b border-desktop-border px-3 py-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
+                {t.kanbanModals.addRepository}
               </div>
-            )}
-
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-[#171922]">
-              <div className="mb-3">
-                <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                  {t.kanbanModals.addRepository}
-                </div>
-                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  {t.kanbanModals.selectOrCloneRepo}
-                </div>
-              </div>
-              <RepoPicker
-                value={addRepoSelection}
-                onChange={setAddRepoSelection}
-                additionalRepos={codebases.map((codebase) => ({
-                  name: getCodebaseDisplayName(codebase),
-                  path: codebase.repoPath,
-                  branch: codebase.branch,
-                }))}
-              />
-              {addError && (
-                <div className="mt-2 text-xs text-rose-600 dark:text-rose-400">{addError}</div>
-              )}
-              <button
-                type="button"
-                onClick={() => void onAddRepository(addRepoSelection)}
-                disabled={!addRepoSelection || addSaving}
-                className="mt-3 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
-              >
-                {addSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : null}
-                <span>{addSaving ? t.kanbanModals.addingRepository : t.kanbanModals.addRepository}</span>
-              </button>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-[#12141c]">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                  {t.kanbanBoard.repos}
-                </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">{codebases.length}</div>
-              </div>
-              {sortedCodebases.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                  {t.kanbanBoard.noReposLinked}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {sortedCodebases.map((codebase) => {
-                    const codebaseLabel = getCodebaseDisplayName(codebase);
-                    const active = selectedCodebase?.id === codebase.id;
-                    return (
-                      <button
-                        key={codebase.id}
-                        type="button"
-                        onClick={() => void onSelectCodebase(codebase)}
-                        className={`w-full rounded-xl border px-3 py-3 text-left transition ${
-                          active
-                            ? "border-blue-200 bg-blue-50/90 shadow-sm dark:border-blue-900/40 dark:bg-blue-900/10"
-                            : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#12141c] dark:hover:bg-[#171922]"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
-                              {codebaseLabel}
-                            </div>
-                            <div className="mt-1 truncate font-mono text-[11px] text-slate-500 dark:text-slate-400">
-                              {codebase.repoPath}
-                            </div>
-                          </div>
-                          {codebase.isDefault && (
-                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
-                              {t.workspace.defaultLabel}
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                          <span>{`${t.kanbanModals.branch} ${codebase.branch ?? "—"}`}</span>
-                          <span>{`${t.kanbanModals.sourceType} ${codebase.sourceType ?? "local"}`}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </aside>
-
-          <section className="min-h-0 overflow-y-auto pr-1">
-            {!selectedCodebase ? (
-              <div className="flex h-full min-h-[360px] items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 px-6 text-center dark:border-slate-700 dark:bg-[#171922]">
-                <div className="max-w-sm space-y-2">
-                  <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                    {t.kanbanBoard.noReposLinked}
-                  </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                    {t.kanbanModals.selectRepositoryHint}
-                  </div>
-                </div>
-              </div>
-            ) : editingCodebase ? (
-              <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-[#12141c]">
-                <div>
-                  <label className="mb-2 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                    {t.kanbanModals.selectOrCloneRepo}
-                  </label>
+              <div className="mt-2 flex items-center gap-2">
+                <div className="min-w-0 flex-1 rounded-sm border border-desktop-border bg-desktop-bg-primary px-2.5 py-2">
                   <RepoPicker
-                    value={editRepoSelection}
-                    onChange={onRepoSelectionChange}
+                    value={addRepoSelection}
+                    onChange={setAddRepoSelection}
                     additionalRepos={codebases.map((codebase) => ({
                       name: getCodebaseDisplayName(codebase),
                       path: codebase.repoPath,
@@ -339,106 +234,227 @@ export function KanbanCodebaseModal({
                     }))}
                   />
                 </div>
-                {editError && (
-                  <div className="text-xs text-rose-600 dark:text-rose-400">{editError}</div>
-                )}
-                {recloneError && (
-                  <div className="text-xs text-rose-600 dark:text-rose-400">{recloneError}</div>
-                )}
-                {editSaving && (
-                  <div className="text-xs text-amber-600 dark:text-amber-400">{t.kanbanModals.updatingRepo}</div>
-                )}
+                <button
+                  type="button"
+                  onClick={() => void onAddRepository(addRepoSelection)}
+                  disabled={!addRepoSelection || addSaving}
+                  className={toolbarButtonClassName("primary", "h-9 shrink-0")}
+                >
+                  {addSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : null}
+                  <span>{addSaving ? t.kanbanModals.addingRepository : t.kanbanModals.addRepository}</span>
+                </button>
+              </div>
+              {addError ? (
+                <div className="mt-2 text-[11px] text-rose-500">{addError}</div>
+              ) : null}
+            </div>
 
-                {codebases.length > 1 && editRepoSelection && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/40 dark:bg-amber-900/10">
-                    <div className="flex items-start gap-2">
-                      <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"/>
-                      <div className="flex-1">
-                        <p className="text-xs text-amber-700 dark:text-amber-300">
-                          {`${codebases.length} ${t.kanbanModals.replaceAllHint}`}
-                        </p>
-                        <button
-                          onClick={() => setShowReplaceAllConfirm(true)}
-                          disabled={editSaving || replacingAll}
-                          className="mt-2 text-xs font-medium text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
-                        >
-                          {t.kanbanModals.replaceAllRepos}
-                        </button>
-                      </div>
+            {repoHealth && healthIssuesCount > 0 ? (
+              <div className="border-b border-desktop-border px-3 py-2.5">
+                <div className="flex items-start gap-2 rounded-sm border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+                  <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" />
+                  <div className="min-w-0">
+                    <div className="font-medium text-amber-100">{t.kanbanModals.workspaceHealthTitle}</div>
+                    <div className="mt-0.5 text-amber-200/80">
+                      {`${repoHealth.missingRepoTasks} ${t.kanban.missing} · ${repoHealth.cwdMismatchTasks} ${t.kanban.sessionMismatch}`}
                     </div>
                   </div>
-                )}
-
-                <div className="flex justify-end gap-2">
-                  <button
-                    onClick={handleCancelEditCodebase}
-                    disabled={editSaving || replacingAll}
-                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-[#191c28]"
-                  >
-                    {t.common.cancel}
-                  </button>
                 </div>
               </div>
-            ) : (
-              <div className="min-h-0 space-y-4 text-sm">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                  <SummaryCard label={t.kanbanModals.currentRepository} value={selectedCodebaseLabel ?? "—"} />
-                  <SummaryCard label={t.kanbanModals.path} value={selectedCodebase.repoPath} mono />
-                  <SummaryCard label={t.kanbanModals.branch} value={liveBranchInfo?.current ?? selectedCodebase.branch ?? "—"} />
-                  <SummaryCard label={t.kanbanModals.sourceType} value={selectedCodebase.sourceType ?? "local"} />
+            ) : null}
+
+            <div className="flex items-center justify-between border-b border-desktop-border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
+              <span>{t.kanbanBoard.repos}</span>
+              <span>{codebases.length}</span>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {sortedCodebases.length === 0 ? (
+                <div className="m-3 rounded-sm border border-dashed border-desktop-border px-3 py-4 text-[11px] text-desktop-text-secondary">
+                  {t.kanbanBoard.noReposLinked}
                 </div>
+              ) : (
+                sortedCodebases.map((codebase) => {
+                  const codebaseLabel = getCodebaseDisplayName(codebase);
+                  const active = selectedCodebase?.id === codebase.id;
+                  const sourceType = getCodebaseSourceType(codebase);
 
-                {selectedCodebase.sourceUrl && (
-                  <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-[#12141c]">
-                    <div className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      {t.kanbanModals.sourceUrl}
-                    </div>
-                    <a
-                      href={selectedCodebase.sourceUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block truncate text-xs text-amber-600 hover:underline dark:text-amber-400"
+                  return (
+                    <button
+                      key={codebase.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedWorktreeIds([]);
+                        void onSelectCodebase(codebase);
+                      }}
+                      className={`w-full border-l-2 px-3 py-2.5 text-left transition ${
+                        active
+                          ? "border-desktop-accent bg-desktop-bg-active"
+                          : "border-transparent hover:bg-desktop-bg-active/60"
+                      }`}
                     >
-                      {selectedCodebase.sourceUrl}
-                    </a>
-                  </div>
-                )}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[12px] font-medium text-desktop-text-primary">
+                            {codebaseLabel}
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-desktop-text-secondary">
+                            <span>{`${t.kanbanModals.branch} ${codebase.branch ?? "—"}`}</span>
+                            <span>{`${t.kanbanModals.sourceType} ${sourceType}`}</span>
+                          </div>
+                        </div>
+                        {codebase.isDefault ? (
+                          <span className="rounded-sm border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">
+                            {t.workspace.defaultLabel}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-1 truncate font-mono text-[10px] text-desktop-text-muted">
+                        {codebase.repoPath}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </aside>
 
-                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-[#171922]">
-                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      {t.kanbanModals.branches} ({sortedBranches.length})
-                    </div>
-                    <div className="text-[11px] text-slate-400 dark:text-slate-500">{t.kanbanModals.branchesHint}</div>
+          <section className="min-h-0 overflow-y-auto bg-desktop-bg-primary">
+            {!selectedCodebase ? (
+              <div className="flex h-full min-h-[320px] items-center justify-center px-6 text-center">
+                <div className="max-w-sm rounded-sm border border-dashed border-desktop-border px-6 py-8">
+                  <div className="text-[13px] font-semibold text-desktop-text-primary">
+                    {t.kanbanBoard.noReposLinked}
                   </div>
-                  {branchActionError && (
-                    <div className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-600 dark:border-rose-900/40 dark:bg-rose-900/10 dark:text-rose-300">
+                  <div className="mt-2 text-[11px] text-desktop-text-secondary">
+                    {t.kanbanModals.selectRepositoryHint}
+                  </div>
+                </div>
+              </div>
+            ) : editingCodebase ? (
+              <div className="space-y-3 p-3">
+                <InspectorSection
+                  title={t.common.edit}
+                  hint={t.kanbanModals.selectOrCloneRepo}
+                >
+                  <div className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-3 py-3">
+                    <RepoPicker
+                      value={editRepoSelection}
+                      onChange={onRepoSelectionChange}
+                      additionalRepos={codebases.map((codebase) => ({
+                        name: getCodebaseDisplayName(codebase),
+                        path: codebase.repoPath,
+                        branch: codebase.branch,
+                      }))}
+                    />
+                  </div>
+                  {editError ? (
+                    <div className="text-[11px] text-rose-500">{editError}</div>
+                  ) : null}
+                  {recloneError ? (
+                    <div className="text-[11px] text-rose-500">{recloneError}</div>
+                  ) : null}
+                  {editSaving ? (
+                    <div className="text-[11px] text-amber-400">{t.kanbanModals.updatingRepo}</div>
+                  ) : null}
+
+                  {codebases.length > 1 && editRepoSelection ? (
+                    <div className="rounded-sm border border-amber-500/30 bg-amber-500/10 px-3 py-3">
+                      <div className="flex items-start gap-2">
+                        <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"/>
+                        <div className="flex-1">
+                          <p className="text-[11px] text-amber-100/90">
+                            {`${codebases.length} ${t.kanbanModals.replaceAllHint}`}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setShowReplaceAllConfirm(true)}
+                            disabled={editSaving || replacingAll}
+                            className="mt-2 inline-flex items-center rounded-sm border border-amber-500/30 px-2 py-1 text-[11px] font-medium text-amber-200 transition hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {t.kanbanModals.replaceAllRepos}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleCancelEditCodebase}
+                      disabled={editSaving || replacingAll}
+                      className={toolbarButtonClassName("default")}
+                    >
+                      {t.common.cancel}
+                    </button>
+                  </div>
+                </InspectorSection>
+              </div>
+            ) : (
+              <div className="space-y-3 p-3 text-sm">
+                <InspectorSection
+                  title={selectedCodebaseLabel ?? t.kanbanModals.currentRepository}
+                  hint={selectedCodebase.repoPath}
+                >
+                  <div className="grid gap-px overflow-hidden rounded-sm border border-desktop-border bg-desktop-border lg:grid-cols-2 xl:grid-cols-4">
+                    <InfoField label={t.kanbanModals.currentRepository} value={selectedCodebaseLabel ?? "—"} />
+                    <InfoField label={t.kanbanModals.path} value={selectedCodebase.repoPath} mono />
+                    <InfoField label={t.kanbanModals.branch} value={liveBranchInfo?.current ?? selectedCodebase.branch ?? "—"} />
+                    <InfoField label={t.kanbanModals.sourceType} value={selectedCodebaseSourceType} />
+                  </div>
+
+                  {selectedCodebase.sourceUrl ? (
+                    <div className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-3 py-3">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
+                        {t.kanbanModals.sourceUrl}
+                      </div>
+                      <a
+                        href={selectedCodebase.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-1 block truncate font-mono text-[11px] text-desktop-accent hover:underline"
+                      >
+                        {selectedCodebase.sourceUrl}
+                      </a>
+                    </div>
+                  ) : null}
+                </InspectorSection>
+
+                <InspectorSection
+                  title={`${t.kanbanModals.branches} (${sortedBranches.length})`}
+                  hint={t.kanbanModals.branchesHint}
+                >
+                  {branchActionError ? (
+                    <div className="rounded-sm border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-300">
                       {branchActionError}
                     </div>
-                  )}
+                  ) : null}
 
                   {sortedBranches.length === 0 ? (
-                    <div className="text-xs text-slate-400 dark:text-slate-500">{t.kanbanModals.noBranches}</div>
+                    <div className="rounded-sm border border-dashed border-desktop-border px-3 py-4 text-[11px] text-desktop-text-secondary">
+                      {t.kanbanModals.noBranches}
+                    </div>
                   ) : (
-                    <div className="space-y-3">
-                      {issueBranches.length > 0 && (
+                    <div className="space-y-3 rounded-sm border border-desktop-border bg-desktop-bg-primary px-3 py-3">
+                      {issueBranches.length > 0 ? (
                         <div className="space-y-2">
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                            <div className="text-[11px] font-medium text-desktop-text-secondary">
                               {t.kanbanModals.issueBranches.replace("{count}", String(issueBranches.length))}
                             </div>
-                            {removableIssueBranches.length > 0 && (
+                            {removableIssueBranches.length > 0 ? (
                               <button
                                 type="button"
                                 onClick={() => void handleDeleteIssueBranches(removableIssueBranches)}
                                 disabled={removableIssueBranches.some((branch) => deletingBranchSet.has(branch))}
-                                className="rounded-lg border border-rose-200 px-2.5 py-1 text-[10px] font-medium text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/10"
+                                className="rounded-sm border border-rose-500/30 px-2 py-1 text-[10px] font-medium text-rose-300 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 {removableIssueBranches.some((branch) => deletingBranchSet.has(branch))
                                   ? t.kanbanModals.removing
                                   : t.kanbanModals.clearIssueBranches.replace("{count}", String(removableIssueBranches.length))}
                               </button>
-                            )}
+                            ) : null}
                           </div>
                           <div className="flex flex-wrap gap-2">
                             {issueBranches.map((branch) => (
@@ -459,11 +475,11 @@ export function KanbanCodebaseModal({
                             ))}
                           </div>
                         </div>
-                      )}
+                      ) : null}
 
-                      {otherBranches.length > 0 && (
+                      {otherBranches.length > 0 ? (
                         <div className="space-y-2">
-                          <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                          <div className="text-[11px] font-medium text-desktop-text-secondary">
                             {t.kanbanModals.otherBranches.replace("{count}", String(otherBranches.length))}
                           </div>
                           <div className="flex flex-wrap gap-2">
@@ -478,31 +494,28 @@ export function KanbanCodebaseModal({
                             ))}
                           </div>
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   )}
-                </div>
+                </InspectorSection>
 
-                <div>
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <div className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      {t.kanbanModals.worktrees} ({codebaseWorktrees.length})
-                    </div>
-                    <div className="text-[11px] text-slate-400 dark:text-slate-500">{t.kanbanModals.worktreeHint}</div>
-                  </div>
-                  {worktreeActionError && (
-                    <div className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-600 dark:border-rose-900/40 dark:bg-rose-900/10 dark:text-rose-300">
+                <InspectorSection
+                  title={`${t.kanbanModals.worktrees} (${codebaseWorktrees.length})`}
+                  hint={t.kanbanModals.worktreeHint}
+                >
+                  {worktreeActionError ? (
+                    <div className="rounded-sm border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-300">
                       {worktreeActionError}
                     </div>
-                  )}
+                  ) : null}
                   {codebaseWorktrees.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                    <div className="rounded-sm border border-dashed border-desktop-border px-3 py-4 text-[11px] text-desktop-text-secondary">
                       {t.kanbanModals.noWorktrees}
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 dark:border-slate-800 dark:bg-[#171922]">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-desktop-border bg-desktop-bg-primary px-3 py-2">
+                        <div className="text-[11px] text-desktop-text-secondary">
                           {selectedWorktrees.length > 0
                             ? t.kanbanModals.selectedWorktrees.replace("{count}", String(selectedWorktrees.length))
                             : t.kanbanModals.selectWorktreesHint}
@@ -511,7 +524,7 @@ export function KanbanCodebaseModal({
                           <button
                             type="button"
                             onClick={() => setSelectedWorktreeIds(allWorktreesSelected ? [] : sortedWorktrees.map((worktree) => worktree.id))}
-                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-white dark:border-slate-700 dark:text-slate-300 dark:hover:bg-[#191c28]"
+                            className={toolbarButtonClassName("default")}
                           >
                             {allWorktreesSelected ? t.kanbanModals.clearSelection : t.tasks.selectAll}
                           </button>
@@ -519,7 +532,7 @@ export function KanbanCodebaseModal({
                             type="button"
                             onClick={() => void handleDeleteCodebaseWorktrees(selectedWorktrees)}
                             disabled={selectedWorktrees.length === 0 || bulkActionBusy}
-                            className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/10"
+                            className={toolbarButtonClassName("danger")}
                           >
                             {bulkActionBusy
                               ? t.kanbanModals.removing
@@ -530,8 +543,9 @@ export function KanbanCodebaseModal({
                       {sortedWorktrees.map((worktree) => {
                         const linkedTasks = localTasks.filter((task) => task.worktreeId === worktree.id);
                         const worktreeDeleting = deletingWorktreeIdSet.has(worktree.id);
+
                         return (
-                          <div key={worktree.id} className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-[#12141c]">
+                          <div key={worktree.id} className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-3 py-3">
                             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                               <div className="flex min-w-0 flex-1 gap-3">
                                 <label className="pt-0.5">
@@ -548,45 +562,42 @@ export function KanbanCodebaseModal({
                                         return current.filter((id) => id !== worktree.id);
                                       });
                                     }}
-                                    className="h-4 w-4 rounded border-slate-300 text-amber-500 focus:ring-amber-500 dark:border-slate-600 dark:bg-[#0f1117]"
+                                    className="h-4 w-4 rounded border-desktop-border bg-desktop-bg-secondary text-desktop-accent focus:ring-desktop-accent"
                                   />
                                 </label>
                                 <div className="min-w-0 flex-1 space-y-2">
                                   <div className="flex flex-wrap items-center gap-2">
-                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${worktree.status === "active"
-                                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
-                                        : worktree.status === "creating"
-                                          ? "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
-                                          : "bg-rose-100 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300"
-                                      }`}>{worktree.status}</span>
-                                    <span className="font-mono text-xs text-slate-700 dark:text-slate-300">{worktree.branch}</span>
-                                    <span className="text-[11px] text-slate-400 dark:text-slate-500">{t.kanban.baseLabel} {worktree.baseBranch}</span>
-                                    {linkedTasks.length > 0 && (
-                                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-700 dark:bg-sky-900/20 dark:text-sky-300">
+                                    <span className={`rounded-sm px-1.5 py-0.5 text-[10px] font-medium ${getWorktreeStatusTone(worktree.status)}`}>
+                                      {worktree.status}
+                                    </span>
+                                    <span className="font-mono text-[11px] text-desktop-text-primary">{worktree.branch}</span>
+                                    <span className="text-[10px] text-desktop-text-secondary">{t.kanban.baseLabel} {worktree.baseBranch}</span>
+                                    {linkedTasks.length > 0 ? (
+                                      <span className="rounded-sm border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-300">
                                         {linkedTasks.length} {t.kanbanModals.linkedTasks}{linkedTasks.length > 1 ? "s" : ""}
                                       </span>
-                                    )}
+                                    ) : null}
                                   </div>
-                                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-desktop-text-secondary">
                                     <span>{t.kanbanModals.createdAtLabel} <time dateTime={worktree.createdAt}>{formatTimestamp(worktree.createdAt)}</time></span>
                                     <span>{t.kanbanModals.updatedAtLabel} <time dateTime={worktree.updatedAt}>{formatTimestamp(worktree.updatedAt)}</time></span>
                                     {worktree.label ? <span>{t.kanbanModals.labelLabel} {worktree.label}</span> : null}
                                   </div>
-                                  <div className="break-all font-mono text-xs text-slate-400 dark:text-slate-500">{worktree.worktreePath}</div>
-                                  {linkedTasks.length > 0 && (
+                                  <div className="break-all font-mono text-[10px] text-desktop-text-muted">{worktree.worktreePath}</div>
+                                  {linkedTasks.length > 0 ? (
                                     <div className="flex flex-wrap gap-1.5">
                                       {linkedTasks.slice(0, 4).map((task) => (
-                                        <span key={task.id} className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                                        <span key={task.id} className="rounded-sm border border-desktop-border px-2 py-0.5 text-[10px] text-desktop-text-secondary">
                                           {task.title}
                                         </span>
                                       ))}
-                                      {linkedTasks.length > 4 && (
-                                        <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                                      {linkedTasks.length > 4 ? (
+                                        <span className="rounded-sm border border-desktop-border px-2 py-0.5 text-[10px] text-desktop-text-secondary">
                                           +{linkedTasks.length - 4} {t.kanbanModals.more}
                                         </span>
-                                      )}
+                                      ) : null}
                                     </div>
-                                  )}
+                                  ) : null}
                                 </div>
                               </div>
                               <div className="flex shrink-0 items-center gap-2 self-end lg:self-start">
@@ -594,7 +605,7 @@ export function KanbanCodebaseModal({
                                   type="button"
                                   onClick={() => void handleDeleteCodebaseWorktrees([worktree])}
                                   disabled={worktreeDeleting || bulkActionBusy}
-                                  className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/10"
+                                  className={toolbarButtonClassName("danger")}
                                 >
                                   {worktreeDeleting ? t.kanbanModals.removing : t.common.remove}
                                 </button>
@@ -605,31 +616,39 @@ export function KanbanCodebaseModal({
                       })}
                     </div>
                   )}
-                </div>
+                </InspectorSection>
 
-                {selectedCodebase.sourceType === "github" && selectedCodebase.sourceUrl && (
-                  <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-[#12141c]">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-xs font-medium text-slate-700 dark:text-slate-300">{t.kanbanModals.recloneRepo}</div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">{t.kanbanModals.recloneHint}</div>
-                      </div>
+                {selectedCodebaseSourceType === "github" && selectedCodebase.sourceUrl ? (
+                  <InspectorSection
+                    title={t.kanbanModals.recloneRepo}
+                    hint={t.kanbanModals.recloneHint}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-desktop-border bg-desktop-bg-primary px-3 py-3">
+                      <a
+                        href={selectedCodebase.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="min-w-0 flex-1 truncate font-mono text-[11px] text-desktop-accent hover:underline"
+                      >
+                        {selectedCodebase.sourceUrl}
+                      </a>
                       <button
+                        type="button"
                         onClick={() => void handleReclone()}
                         disabled={recloning}
-                        className="rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-600 disabled:opacity-50"
+                        className={toolbarButtonClassName("primary")}
                       >
                         {recloning ? t.kanbanModals.cloning : t.kanbanModals.reclone}
                       </button>
                     </div>
-                    {recloneError && (
-                      <div className="mt-2 text-xs text-rose-600 dark:text-rose-400">{recloneError}</div>
-                    )}
-                    {recloneSuccess && (
-                      <div className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">{recloneSuccess}</div>
-                    )}
-                  </div>
-                )}
+                    {recloneError ? (
+                      <div className="text-[11px] text-rose-500">{recloneError}</div>
+                    ) : null}
+                    {recloneSuccess ? (
+                      <div className="text-[11px] text-emerald-400">{recloneSuccess}</div>
+                    ) : null}
+                  </InspectorSection>
+                ) : null}
               </div>
             )}
           </section>
@@ -639,7 +658,56 @@ export function KanbanCodebaseModal({
   );
 }
 
-function SummaryCard({
+function CompactStat({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  tone?: "neutral" | "warning";
+}) {
+  const toneClassName = tone === "warning"
+    ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+    : "border-desktop-border bg-desktop-bg-secondary text-desktop-text-secondary";
+
+  return (
+    <div className={`rounded-sm border px-2.5 py-1.5 ${toneClassName}`}>
+      <div className="text-[10px] font-semibold uppercase tracking-[0.12em]">
+        {label}
+      </div>
+      <div className="mt-1 truncate text-[12px] font-semibold text-desktop-text-primary">
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function InspectorSection({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint?: string | null;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-sm border border-desktop-border bg-desktop-bg-secondary/50">
+      <div className="border-b border-desktop-border px-3 py-2.5">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
+          {title}
+        </div>
+        {hint ? (
+          <div className="mt-1 text-[11px] text-desktop-text-secondary">{hint}</div>
+        ) : null}
+      </div>
+      <div className="space-y-3 p-3">{children}</div>
+    </section>
+  );
+}
+
+function InfoField({
   label,
   value,
   mono = false,
@@ -649,11 +717,11 @@ function SummaryCard({
   mono?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-[#12141c]">
-      <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+    <div className="bg-desktop-bg-primary px-3 py-3">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
         {label}
       </div>
-      <div className={`mt-2 truncate text-sm font-semibold text-slate-900 dark:text-slate-100 ${mono ? "font-mono text-xs" : ""}`}>
+      <div className={`mt-1 break-all text-[12px] text-desktop-text-primary ${mono ? "font-mono" : "font-medium"}`}>
         {value}
       </div>
     </div>
@@ -669,12 +737,41 @@ function getCodebaseDisplayName(codebase: CodebaseData): string {
   return codebase.label ?? codebase.repoPath.split("/").pop() ?? codebase.repoPath;
 }
 
-function isGitHubCodebase(codebase: CodebaseData): boolean {
-  return codebase.sourceType === "github" || Boolean(codebase.sourceUrl?.includes("github.com"));
+function getCodebaseSourceType(codebase: CodebaseData): "local" | "github" {
+  if (codebase.sourceType === "github") return "github";
+  if (codebase.sourceUrl?.includes("github.com")) return "github";
+  if (looksLikeGitHubRepoLabel(codebase.label)) return "github";
+  return "local";
 }
 
 function isIssueBranch(branch: string): boolean {
   return branch.startsWith("issue/");
+}
+
+function looksLikeGitHubRepoLabel(value?: string): boolean {
+  const normalized = value?.trim();
+  return normalized ? /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(normalized) : false;
+}
+
+function toolbarButtonClassName(
+  tone: "default" | "primary" | "danger",
+  extraClassName = "",
+): string {
+  const baseClassName = "inline-flex items-center gap-2 rounded-sm border px-2.5 py-1.5 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-50";
+
+  const toneClassName = tone === "primary"
+    ? "border-desktop-accent bg-desktop-accent text-white hover:brightness-110"
+    : tone === "danger"
+      ? "border-rose-500/30 bg-rose-500/10 text-rose-300 hover:bg-rose-500/15"
+      : "border-desktop-border bg-desktop-bg-primary text-desktop-text-secondary hover:bg-desktop-bg-active hover:text-desktop-text-primary";
+
+  return [baseClassName, toneClassName, extraClassName].filter(Boolean).join(" ");
+}
+
+function getWorktreeStatusTone(status: WorktreeInfo["status"]): string {
+  if (status === "active") return "bg-emerald-500/15 text-emerald-300";
+  if (status === "creating") return "bg-amber-500/15 text-amber-300";
+  return "bg-rose-500/15 text-rose-300";
 }
 
 function compareBranches(
