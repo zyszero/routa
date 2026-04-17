@@ -12,10 +12,7 @@ import type {
   EntrixRunTier,
 } from "./entrix-run-types";
 
-type EntrixCommandInvocation = {
-  command: string;
-  args: string[];
-};
+type EntrixCommandStrategy = "entrix_binary" | "cargo_runner";
 
 type EntrixCommandResult = {
   command: string;
@@ -61,14 +58,31 @@ function trimSnippet(value: string | undefined, maxLength = 240): string | null 
 }
 
 function buildEntrixCommandCandidates(
+  _tier: EntrixRunTier,
+  _scope: EntrixRunScope,
+): EntrixCommandStrategy[] {
+  return [
+    "entrix_binary",
+    "cargo_runner",
+  ];
+}
+
+function buildEntrixArgs(tier: EntrixRunTier, scope: EntrixRunScope): string[] {
+  return ["run", "--tier", tier, "--scope", scope, "--json"];
+}
+
+function describeEntrixCommand(
+  strategy: EntrixCommandStrategy,
   tier: EntrixRunTier,
   scope: EntrixRunScope,
-): EntrixCommandInvocation[] {
-  const entrixArgs = ["run", "--tier", tier, "--scope", scope, "--json"];
-  return [
-    { command: "entrix", args: entrixArgs },
-    { command: "cargo", args: ["run", "-q", "-p", "entrix", "--", ...entrixArgs] },
-  ];
+): Pick<EntrixCommandResult, "command" | "args"> {
+  const entrixArgs = buildEntrixArgs(tier, scope);
+  switch (strategy) {
+    case "entrix_binary":
+      return { command: "entrix", args: entrixArgs };
+    case "cargo_runner":
+      return { command: "cargo", args: ["run", "-q", "-p", "entrix", "--", ...entrixArgs] };
+  }
 }
 
 function extractJsonOutput(raw: string): string {
@@ -192,17 +206,28 @@ export function summarizeEntrixReport(report: unknown): EntrixRunSummary {
 }
 
 async function runEntrixCommand(
-  invocation: EntrixCommandInvocation,
+  strategy: EntrixCommandStrategy,
+  tier: EntrixRunTier,
+  scope: EntrixRunScope,
   repoRoot: string,
 ): Promise<EntrixCommandResult> {
   const startedAt = Date.now();
+  const invocation = describeEntrixCommand(strategy, tier, scope);
 
   return await new Promise<EntrixCommandResult>((resolve) => {
-    const child = spawn(invocation.command, invocation.args, {
-      cwd: repoRoot,
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: 300_000,
-    });
+    // Keep child-process execution on a strict allowlist so callers cannot
+    // influence the spawned binary or shell behavior.
+    const child = strategy === "entrix_binary"
+      ? spawn("entrix", buildEntrixArgs(tier, scope), {
+        cwd: repoRoot,
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 300_000,
+      })
+      : spawn("cargo", ["run", "-q", "-p", "entrix", "--", ...buildEntrixArgs(tier, scope)], {
+        cwd: repoRoot,
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 300_000,
+      });
 
     let stdout = "";
     let stderr = "";
@@ -249,7 +274,7 @@ export async function executeEntrixRun(params: {
   let lastError = "Entrix command did not start";
 
   for (const candidate of candidates) {
-    const result = await runEntrixCommand(candidate, params.repoRoot);
+    const result = await runEntrixCommand(candidate, params.tier, params.scope, params.repoRoot);
     const missingBinary = result.error?.includes("ENOENT") ?? false;
     if (missingBinary) {
       lastError = result.error ?? lastError;
@@ -276,7 +301,7 @@ export async function executeEntrixRun(params: {
       const details = result.stderr.trim() || result.stdout.trim() || result.error;
       throw new Error(
         [
-          `Entrix run failed for ${candidate.command}`,
+          `Entrix run failed for ${result.command}`,
           error instanceof Error ? error.message : String(error),
           details ? `details: ${details}` : null,
         ].filter(Boolean).join(" | "),
