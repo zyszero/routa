@@ -13,6 +13,7 @@ import {
 import { useTranslation } from "@/i18n";
 
 import type {
+  AggregatedSelectionSession,
   ApiDetail,
   FeatureDetail,
 } from "./types";
@@ -20,16 +21,6 @@ import {
   type ExplorerSurfaceItem,
   getHttpMethodBadgeClass,
 } from "./surface-navigation";
-
-export type AggregatedSelectionSession = {
-  provider: string;
-  sessionId: string;
-  updatedAt: string;
-  promptSnippet: string;
-  promptHistory: string[];
-  resumeCommand?: string;
-  changedFiles: string[];
-};
 
 function formatShortDate(iso: string): string {
   if (!iso || iso === "-") return "-";
@@ -148,6 +139,9 @@ export function ContextPanel({
   selectedScopeSessions,
   selectedSurface,
   selectedSurfaceFeatureNames,
+  onStartSessionAnalysis,
+  isStartingSessionAnalysis = false,
+  sessionAnalysisError,
   t,
 }: {
   featureDetail: FeatureDetail | null;
@@ -155,6 +149,9 @@ export function ContextPanel({
   selectedScopeSessions: AggregatedSelectionSession[];
   selectedSurface: ExplorerSurfaceItem | null;
   selectedSurfaceFeatureNames: string[];
+  onStartSessionAnalysis?: () => void;
+  isStartingSessionAnalysis?: boolean;
+  sessionAnalysisError?: string | null;
   t: ReturnType<typeof useTranslation>["t"];
 }) {
   const [copiedResumeCommand, setCopiedResumeCommand] = useState("");
@@ -168,6 +165,10 @@ export function ContextPanel({
   const selectedSurfaceKindLabel = selectedSurface
     ? describeSurfaceKind(selectedSurface.kind, t)
     : "";
+  const canStartSessionAnalysis = selectedFileCount > 0
+    && selectedScopeSessions.length > 0
+    && typeof onStartSessionAnalysis === "function"
+    && !isStartingSessionAnalysis;
 
   return (
     <div className="space-y-2">
@@ -366,6 +367,42 @@ export function ContextPanel({
           </div>
         </ContextSection>
       ) : null}
+
+      <ContextSection title={t.featureExplorer.sessionAnalysisTitle}>
+        <div className="space-y-2">
+          <div className="text-[11px] leading-5 text-desktop-text-secondary">
+            {canStartSessionAnalysis || isStartingSessionAnalysis
+              ? t.featureExplorer.sessionAnalysisDescription
+              : t.featureExplorer.sessionAnalysisEmpty}
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            <InlineMetricPill label={t.featureExplorer.filesLabel} value={String(selectedFileCount)} />
+            <InlineMetricPill label={t.featureExplorer.sessionsLabel} value={String(selectedScopeSessions.length)} />
+          </div>
+
+          {sessionAnalysisError ? (
+            <div className="rounded-sm border border-red-400/40 bg-red-500/8 px-2 py-1.5 text-[11px] text-red-500">
+              {sessionAnalysisError}
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={() => onStartSessionAnalysis?.()}
+            disabled={!canStartSessionAnalysis}
+            className={`inline-flex w-full items-center justify-center rounded-sm border px-2 py-1.5 text-[11px] font-medium transition-colors ${
+              canStartSessionAnalysis
+                ? "border-desktop-accent bg-desktop-bg-active text-desktop-text-primary hover:bg-desktop-bg-primary"
+                : "cursor-not-allowed border-desktop-border bg-desktop-bg-primary/40 text-desktop-text-secondary/60"
+            }`}
+          >
+            {isStartingSessionAnalysis
+              ? t.featureExplorer.sessionAnalysisStarting
+              : t.featureExplorer.sessionAnalysisAction}
+          </button>
+        </div>
+      </ContextSection>
     </div>
   );
 }

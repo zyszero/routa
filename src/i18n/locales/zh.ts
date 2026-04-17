@@ -258,6 +258,7 @@ const zh: TranslationDictionary = {
     groupWorkflow: "Kanban Automation",
     groupGovernance: "Governance & Settings",
     featureMetrics: "特性指标",
+    workViewLabel: "工作视角",
     sectionView: "分组",
     browserUrlView: "Browser URL",
     pathView: "路径",
@@ -290,6 +291,12 @@ const zh: TranslationDictionary = {
     noPagesDeclared: "未声明页面",
     noApisDeclared: "未声明 API",
     repository: "代码仓库",
+    sessionAnalysisTitle: "会话分析",
+    sessionAnalysisDescription: "启动一个只读 specialist，复盘当前选中文件关联的会话，并给出更快的后续输入建议。",
+    sessionAnalysisEmpty: "请先选中至少一个带会话证据的文件，再启动分析会话。",
+    sessionAnalysisAction: "分析选中会话",
+    sessionAnalysisStarting: "正在启动分析…",
+    sessionAnalysisFailed: "启动分析会话失败",
   },
 
   settings: {

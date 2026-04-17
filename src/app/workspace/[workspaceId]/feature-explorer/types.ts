@@ -64,6 +64,17 @@ export interface FileSignal {
   promptHistory: string[];
 }
 
+export interface AggregatedSelectionSession {
+  provider: string;
+  sessionId: string;
+  updatedAt: string;
+  promptSnippet: string;
+  promptHistory: string[];
+  toolNames: string[];
+  resumeCommand?: string;
+  changedFiles: string[];
+}
+
 export interface FileTreeNode {
   id: string;
   name: string;

@@ -259,6 +259,7 @@ const en: TranslationDictionary = {
     groupWorkflow: "Kanban Automation",
     groupGovernance: "Governance & Settings",
     featureMetrics: "Feature metrics",
+    workViewLabel: "Work View",
     sectionView: "Sections",
     browserUrlView: "Browser URL",
     pathView: "Path",
@@ -291,6 +292,12 @@ const en: TranslationDictionary = {
     noPagesDeclared: "No pages declared",
     noApisDeclared: "No APIs declared",
     repository: "Repository",
+    sessionAnalysisTitle: "Session analysis",
+    sessionAnalysisDescription: "Launch a read-only specialist to review the selected file sessions and suggest faster future prompts.",
+    sessionAnalysisEmpty: "Select at least one file with session evidence to start an analysis session.",
+    sessionAnalysisAction: "Analyze selected sessions",
+    sessionAnalysisStarting: "Starting analysis…",
+    sessionAnalysisFailed: "Failed to start the analysis session",
   },
 
   settings: {

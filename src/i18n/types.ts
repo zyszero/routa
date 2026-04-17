@@ -265,6 +265,7 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     groupWorkflow: string;
     groupGovernance: string;
     featureMetrics: string;
+    workViewLabel: string;
     sectionView: string;
     browserUrlView: string;
     pathView: string;
@@ -297,6 +298,12 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     noPagesDeclared: string;
     noApisDeclared: string;
     repository: string;
+    sessionAnalysisTitle: string;
+    sessionAnalysisDescription: string;
+    sessionAnalysisEmpty: string;
+    sessionAnalysisAction: string;
+    sessionAnalysisStarting: string;
+    sessionAnalysisFailed: string;
   };
 
   // Settings panel

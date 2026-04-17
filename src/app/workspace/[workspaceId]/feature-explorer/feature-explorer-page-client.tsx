@@ -20,16 +20,23 @@ import { RepoPicker, type RepoSelection } from "@/client/components/repo-picker"
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
 import { useCodebases, useWorkspaces } from "@/client/hooks/use-workspaces";
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
+import { storePendingPrompt } from "@/client/utils/pending-prompt";
 import { loadRepoSelection, saveRepoSelection } from "@/client/utils/repo-selection-storage";
 import { useTranslation } from "@/i18n";
 
-import type { FeatureDetail, FeatureSurfacePage, FileTreeNode, InspectorTab } from "./types";
+import type {
+  AggregatedSelectionSession,
+  FeatureDetail,
+  FeatureSurfacePage,
+  FileTreeNode,
+  InspectorTab,
+} from "./types";
 import {
   ApiPanel,
-  type AggregatedSelectionSession,
   ContextPanel,
   ScreenshotPanel,
 } from "./feature-explorer-inspector-panels";
+import { buildSessionAnalysisPrompt } from "./session-analysis";
 import {
   type ExplorerSection,
   type ExplorerSurfaceItem,
@@ -181,13 +188,32 @@ function replaceFeatureExplorerUrlState(nextState: FeatureExplorerUrlState): voi
   window.history.replaceState(window.history.state, "", nextUrl);
 }
 
+function buildSessionAnalysisSessionName(
+  locale: string,
+  featureDetail: FeatureDetail | null,
+  selectedFilePaths: string[],
+): string {
+  const firstFile = selectedFilePaths[0]?.split("/").pop() ?? "";
+  const focus = firstFile || featureDetail?.name || "feature";
+
+  if (selectedFilePaths.length > 1) {
+    return locale === "zh"
+      ? `文件会话分析 · ${focus} +${selectedFilePaths.length - 1}`
+      : `File session analysis · ${focus} +${selectedFilePaths.length - 1}`;
+  }
+
+  return locale === "zh"
+    ? `文件会话分析 · ${focus}`
+    : `File session analysis · ${focus}`;
+}
+
 export function FeatureExplorerPageClient({
   workspaceId,
 }: {
   workspaceId: string;
 }) {
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const workspacesHook = useWorkspaces();
   const { codebases } = useCodebases(workspaceId);
 
@@ -249,6 +275,8 @@ export function FeatureExplorerPageClient({
   const [hasResolvedInitialUrlSelection, setHasResolvedInitialUrlSelection] = useState(
     initialUrlState.featureId === "",
   );
+  const [isStartingSessionAnalysis, setIsStartingSessionAnalysis] = useState(false);
+  const [sessionAnalysisError, setSessionAnalysisError] = useState<string | null>(null);
 
   // Derive effective feature ID: user-selected or auto-initialized from hook
   const effectiveFeatureId = featureId || initialFeatureId;
@@ -313,18 +341,69 @@ export function FeatureExplorerPageClient({
     }
     return map;
   }, [featureMetadata, surfaceIndex.nextjsApis, surfaceIndex.rustApis]);
+  const browserViewFeatureIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const feature of features) {
+      if (feature.pageCount > 0) {
+        ids.add(feature.id);
+      }
+    }
+    for (const metadataItem of featureMetadata) {
+      if ((metadataItem.pages?.length ?? 0) > 0) {
+        ids.add(metadataItem.id);
+      }
+    }
+    for (const page of surfaceIndex.pages) {
+      for (const featureId of dedupeFeatureIds(pageFeatureMap.get(page.route) ?? [])) {
+        ids.add(featureId);
+      }
+    }
+    return ids;
+  }, [featureMetadata, features, pageFeatureMap, surfaceIndex.pages]);
+  const nextjsApiFeatureIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const api of surfaceIndex.nextjsApis) {
+      const lookupKey = buildApiLookupKey(api.method, api.path);
+      for (const featureId of dedupeFeatureIds(apiFeatureMap.get(lookupKey) ?? [])) {
+        ids.add(featureId);
+      }
+    }
+    return ids;
+  }, [apiFeatureMap, surfaceIndex.nextjsApis]);
+  const rustApiFeatureIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const api of surfaceIndex.rustApis) {
+      const lookupKey = buildApiLookupKey(api.method, api.path);
+      for (const featureId of dedupeFeatureIds(apiFeatureMap.get(lookupKey) ?? [])) {
+        ids.add(featureId);
+      }
+    }
+    return ids;
+  }, [apiFeatureMap, surfaceIndex.rustApis]);
 
   const featureItems = useMemo<ExplorerSurfaceItem[]>(
     () => features
-      .filter((feature) => matchesQuery(query, [feature.name, feature.summary, feature.id]))
-      .sort((left, right) => {
-        if (right.sessionCount !== left.sessionCount) {
-          return right.sessionCount - left.sessionCount;
+      .filter((feature) => {
+        if (!matchesQuery(query, [feature.name, feature.summary, feature.id])) {
+          return false;
         }
-        if (right.changedFiles !== left.changedFiles) {
-          return right.changedFiles - left.changedFiles;
+
+        if (feature.id === effectiveFeatureId) {
+          return true;
         }
-        return left.name.localeCompare(right.name);
+
+        switch (surfaceNavigationView) {
+          case "sections":
+            return true;
+          case "browser-url":
+            return browserViewFeatureIds.has(feature.id);
+          case "nextjs-api":
+            return nextjsApiFeatureIds.has(feature.id);
+          case "rust-api":
+            return rustApiFeatureIds.has(feature.id);
+          case "path":
+            return true;
+        }
       })
       .map((feature): ExplorerSurfaceItem => {
         const metadataItem = featureMetadataById.get(feature.id);
@@ -353,7 +432,19 @@ export function FeatureExplorerPageClient({
           selectable: true,
         };
       }),
-    [capabilityGroups, featureMetadataById, features, query, t.featureExplorer.filesLabel, t.featureExplorer.sessionsLabel],
+    [
+      browserViewFeatureIds,
+      capabilityGroups,
+      effectiveFeatureId,
+      featureMetadataById,
+      features,
+      nextjsApiFeatureIds,
+      query,
+      rustApiFeatureIds,
+      surfaceNavigationView,
+      t.featureExplorer.filesLabel,
+      t.featureExplorer.sessionsLabel,
+    ],
   );
   const pageItems = useMemo<ExplorerSurfaceItem[]>(
     () => surfaceIndex.pages
@@ -605,6 +696,15 @@ export function FeatureExplorerPageClient({
     [resolvedFeatureDetail, surfaceOnlySelection],
   );
   const flatMap = useMemo(() => flattenFiles(fileTree), [fileTree]);
+  const selectedFilePaths = useMemo(
+    () => [...new Set(
+      selectedFileIds
+        .map((fileId) => flatMap[fileId])
+        .filter((node): node is FileTreeNode => Boolean(node && node.kind === "file"))
+        .map((node) => node.path),
+    )].sort((left, right) => left.localeCompare(right)),
+    [flatMap, selectedFileIds],
+  );
   const treeNodeStats = useMemo(() => buildTreeNodeStats(fileTree, fileStats), [fileTree, fileStats]);
   const selectableFileIdsByNode = useMemo(() => buildSelectableFileIdsByNode(fileTree), [fileTree]);
 
@@ -661,6 +761,11 @@ export function FeatureExplorerPageClient({
               existing.promptHistory.push(prompt);
             }
           }
+          for (const toolName of session.toolNames ?? []) {
+            if (!existing.toolNames.includes(toolName)) {
+              existing.toolNames.push(toolName);
+            }
+          }
           for (const changedFile of session.changedFiles ?? [fileNode.path]) {
             if (!existing.changedFiles.includes(changedFile)) {
               existing.changedFiles.push(changedFile);
@@ -675,6 +780,7 @@ export function FeatureExplorerPageClient({
           updatedAt: session.updatedAt,
           promptSnippet: session.promptSnippet,
           promptHistory: [...(session.promptHistory ?? [])],
+          toolNames: [...(session.toolNames ?? [])],
           ...(session.resumeCommand ? { resumeCommand: session.resumeCommand } : {}),
           changedFiles: [...(session.changedFiles ?? [fileNode.path])],
         });
@@ -684,6 +790,7 @@ export function FeatureExplorerPageClient({
     return [...aggregated.values()]
       .map((session) => ({
         ...session,
+        toolNames: session.toolNames.sort((left, right) => left.localeCompare(right)),
         changedFiles: session.changedFiles.sort((left, right) => left.localeCompare(right)),
       }))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
@@ -884,6 +991,76 @@ export function FeatureExplorerPageClient({
     }
   };
 
+  const handleStartSessionAnalysis = async () => {
+    if (!effectiveRepoSelection?.path || selectedFilePaths.length === 0 || selectedScopeSessions.length === 0) {
+      return;
+    }
+
+    setSessionAnalysisError(null);
+    setIsStartingSessionAnalysis(true);
+
+    try {
+      const prompt = buildSessionAnalysisPrompt({
+        locale,
+        workspaceId,
+        repoName: effectiveRepoSelection.name,
+        repoPath: effectiveRepoSelection.path,
+        branch: effectiveRepoSelection.branch,
+        featureDetail: surfaceOnlySelection ? null : resolvedFeatureDetail,
+        selectedFilePaths,
+        sessions: selectedScopeSessions,
+      });
+
+      const response = await desktopAwareFetch("/api/acp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: `feature-explorer-analysis:${Date.now()}`,
+          method: "session/new",
+          params: {
+            workspaceId,
+            cwd: effectiveRepoSelection.path,
+            branch: effectiveRepoSelection.branch || undefined,
+            role: "ROUTA",
+            specialistId: "file-session-analyst",
+            specialistLocale: locale,
+            name: buildSessionAnalysisSessionName(locale, surfaceOnlySelection ? null : resolvedFeatureDetail, selectedFilePaths),
+          },
+        }),
+      });
+
+      const payload = await response.json().catch(() => null) as {
+        result?: { sessionId?: string };
+        error?: { message?: string };
+      } | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.error?.message || t.featureExplorer.sessionAnalysisFailed);
+      }
+
+      if (payload?.error?.message) {
+        throw new Error(payload.error.message);
+      }
+
+      const sessionId = payload?.result?.sessionId;
+      if (!sessionId) {
+        throw new Error(t.featureExplorer.sessionAnalysisFailed);
+      }
+
+      storePendingPrompt(sessionId, prompt);
+      router.push(`/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}`);
+    } catch (err) {
+      setSessionAnalysisError(
+        err instanceof Error && err.message
+          ? err.message
+          : t.featureExplorer.sessionAnalysisFailed,
+      );
+    } finally {
+      setIsStartingSessionAnalysis(false);
+    }
+  };
+
   return (
     <DesktopAppShell
       workspaceId={workspaceId}
@@ -928,6 +1105,9 @@ export function FeatureExplorerPageClient({
                     className="w-full bg-transparent text-xs text-desktop-text-primary outline-none placeholder:text-desktop-text-secondary"
                   />
                 </label>
+                <div className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
+                  {t.featureExplorer.workViewLabel}
+                </div>
                 <div className="mt-2 flex flex-wrap items-center gap-1">
                   {surfaceNavigationOptions.map((option) => (
                     <button
@@ -1224,6 +1404,9 @@ export function FeatureExplorerPageClient({
                     selectedScopeSessions={selectedScopeSessions}
                     selectedSurface={selectedSurface}
                     selectedSurfaceFeatureNames={selectedSurfaceFeatureNames}
+                    onStartSessionAnalysis={handleStartSessionAnalysis}
+                    isStartingSessionAnalysis={isStartingSessionAnalysis}
+                    sessionAnalysisError={sessionAnalysisError}
                     t={t}
                   />
                 )}

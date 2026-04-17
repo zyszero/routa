@@ -18,6 +18,11 @@ const { useFeatureExplorerData } = vi.hoisted(() => ({
   useFeatureExplorerData: vi.fn(),
 }));
 
+const sessionLaunchState = vi.hoisted(() => ({
+  desktopAwareFetch: vi.fn(),
+  storePendingPrompt: vi.fn(),
+}));
+
 const localStorageMock = vi.hoisted(() => {
   let store = new Map<string, string>();
   return {
@@ -45,6 +50,14 @@ vi.mock("@/client/hooks/use-workspaces", () => ({
 
 vi.mock("../use-feature-explorer-data", () => ({
   useFeatureExplorerData,
+}));
+
+vi.mock("@/client/utils/diagnostics", () => ({
+  desktopAwareFetch: sessionLaunchState.desktopAwareFetch,
+}));
+
+vi.mock("@/client/utils/pending-prompt", () => ({
+  storePendingPrompt: sessionLaunchState.storePendingPrompt,
 }));
 
 vi.mock("@/client/components/desktop-app-shell", () => ({
@@ -98,6 +111,8 @@ describe("FeatureExplorerPageClient", () => {
     window.localStorage.clear();
     navState.push.mockReset();
     clipboardState.writeText.mockReset();
+    sessionLaunchState.desktopAwareFetch.mockReset();
+    sessionLaunchState.storePendingPrompt.mockReset();
     useWorkspaces.mockReturnValue({
       loading: false,
       workspaces: [{ id: "default", title: "Default Workspace" }],
@@ -362,7 +377,7 @@ describe("FeatureExplorerPageClient", () => {
     expect(screen.queryByText("feature-explorer")).toBeNull();
   });
 
-  it("sorts features by sessions and file counts", async () => {
+  it("keeps feature navigation in the incoming source order", async () => {
     useFeatureExplorerData.mockReturnValue({
       loading: false,
       error: null,
@@ -417,7 +432,87 @@ describe("FeatureExplorerPageClient", () => {
     const highFeature = screen.getByRole("button", { name: /Feature High/ });
     const lowFeature = screen.getByRole("button", { name: /Feature Low/ });
 
-    expect(highFeature.compareDocumentPosition(lowFeature) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(lowFeature.compareDocumentPosition(highFeature) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("filters feature navigation by nextjs api work view", async () => {
+    useFeatureExplorerData.mockReturnValue({
+      loading: false,
+      error: null,
+      capabilityGroups: [{ id: "execution", name: "Execution", description: "" }],
+      features: [
+        {
+          id: "feature-nextjs",
+          name: "Feature Next.js",
+          group: "execution",
+          summary: "Mapped to a Next.js API",
+          status: "active",
+          sessionCount: 1,
+          changedFiles: 1,
+          updatedAt: "-",
+          sourceFileCount: 1,
+          pageCount: 0,
+          apiCount: 1,
+        },
+        {
+          id: "feature-hidden",
+          name: "Feature Hidden",
+          group: "execution",
+          summary: "No Next.js API mapping",
+          status: "active",
+          sessionCount: 9,
+          changedFiles: 9,
+          updatedAt: "-",
+          sourceFileCount: 1,
+          pageCount: 0,
+          apiCount: 0,
+        },
+      ],
+      surfaceIndex: {
+        generatedAt: "",
+        pages: [],
+        apis: [],
+        contractApis: [],
+        nextjsApis: [
+          {
+            domain: "feature-explorer",
+            method: "GET",
+            path: "/api/feature-explorer",
+            sourceFiles: ["src/app/api/feature-explorer/route.ts"],
+          },
+        ],
+        rustApis: [],
+        metadata: {
+          schemaVersion: 1,
+          capabilityGroups: [],
+          features: [
+            {
+              id: "feature-nextjs",
+              name: "Feature Next.js",
+              pages: [],
+              apis: ["GET /api/feature-explorer"],
+              sourceFiles: ["src/app/api/feature-explorer/route.ts"],
+            },
+          ],
+        },
+        repoRoot: "/repo/default",
+        warnings: [],
+      },
+      featureDetail: null,
+      featureDetailLoading: false,
+      initialFeatureId: "",
+      fetchFeatureDetail: vi.fn().mockResolvedValue(null),
+    });
+
+    render(<FeatureExplorerPageClient workspaceId="default" />);
+
+    expect(screen.getByRole("button", { name: /Feature Next.js/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Feature Hidden/ })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next.js API" }));
+
+    expect(screen.getByRole("button", { name: /Feature Next.js/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Feature Hidden/ })).toBeNull();
   });
 
   it("does not duplicate feature details in the inspector for feature selections", async () => {
