@@ -278,6 +278,8 @@ function SpecFamilyExplorer({
   const [expandedClusterIds, setExpandedClusterIds] = useState<Set<string>>(
     () => new Set(families.slice(0, 3).map((family) => family.id)),
   );
+  const [collapsedSelectedAreaIds, setCollapsedSelectedAreaIds] = useState<Set<string>>(() => new Set());
+  const [collapsedSelectedClusterIds, setCollapsedSelectedClusterIds] = useState<Set<string>>(() => new Set());
 
   const selectedFamilyId = selectedIssue
     ? (relationsByFilename.get(selectedIssue.filename)?.familyId ?? selectedIssue.filename)
@@ -344,28 +346,50 @@ function SpecFamilyExplorer({
       });
   }, [families]);
 
-  const toggleArea = useCallback((areaId: string) => {
+  const toggleArea = useCallback((areaId: string, isExpanded: boolean, isSelectedArea: boolean) => {
     setExpandedAreaIds((current) => {
       const next = new Set(current);
-      if (next.has(areaId)) {
+      if (isExpanded) {
         next.delete(areaId);
       } else {
         next.add(areaId);
       }
       return next;
     });
+    if (isSelectedArea) {
+      setCollapsedSelectedAreaIds((current) => {
+        const next = new Set(current);
+        if (isExpanded) {
+          next.add(areaId);
+        } else {
+          next.delete(areaId);
+        }
+        return next;
+      });
+    }
   }, []);
 
-  const toggleCluster = useCallback((familyId: string) => {
+  const toggleCluster = useCallback((familyId: string, isExpanded: boolean, isSelectedFamily: boolean) => {
     setExpandedClusterIds((current) => {
       const next = new Set(current);
-      if (next.has(familyId)) {
+      if (isExpanded) {
         next.delete(familyId);
       } else {
         next.add(familyId);
       }
       return next;
     });
+    if (isSelectedFamily) {
+      setCollapsedSelectedClusterIds((current) => {
+        const next = new Set(current);
+        if (isExpanded) {
+          next.add(familyId);
+        } else {
+          next.delete(familyId);
+        }
+        return next;
+      });
+    }
   }, []);
 
   return (
@@ -383,12 +407,14 @@ function SpecFamilyExplorer({
 
         <div className="space-y-1.5">
           {areaGroups.map((area) => {
-            const isAreaExpanded = expandedAreaIds.has(area.id) || selectedAreaId === area.id;
+            const isSelectedArea = selectedAreaId === area.id;
+            const isAreaExpanded = expandedAreaIds.has(area.id)
+              || (isSelectedArea && !collapsedSelectedAreaIds.has(area.id));
             return (
               <section key={area.id} className="rounded-lg border border-black/6 bg-[#f8fafc] dark:border-white/10 dark:bg-white/[0.02]">
                 <button
                   type="button"
-                  onClick={() => toggleArea(area.id)}
+                  onClick={() => toggleArea(area.id, isAreaExpanded, isSelectedArea)}
                   className="flex w-full items-center gap-2 px-2.5 py-2 text-left"
                 >
                   {isAreaExpanded ? (
@@ -399,9 +425,14 @@ function SpecFamilyExplorer({
                   <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-slate-900 dark:text-slate-50">
                     {area.label}
                   </span>
-                  <span className="shrink-0 text-[10px] text-slate-500 dark:text-slate-400">
-                    {area.unresolvedCount} {statusLabels.open} · {area.issueCount}
-                  </span>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <CompactBadge className="bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-200">
+                      {area.unresolvedCount} {statusLabels.open}
+                    </CompactBadge>
+                    <CompactBadge className="bg-black/[0.04] text-slate-500 dark:bg-white/6 dark:text-slate-300">
+                      {area.issueCount}
+                    </CompactBadge>
+                  </div>
                 </button>
 
                 {isAreaExpanded ? (
@@ -411,18 +442,23 @@ function SpecFamilyExplorer({
                         const leadIssue = pickLeadIssue(family);
                         const clusterLabel = getClusterLabel(family);
                         const clusterSurface = family.surfaces.find(isUsefulSurfaceHit)?.secondaryLabel ?? null;
-                        const isClusterExpanded = expandedClusterIds.has(family.id) || selectedFamilyId === family.id;
+                        const isSelectedFamily = selectedFamilyId === family.id;
+                        const isClusterExpanded = expandedClusterIds.has(family.id)
+                          || (isSelectedFamily && !collapsedSelectedClusterIds.has(family.id));
 
                         return (
                           <div key={family.id} className="space-y-1">
                             <button
                               type="button"
                               onClick={() => {
-                                toggleCluster(family.id);
-                                onSelectIssue(leadIssue);
+                                const shouldSelectLead = !isClusterExpanded || !isSelectedFamily;
+                                toggleCluster(family.id, isClusterExpanded, isSelectedFamily);
+                                if (shouldSelectLead) {
+                                  onSelectIssue(leadIssue);
+                                }
                               }}
                               className={`flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left ${
-                                selectedFamilyId === family.id
+                                isSelectedFamily
                                   ? "bg-slate-100 text-slate-950 dark:bg-white/[0.08] dark:text-slate-50"
                                   : "hover:bg-white/70 dark:hover:bg-white/[0.04]"
                               }`}
@@ -436,15 +472,24 @@ function SpecFamilyExplorer({
                                 <div className="truncate text-[12px] font-medium text-slate-900 dark:text-slate-50">
                                   {clusterLabel}
                                 </div>
-                                <div className="truncate text-[10px] text-slate-500 dark:text-slate-400">
-                                  {family.issues.length} {t.specBoard.members} · {family.unresolvedCount} {statusLabels.open}
-                                  {family.relationCount > 0 ? ` · ${family.relationCount} ${t.specBoard.relations}` : ""}
+                                <div className="mt-1 flex flex-wrap items-center gap-1">
+                                  <CompactBadge className="bg-black/[0.04] text-slate-500 dark:bg-white/6 dark:text-slate-300">
+                                    {family.issues.length} {t.specBoard.members}
+                                  </CompactBadge>
+                                  <CompactBadge className="bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-200">
+                                    {family.unresolvedCount} {statusLabels.open}
+                                  </CompactBadge>
+                                  {family.relationCount > 0 ? (
+                                    <CompactBadge className="bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-200">
+                                      {family.relationCount} {t.specBoard.relations}
+                                    </CompactBadge>
+                                  ) : null}
+                                  {clusterSurface ? (
+                                    <CompactBadge className="max-w-full bg-white/80 text-slate-500 dark:bg-white/8 dark:text-slate-300">
+                                      <span className="truncate">{clusterSurface}</span>
+                                    </CompactBadge>
+                                  ) : null}
                                 </div>
-                                {clusterSurface ? (
-                                  <div className="truncate text-[10px] text-slate-400 dark:text-slate-500">
-                                    {clusterSurface}
-                                  </div>
-                                ) : null}
                               </div>
                             </button>
 

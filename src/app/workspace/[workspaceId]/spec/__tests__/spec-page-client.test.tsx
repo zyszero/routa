@@ -192,6 +192,35 @@ describe("SpecPageClient", () => {
     expect(screen.getByTestId("markdown-viewer").textContent).toContain("Second body for the linked issue.");
   });
 
+  it("allows collapsing the currently selected family cluster from the explorer", async () => {
+    mockSpecResponses();
+
+    render(<SpecPageClient />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Families").length).toBeGreaterThan(1);
+    });
+
+    const explorer = screen.getAllByText("Families")[1]?.closest("section");
+    expect(explorer).toBeTruthy();
+
+    await waitFor(() => {
+      expect(within(explorer as HTMLElement).getAllByRole("button", { name: /Linked issue/i }).length).toBeGreaterThan(1);
+    });
+
+    fireEvent.click(within(explorer as HTMLElement).getAllByRole("button", { name: /Linked issue/i })[0] as HTMLElement);
+
+    await waitFor(() => {
+      expect(within(explorer as HTMLElement).getAllByRole("button", { name: /Linked issue/i })).toHaveLength(1);
+    });
+
+    fireEvent.click(within(explorer as HTMLElement).getByRole("button", { name: /Linked issue/i }));
+
+    await waitFor(() => {
+      expect(within(explorer as HTMLElement).getAllByRole("button", { name: /Linked issue/i }).length).toBeGreaterThan(1);
+    });
+  });
+
   it("keeps rendering issues when the feature map endpoint is unavailable", async () => {
     mockSpecResponses({ surfaceOk: false });
 
