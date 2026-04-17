@@ -304,5 +304,11 @@ describe("KanbanCodebaseModal", () => {
       .map((element) => element.parentElement?.textContent ?? "")
       .find((text) => text.includes("github"));
     expect(sourceTypeField).toBeTruthy();
+
+    expect(screen.queryByRole("button", { name: /phodal\/routa/ })).toBeNull();
+    expect(screen.getByRole("link", { name: /Open RepoSlide|打开 RepoSlide/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Edit|编辑/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Remove|移除/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Close|关闭/ })).toBeTruthy();
   });
 });

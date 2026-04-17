@@ -7,7 +7,7 @@ import { RepoPicker, type RepoSelection } from "@/client/components/repo-picker"
 import { useTranslation } from "@/i18n";
 import type { KanbanRequiredTaskField } from "@/core/models/kanban";
 import type { TaskInfo, WorktreeInfo } from "../types";
-import { RefreshCw, TriangleAlert, Info, Trash2 } from "lucide-react";
+import { ExternalLink, Info, Pencil, Plus, RefreshCw, Trash2, TriangleAlert, X } from "lucide-react";
 
 
 export interface KanbanCodebaseModalProps {
@@ -103,6 +103,7 @@ export function KanbanCodebaseModal({
   const localCodebaseCount = codebases.length - githubCodebaseCount;
   const healthIssuesCount = (repoHealth?.missingRepoTasks ?? 0) + (repoHealth?.cwdMismatchTasks ?? 0);
   const selectedCodebaseLabel = selectedCodebase ? getCodebaseDisplayName(selectedCodebase) : null;
+  const showRepositoryRail = sortedCodebases.length > 1;
   const defaultCodebase = useMemo(
     () => codebases.find((codebase) => codebase.isDefault) ?? codebases[0] ?? null,
     [codebases],
@@ -177,79 +178,164 @@ export function KanbanCodebaseModal({
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-1.5">
-              {selectedCodebase && !editingCodebase ? (
-                <>
-                  <Link
-                    href={`/workspace/${selectedCodebase.workspaceId}/codebases/${selectedCodebase.id}/reposlide`}
-                    className={toolbarButtonClassName("default")}
-                  >
-                    {t.kanbanModals.openRepoSlide}
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={onStartEditCodebase}
-                    className={toolbarButtonClassName("default")}
-                  >
-                    {t.common.edit}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onRequestRemoveCodebase}
-                    className={toolbarButtonClassName("danger")}
-                  >
-                    {t.common.remove}
-                  </button>
-                </>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedWorktreeIds([]);
-                  onClose();
-                }}
-                className={toolbarButtonClassName("default")}
-              >
-                {t.common.close}
-              </button>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center rounded-sm border border-desktop-border bg-desktop-bg-secondary/80 p-1">
+                {selectedCodebase && !editingCodebase ? (
+                  <>
+                    <Link
+                      href={`/workspace/${selectedCodebase.workspaceId}/codebases/${selectedCodebase.id}/reposlide`}
+                      aria-label={t.kanbanModals.openRepoSlide}
+                      title={t.kanbanModals.openRepoSlide}
+                      className={commandIconButtonClassName()}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={onStartEditCodebase}
+                      aria-label={t.common.edit}
+                      title={t.common.edit}
+                      className={commandIconButtonClassName()}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onRequestRemoveCodebase}
+                      aria-label={t.common.remove}
+                      title={t.common.remove}
+                      className={commandIconButtonClassName("danger")}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedWorktreeIds([]);
+                    onClose();
+                  }}
+                  aria-label={t.common.close}
+                  title={t.common.close}
+                  className={commandIconButtonClassName()}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[320px,minmax(0,1fr)]">
-          <aside className="flex min-h-0 flex-col border-b border-desktop-border bg-desktop-bg-secondary/60 xl:border-b-0 xl:border-r">
-            <div className="border-b border-desktop-border px-3 py-3">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
-                {t.kanbanModals.addRepository}
-              </div>
-              <div className="mt-2 flex items-center gap-2">
-                <div className="min-w-0 flex-1 rounded-sm border border-desktop-border bg-desktop-bg-primary px-2.5 py-2">
-                  <RepoPicker
-                    value={addRepoSelection}
-                    onChange={setAddRepoSelection}
-                    additionalRepos={codebases.map((codebase) => ({
-                      name: getCodebaseDisplayName(codebase),
-                      path: codebase.repoPath,
-                      branch: codebase.branch,
-                    }))}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void onAddRepository(addRepoSelection)}
-                  disabled={!addRepoSelection || addSaving}
-                  className={toolbarButtonClassName("primary", "h-9 shrink-0")}
-                >
-                  {addSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : null}
-                  <span>{addSaving ? t.kanbanModals.addingRepository : t.kanbanModals.addRepository}</span>
-                </button>
-              </div>
-              {addError ? (
-                <div className="mt-2 text-[11px] text-rose-500">{addError}</div>
-              ) : null}
+        <div className="border-b border-desktop-border bg-desktop-bg-secondary/50 px-3 py-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
+              {t.kanbanModals.addRepository}
             </div>
+            <div className="min-w-[320px] flex-1 rounded-sm border border-desktop-border bg-desktop-bg-primary px-2.5 py-2">
+              <RepoPicker
+                value={addRepoSelection}
+                onChange={setAddRepoSelection}
+                additionalRepos={codebases.map((codebase) => ({
+                  name: getCodebaseDisplayName(codebase),
+                  path: codebase.repoPath,
+                  branch: codebase.branch,
+                }))}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => void onAddRepository(addRepoSelection)}
+              disabled={!addRepoSelection || addSaving}
+              className={toolbarButtonClassName("primary", "h-9 shrink-0")}
+            >
+              {addSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+              <span>{addSaving ? t.kanbanModals.addingRepository : t.kanbanModals.addRepository}</span>
+            </button>
+          </div>
+          {addError ? (
+            <div className="mt-2 text-[11px] text-rose-500">{addError}</div>
+          ) : null}
+        </div>
 
-            {repoHealth && healthIssuesCount > 0 ? (
+        <div className={showRepositoryRail
+          ? "grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[280px,minmax(0,1fr)]"
+          : "grid min-h-0 flex-1 grid-cols-1"}>
+          {showRepositoryRail ? (
+            <aside className="flex min-h-0 flex-col border-b border-desktop-border bg-desktop-bg-secondary/60 xl:border-b-0 xl:border-r">
+              {repoHealth && healthIssuesCount > 0 ? (
+                <div className="border-b border-desktop-border px-3 py-2.5">
+                  <div className="flex items-start gap-2 rounded-sm border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+                    <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" />
+                    <div className="min-w-0">
+                      <div className="font-medium text-amber-100">{t.kanbanModals.workspaceHealthTitle}</div>
+                      <div className="mt-0.5 text-amber-200/80">
+                        {`${repoHealth.missingRepoTasks} ${t.kanban.missing} · ${repoHealth.cwdMismatchTasks} ${t.kanban.sessionMismatch}`}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="flex items-center justify-between border-b border-desktop-border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
+                <span>{t.kanbanBoard.repos}</span>
+                <span>{codebases.length}</span>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {sortedCodebases.length === 0 ? (
+                  <div className="m-3 rounded-sm border border-dashed border-desktop-border px-3 py-4 text-[11px] text-desktop-text-secondary">
+                    {t.kanbanBoard.noReposLinked}
+                  </div>
+                ) : (
+                  sortedCodebases.map((codebase) => {
+                    const codebaseLabel = getCodebaseDisplayName(codebase);
+                    const active = selectedCodebase?.id === codebase.id;
+                    const sourceType = getCodebaseSourceType(codebase);
+
+                    return (
+                      <button
+                        key={codebase.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedWorktreeIds([]);
+                          void onSelectCodebase(codebase);
+                        }}
+                        className={`w-full border-l-2 px-3 py-2.5 text-left transition ${
+                          active
+                            ? "border-desktop-accent bg-desktop-bg-active"
+                            : "border-transparent hover:bg-desktop-bg-active/60"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[12px] font-medium text-desktop-text-primary">
+                              {codebaseLabel}
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-desktop-text-secondary">
+                              <span>{`${t.kanbanModals.branch} ${codebase.branch ?? "—"}`}</span>
+                              <span>{`${t.kanbanModals.sourceType} ${sourceType}`}</span>
+                            </div>
+                          </div>
+                          {codebase.isDefault ? (
+                            <span className="rounded-sm border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">
+                              {t.workspace.defaultLabel}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="mt-1 truncate font-mono text-[10px] text-desktop-text-muted">
+                          {codebase.repoPath}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </aside>
+          ) : null}
+
+          <section className="min-h-0 overflow-y-auto bg-desktop-bg-primary">
+            {!showRepositoryRail && repoHealth && healthIssuesCount > 0 ? (
               <div className="border-b border-desktop-border px-3 py-2.5">
                 <div className="flex items-start gap-2 rounded-sm border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
                   <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" />
@@ -263,63 +349,6 @@ export function KanbanCodebaseModal({
               </div>
             ) : null}
 
-            <div className="flex items-center justify-between border-b border-desktop-border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
-              <span>{t.kanbanBoard.repos}</span>
-              <span>{codebases.length}</span>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {sortedCodebases.length === 0 ? (
-                <div className="m-3 rounded-sm border border-dashed border-desktop-border px-3 py-4 text-[11px] text-desktop-text-secondary">
-                  {t.kanbanBoard.noReposLinked}
-                </div>
-              ) : (
-                sortedCodebases.map((codebase) => {
-                  const codebaseLabel = getCodebaseDisplayName(codebase);
-                  const active = selectedCodebase?.id === codebase.id;
-                  const sourceType = getCodebaseSourceType(codebase);
-
-                  return (
-                    <button
-                      key={codebase.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedWorktreeIds([]);
-                        void onSelectCodebase(codebase);
-                      }}
-                      className={`w-full border-l-2 px-3 py-2.5 text-left transition ${
-                        active
-                          ? "border-desktop-accent bg-desktop-bg-active"
-                          : "border-transparent hover:bg-desktop-bg-active/60"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[12px] font-medium text-desktop-text-primary">
-                            {codebaseLabel}
-                          </div>
-                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-desktop-text-secondary">
-                            <span>{`${t.kanbanModals.branch} ${codebase.branch ?? "—"}`}</span>
-                            <span>{`${t.kanbanModals.sourceType} ${sourceType}`}</span>
-                          </div>
-                        </div>
-                        {codebase.isDefault ? (
-                          <span className="rounded-sm border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">
-                            {t.workspace.defaultLabel}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="mt-1 truncate font-mono text-[10px] text-desktop-text-muted">
-                        {codebase.repoPath}
-                      </div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </aside>
-
-          <section className="min-h-0 overflow-y-auto bg-desktop-bg-primary">
             {!selectedCodebase ? (
               <div className="flex h-full min-h-[320px] items-center justify-center px-6 text-center">
                 <div className="max-w-sm rounded-sm border border-dashed border-desktop-border px-6 py-8">
@@ -766,6 +795,15 @@ function toolbarButtonClassName(
       : "border-desktop-border bg-desktop-bg-primary text-desktop-text-secondary hover:bg-desktop-bg-active hover:text-desktop-text-primary";
 
   return [baseClassName, toneClassName, extraClassName].filter(Boolean).join(" ");
+}
+
+function commandIconButtonClassName(tone: "default" | "danger" = "default"): string {
+  const baseClassName = "inline-flex h-8 w-8 items-center justify-center rounded-sm transition";
+  const toneClassName = tone === "danger"
+    ? "text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+    : "text-desktop-text-secondary hover:bg-desktop-bg-active hover:text-desktop-text-primary";
+
+  return `${baseClassName} ${toneClassName}`;
 }
 
 function getWorktreeStatusTone(status: WorktreeInfo["status"]): string {
