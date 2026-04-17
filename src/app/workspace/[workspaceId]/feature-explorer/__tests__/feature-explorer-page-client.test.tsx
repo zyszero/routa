@@ -303,6 +303,8 @@ describe("FeatureExplorerPageClient", () => {
     expect(screen.getByText("Rust API")).toBeTruthy();
     expect(screen.getByText("/workspace/:workspaceId/feature-explorer")).toBeTruthy();
     expect(screen.getAllByText("GET /api/feature-explorer").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("feature-metric-sessions-feature-a").textContent).toBe("0 sessions");
+    expect(screen.getByTestId("feature-metric-files-feature-a").textContent).toBe("1 files");
   });
 
   it("summarizes folder session counts from descendant files", async () => {

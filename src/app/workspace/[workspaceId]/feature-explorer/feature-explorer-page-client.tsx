@@ -117,6 +117,13 @@ function formatShortDate(iso: string): string {
 
 type ExplorerSurfaceKind = "feature" | "page" | "contract-api" | "nextjs-api" | "rust-api";
 
+type ExplorerSurfaceMetric = {
+  id: string;
+  label: string;
+  value: string;
+  testId?: string;
+};
+
 type ExplorerSurfaceItem = {
   key: string;
   kind: ExplorerSurfaceKind;
@@ -124,6 +131,7 @@ type ExplorerSurfaceItem = {
   secondary: string;
   featureIds: string[];
   sourceFiles: string[];
+  metrics?: ExplorerSurfaceMetric[];
   selectable: boolean;
 };
 
@@ -319,10 +327,24 @@ export function FeatureExplorerPageClient({
           secondary: capabilityGroups.find((group) => group.id === feature.group)?.name ?? feature.group,
           featureIds: [feature.id],
           sourceFiles,
+          metrics: [
+            {
+              id: "sessions",
+              label: t.featureExplorer.sessionsLabel,
+              value: String(feature.sessionCount),
+              testId: `feature-metric-sessions-${feature.id}`,
+            },
+            {
+              id: "files",
+              label: t.featureExplorer.filesLabel,
+              value: String(feature.changedFiles),
+              testId: `feature-metric-files-${feature.id}`,
+            },
+          ],
           selectable: true,
         };
       }),
-    [capabilityGroups, featureMetadataById, features, query],
+    [capabilityGroups, featureMetadataById, features, query, t.featureExplorer.filesLabel, t.featureExplorer.sessionsLabel],
   );
   const pageItems = useMemo<ExplorerSurfaceItem[]>(
     () => surfaceIndex.pages
@@ -685,6 +707,19 @@ export function FeatureExplorerPageClient({
                                     {item.secondary ? (
                                       <div className="mt-0.5 truncate text-[10px] text-current/75">
                                         {item.secondary}
+                                      </div>
+                                    ) : null}
+                                    {item.metrics?.length ? (
+                                      <div className="mt-1 flex flex-wrap gap-1">
+                                        {item.metrics.map((metric) => (
+                                          <span
+                                            key={metric.id}
+                                            data-testid={metric.testId}
+                                            className="inline-flex items-center rounded-sm border border-desktop-border bg-desktop-bg-primary px-1.5 py-0.5 text-[9px] font-medium text-current/80"
+                                          >
+                                            {metric.value} {metric.label}
+                                          </span>
+                                        ))}
                                       </div>
                                     ) : null}
                                   </div>
