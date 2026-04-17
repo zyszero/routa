@@ -24,6 +24,19 @@ export interface ProductFeature {
   domain_objects: string[];
 }
 
+export interface FrontendPageDetail {
+  name: string;
+  route: string;
+  description: string;
+}
+
+export interface ApiEndpointDetail {
+  group: string;
+  method: string;
+  endpoint: string;
+  description: string;
+}
+
 interface FeatureMetadata {
   schema_version?: number;
   capability_groups: CapabilityGroup[];
@@ -44,6 +57,8 @@ function extractFrontmatter(raw: string): string | null {
 export function parseFeatureTree(repoRoot: string): {
   capabilityGroups: CapabilityGroup[];
   features: ProductFeature[];
+  frontendPages: FrontendPageDetail[];
+  apiEndpoints: ApiEndpointDetail[];
 } {
   const featureTreePath = path.join(repoRoot, "docs/product-specs/FEATURE_TREE.md");
   if (!fs.existsSync(featureTreePath)) {
@@ -62,6 +77,8 @@ export function parseFeatureTree(repoRoot: string): {
     throw new Error("feature_metadata not found in frontmatter");
   }
 
+  const { frontendPages, apiEndpoints } = parseFeatureTreeTables(raw);
+
   return {
     capabilityGroups: metadata.capability_groups ?? [],
     features: (metadata.features ?? []).map((f) => ({
@@ -76,7 +93,106 @@ export function parseFeatureTree(repoRoot: string): {
       related_features: f.related_features ?? [],
       domain_objects: f.domain_objects ?? [],
     })),
+    frontendPages,
+    apiEndpoints,
   };
+}
+
+function parseFeatureTreeTables(raw: string): {
+  frontendPages: FrontendPageDetail[];
+  apiEndpoints: ApiEndpointDetail[];
+} {
+  const frontendPages: FrontendPageDetail[] = [];
+  const apiEndpoints: ApiEndpointDetail[] = [];
+
+  let section: "none" | "frontend" | "api" = "none";
+  let activeTable: "none" | "frontend" | "api" = "none";
+  let currentApiGroup = "";
+
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+
+    if (trimmed === "## Frontend Pages") {
+      section = "frontend";
+      activeTable = "none";
+      continue;
+    }
+
+    if (trimmed === "## API Endpoints") {
+      section = "api";
+      activeTable = "none";
+      continue;
+    }
+
+    if (trimmed.startsWith("## ")) {
+      section = "none";
+      activeTable = "none";
+      continue;
+    }
+
+    if (section === "frontend") {
+      if (trimmed === "| Page | Route | Description |") {
+        activeTable = "frontend";
+        continue;
+      }
+      if (activeTable === "frontend") {
+        if (trimmed === "|------|-------|-------------|") continue;
+        if (!trimmed || trimmed === "---") {
+          activeTable = "none";
+          continue;
+        }
+        const cells = parseMarkdownRow(trimmed);
+        if (cells && cells.length >= 3) {
+          frontendPages.push({
+            name: cells[0],
+            route: stripInlineCode(cells[1]),
+            description: cells[2],
+          });
+        }
+      }
+      continue;
+    }
+
+    if (section === "api") {
+      if (trimmed.startsWith("### ")) {
+        currentApiGroup = trimmed.replace(/^###\s+/, "").replace(/\s+\(\d+\)\s*$/, "");
+        activeTable = "none";
+        continue;
+      }
+      if (trimmed === "| Method | Endpoint | Description |") {
+        activeTable = "api";
+        continue;
+      }
+      if (activeTable === "api") {
+        if (trimmed === "|--------|----------|-------------|") continue;
+        if (!trimmed) {
+          activeTable = "none";
+          continue;
+        }
+        const cells = parseMarkdownRow(trimmed);
+        if (cells && cells.length >= 3) {
+          apiEndpoints.push({
+            group: currentApiGroup,
+            method: cells[0],
+            endpoint: stripInlineCode(cells[1]),
+            description: cells[2],
+          });
+        }
+      }
+    }
+  }
+
+  return { frontendPages, apiEndpoints };
+}
+
+function parseMarkdownRow(line: string): string[] | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) return null;
+  return trimmed.slice(1, -1).split("|").map((cell) => cell.trim());
+}
+
+function stripInlineCode(value: string): string {
+  return value.trim().replace(/^`+|`+$/g, "");
 }
 
 export interface FileTreeNode {

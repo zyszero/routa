@@ -34,6 +34,8 @@ export interface FeatureDetail {
   updatedAt: string;
   fileTree: FileTreeNode[];
   surfaceLinks?: SurfaceLink[];
+  pageDetails?: PageDetail[];
+  apiDetails?: ApiDetail[];
 }
 
 export interface FileTreeNode {
@@ -48,6 +50,19 @@ export interface SurfaceLink {
   kind: string;
   route: string;
   sourcePath: string;
+}
+
+export interface PageDetail {
+  name: string;
+  route: string;
+  description: string;
+}
+
+export interface ApiDetail {
+  group: string;
+  method: string;
+  endpoint: string;
+  description: string;
 }
 
 export interface FeatureListResponse {

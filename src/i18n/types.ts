@@ -254,6 +254,17 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     groupExecution: string;
     groupWorkflow: string;
     groupGovernance: string;
+    featureMetrics: string;
+    capabilityGroup: string;
+    groupDescription: string;
+    statusLabel: string;
+    declaredPages: string;
+    declaredApis: string;
+    sourceFilesLabel: string;
+    domainObjectsLabel: string;
+    surfaceLinksLabel: string;
+    noPagesDeclared: string;
+    noApisDeclared: string;
   };
 
   // Settings panel

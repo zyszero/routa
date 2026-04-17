@@ -247,6 +247,17 @@ const zh: TranslationDictionary = {
     groupExecution: "Agent Execution",
     groupWorkflow: "Kanban Automation",
     groupGovernance: "Governance & Settings",
+    featureMetrics: "特性指标",
+    capabilityGroup: "能力分组",
+    groupDescription: "分组说明",
+    statusLabel: "状态",
+    declaredPages: "声明页面",
+    declaredApis: "声明 API",
+    sourceFilesLabel: "源文件",
+    domainObjectsLabel: "领域对象",
+    surfaceLinksLabel: "界面关联",
+    noPagesDeclared: "未声明页面",
+    noApisDeclared: "未声明 API",
   },
 
   settings: {

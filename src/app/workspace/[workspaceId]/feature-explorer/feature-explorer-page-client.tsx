@@ -122,6 +122,9 @@ export function FeatureExplorerPageClient({
   const flatMap = useMemo(() => flattenFiles(fileTree), [fileTree]);
   const activeFile = flatMap[activeFileId] ?? null;
   const activeFeature = features.find((f) => f.id === effectiveFeatureId);
+  const activeGroup = activeFeature
+    ? capabilityGroups.find((group) => group.id === activeFeature.group) ?? null
+    : null;
 
   const handleWorkspaceSelect = (nextWorkspaceId: string) => {
     router.push(`/workspace/${encodeURIComponent(nextWorkspaceId)}/feature-explorer`);
@@ -253,8 +256,15 @@ export function FeatureExplorerPageClient({
                 ) : (
                   groupedFeatures.map(({ group, items }) => (
                     <div key={group.id} className="border-b border-desktop-border">
-                      <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">
-                        {group.name}
+                      <div className="px-3 py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">
+                          {group.name}
+                        </div>
+                        {group.description ? (
+                          <div className="mt-1 text-[10px] leading-4 text-desktop-text-secondary/80">
+                            {group.description}
+                          </div>
+                        ) : null}
                       </div>
                       <div className="px-2 pb-2">
                         {items.map((feature) => {
@@ -282,8 +292,13 @@ export function FeatureExplorerPageClient({
                                 </span>
                                 <span className="text-[10px] text-current/70">{feature.sessionCount}</span>
                               </div>
-                              <div className="mt-0.5 flex items-center gap-2 text-[10px] text-current/70">
-                                <span>{feature.changedFiles}f</span>
+                              <div className="mt-1 line-clamp-2 text-[10px] leading-4 text-current/80">
+                                {feature.summary}
+                              </div>
+                              <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-current/70">
+                                <span>{feature.sourceFileCount}f</span>
+                                <span>{feature.pageCount}p</span>
+                                <span>{feature.apiCount}a</span>
                                 <span>{feature.updatedAt}</span>
                               </div>
                             </button>
@@ -300,17 +315,28 @@ export function FeatureExplorerPageClient({
             <section className="flex min-h-0 flex-col border-r border-desktop-border bg-desktop-bg-primary">
               <div className="border-b border-desktop-border px-3 py-2">
                 {activeFeature && (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="inline-flex h-5 w-7 items-center justify-center rounded-sm border border-desktop-accent bg-desktop-bg-active text-[10px] font-semibold text-desktop-text-primary">
-                        {featureCodeBadge(activeFeature.id)}
-                      </span>
-                      <span className="truncate text-[13px] font-semibold text-desktop-text-primary">
-                        {activeFeature.name}
-                      </span>
-                      <span className="text-[10px] text-desktop-text-secondary">
-                        {activeFeature.sessionCount}s · {activeFeature.changedFiles}f
-                      </span>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="inline-flex h-5 w-7 items-center justify-center rounded-sm border border-desktop-accent bg-desktop-bg-active text-[10px] font-semibold text-desktop-text-primary">
+                          {featureCodeBadge(activeFeature.id)}
+                        </span>
+                        <span className="truncate text-[13px] font-semibold text-desktop-text-primary">
+                          {activeFeature.name}
+                        </span>
+                        <span className="text-[10px] text-desktop-text-secondary">
+                          {activeFeature.sessionCount}s · {activeFeature.changedFiles}f
+                        </span>
+                      </div>
+                      <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-desktop-text-secondary">
+                        {activeFeature.summary}
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-desktop-text-secondary">
+                        <span>{activeGroup?.name ?? activeFeature.group}</span>
+                        <span>{activeFeature.pageCount}p</span>
+                        <span>{activeFeature.apiCount}a</span>
+                        <span>{activeFeature.sourceFileCount}f</span>
+                      </div>
                     </div>
                     <span className={`rounded-sm border px-1.5 py-0.5 text-[10px] font-medium ${
                       activeFeature.status === "shipped"
@@ -412,23 +438,14 @@ export function FeatureExplorerPageClient({
                 {inspectorTab === "context" && (
                   <ContextPanel
                     activeFile={activeFile}
+                    activeGroup={activeGroup}
                     featureDetail={featureDetail}
                     t={t}
                   />
                 )}
 
                 {inspectorTab === "screenshot" && (
-                  <div className="text-xs text-desktop-text-secondary">
-                    <ContextSection title={t.featureExplorer.screenshotTab}>
-                      <div className="text-[11px] text-desktop-text-secondary">
-                        {featureDetail?.pages?.map((page) => (
-                          <div key={page} className="flex items-center justify-between rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 mb-1">
-                            <span className="truncate">{page}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </ContextSection>
-                  </div>
+                  <ScreenshotPanel featureDetail={featureDetail} t={t} />
                 )}
 
                 {inspectorTab === "api" && (
@@ -467,10 +484,12 @@ export function FeatureExplorerPageClient({
 /* ── Context Panel ── */
 function ContextPanel({
   activeFile,
+  activeGroup,
   featureDetail,
   t,
 }: {
   activeFile: FileTreeNode | null;
+  activeGroup: CapabilityGroup | null;
   featureDetail: FeatureDetail | null;
   t: ReturnType<typeof useTranslation>["t"];
 }) {
@@ -478,8 +497,47 @@ function ContextPanel({
     return <div className="text-xs text-desktop-text-secondary">-</div>;
   }
 
+  const pageDetails = featureDetail.pageDetails ?? featureDetail.pages.map((route) => ({
+    name: route,
+    route,
+    description: "",
+  }));
+
+  const apiDetails = featureDetail.apiDetails ?? featureDetail.apis.map((declaration) => {
+    const [method, endpoint] = declaration.split(/\s+/, 2);
+    if (endpoint) {
+      return { group: "", method, endpoint, description: "" };
+    }
+    return { group: "", method: "GET", endpoint: declaration, description: "" };
+  });
+
   return (
     <div className="space-y-2">
+      <ContextSection title={t.featureExplorer.featureSummary}>
+        <div className="space-y-3">
+          <div>
+            <div className="text-[13px] font-semibold text-desktop-text-primary">{featureDetail.name}</div>
+            <div className="mt-1 text-[11px] leading-5 text-desktop-text-secondary">{featureDetail.summary}</div>
+          </div>
+
+          <div className="grid gap-px overflow-hidden rounded-sm border border-desktop-border bg-desktop-border sm:grid-cols-2">
+            <MetricCell label={t.featureExplorer.capabilityGroup} value={activeGroup?.name ?? featureDetail.group} />
+            <MetricCell label={t.featureExplorer.statusLabel} value={featureDetail.status} />
+            <MetricCell label={t.featureExplorer.declaredPages} value={String(pageDetails.length)} />
+            <MetricCell label={t.featureExplorer.declaredApis} value={String(apiDetails.length)} />
+            <MetricCell label={t.featureExplorer.sourceFilesLabel} value={String(featureDetail.sourceFiles.length)} />
+            <MetricCell label={t.featureExplorer.sessionsLabel} value={String(featureDetail.sessionCount)} />
+          </div>
+
+          {activeGroup?.description ? (
+            <div className="rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2.5 py-2 text-[11px] leading-5 text-desktop-text-secondary">
+              <span className="font-medium text-desktop-text-primary">{t.featureExplorer.groupDescription}: </span>
+              {activeGroup.description}
+            </div>
+          ) : null}
+        </div>
+      </ContextSection>
+
       {activeFile && (
         <ContextSection title={t.featureExplorer.activeFile}>
           <div className="flex items-center gap-2 text-desktop-text-primary">
@@ -491,6 +549,19 @@ function ContextPanel({
           </div>
         </ContextSection>
       )}
+
+      <ContextSection title={t.featureExplorer.sourceFilesLabel}>
+        <div className="space-y-1">
+          {featureDetail.sourceFiles.map((sourceFile) => (
+            <div
+              key={sourceFile}
+              className="rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 text-[11px] text-desktop-text-secondary"
+            >
+              {sourceFile}
+            </div>
+          ))}
+        </div>
+      </ContextSection>
 
       {featureDetail.relatedFeatures.length > 0 && (
         <ContextSection title={t.featureExplorer.relatedFiles}>
@@ -508,7 +579,7 @@ function ContextPanel({
       )}
 
       {featureDetail.domainObjects.length > 0 && (
-        <ContextSection title="Domain Objects">
+        <ContextSection title={t.featureExplorer.domainObjectsLabel}>
           <div className="flex flex-wrap gap-1">
             {featureDetail.domainObjects.map((obj) => (
               <span
@@ -523,7 +594,7 @@ function ContextPanel({
       )}
 
       {featureDetail.surfaceLinks && featureDetail.surfaceLinks.length > 0 && (
-        <ContextSection title="Surface Links">
+        <ContextSection title={t.featureExplorer.surfaceLinksLabel}>
           <div className="space-y-1">
             {featureDetail.surfaceLinks.map((link, i) => (
               <div
@@ -544,21 +615,73 @@ function ContextPanel({
         </ContextSection>
       )}
 
-      {featureDetail.pages.length > 0 && (
-        <ContextSection title="Pages">
+      {pageDetails.length > 0 ? (
+        <ContextSection title={t.featureExplorer.declaredPages}>
           <div className="space-y-1">
-            {featureDetail.pages.map((page) => (
-              <div
-                key={page}
-                className="rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 text-[11px] text-desktop-text-secondary"
-              >
-                {page}
-              </div>
+            {pageDetails.map((page) => (
+              <SurfaceDetailCard
+                key={page.route}
+                title={page.name}
+                subtitle={page.route}
+                description={page.description}
+              />
             ))}
           </div>
         </ContextSection>
-      )}
+      ) : null}
+
+      {apiDetails.length > 0 ? (
+        <ContextSection title={t.featureExplorer.declaredApis}>
+          <div className="space-y-1">
+            {apiDetails.map((api) => (
+              <ApiDetailCard key={`${api.method}-${api.endpoint}`} api={api} />
+            ))}
+          </div>
+        </ContextSection>
+      ) : null}
     </div>
+  );
+}
+
+function ScreenshotPanel({
+  featureDetail,
+  t,
+}: {
+  featureDetail: FeatureDetail | null;
+  t: ReturnType<typeof useTranslation>["t"];
+}) {
+  if (!featureDetail) {
+    return <div className="text-xs text-desktop-text-secondary">-</div>;
+  }
+
+  const pageDetails = featureDetail.pageDetails ?? featureDetail.pages.map((route) => ({
+    name: route,
+    route,
+    description: "",
+  }));
+
+  return (
+    <ContextSection title={t.featureExplorer.screenshotTab}>
+      {pageDetails.length === 0 ? (
+        <div className="text-[11px] text-desktop-text-secondary">{t.featureExplorer.noPagesDeclared}</div>
+      ) : (
+        <div className="space-y-2">
+          {pageDetails.map((page) => (
+            <div key={page.route} className="rounded-sm border border-desktop-border bg-desktop-bg-secondary p-2.5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-medium text-desktop-text-primary">{page.name}</div>
+                  <div className="mt-1 break-all font-mono text-[10px] text-desktop-text-secondary">{page.route}</div>
+                </div>
+              </div>
+              {page.description ? (
+                <div className="mt-2 text-[11px] leading-5 text-desktop-text-secondary">{page.description}</div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      )}
+    </ContextSection>
   );
 }
 
@@ -576,17 +699,21 @@ function ApiPanel({
   const [responseBody, setResponseBody] = useState("");
   const [requestState, setRequestState] = useState<"idle" | "loading" | "done" | "error">("idle");
 
-  if (!featureDetail || featureDetail.apis.length === 0) {
+  const apiDetails = featureDetail?.apiDetails ?? featureDetail?.apis.map((declaration) => {
+    const [method, endpoint] = declaration.split(/\s+/, 2);
+    if (endpoint) {
+      return { group: "", method, endpoint, description: "" };
+    }
+    return { group: "", method: "GET", endpoint: declaration, description: "" };
+  }) ?? [];
+
+  if (!featureDetail || apiDetails.length === 0) {
     return <div className="text-xs text-desktop-text-secondary">-</div>;
   }
 
-  const apis = featureDetail.apis;
-  const selectedApi = apis[selectedApiIdx] ?? apis[0];
-
-  // Parse "GET /api/sessions" format
-  const parts = selectedApi.split(" ", 2);
-  const method = parts.length === 2 ? parts[0] : "GET";
-  const apiPath = parts.length === 2 ? parts[1] : selectedApi;
+  const selectedApi = apiDetails[selectedApiIdx] ?? apiDetails[0];
+  const method = selectedApi.method;
+  const apiPath = selectedApi.endpoint;
 
   const methodTone = method === "GET"
     ? "border-emerald-300/70 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/12 dark:text-emerald-200"
@@ -617,8 +744,8 @@ function ApiPanel({
           }}
           className="w-full rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 text-[11px] text-desktop-text-primary outline-none"
         >
-          {apis.map((api, idx) => (
-            <option key={api} value={idx}>{api}</option>
+          {apiDetails.map((api, idx) => (
+            <option key={`${api.method}-${api.endpoint}`} value={idx}>{`${api.method} ${api.endpoint}`}</option>
           ))}
         </select>
         <div className="mt-2 flex items-center gap-2 text-[11px]">
@@ -627,6 +754,20 @@ function ApiPanel({
           </span>
           <code className="truncate text-desktop-text-secondary">{apiPath}</code>
         </div>
+        {selectedApi.group || selectedApi.description ? (
+          <div className="mt-2 rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2.5 py-2">
+            {selectedApi.group ? (
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
+                {selectedApi.group}
+              </div>
+            ) : null}
+            {selectedApi.description ? (
+              <div className="mt-1 text-[11px] leading-5 text-desktop-text-secondary">
+                {selectedApi.description}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </ContextSection>
 
       <ContextSection title={t.featureExplorer.requestBody}>
@@ -758,6 +899,64 @@ function ContextSection({ title, children }: { title: string; children: ReactNod
       </div>
       {children}
     </section>
+  );
+}
+
+function MetricCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-desktop-bg-primary px-2.5 py-2">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
+        {label}
+      </div>
+      <div className="mt-1 text-[12px] font-medium text-desktop-text-primary">{value}</div>
+    </div>
+  );
+}
+
+function SurfaceDetailCard({
+  title,
+  subtitle,
+  description,
+}: {
+  title: string;
+  subtitle: string;
+  description?: string;
+}) {
+  return (
+    <div className="rounded-sm border border-desktop-border bg-desktop-bg-secondary p-2.5">
+      <div className="text-[11px] font-medium text-desktop-text-primary">{title}</div>
+      <div className="mt-1 break-all font-mono text-[10px] text-desktop-text-secondary">{subtitle}</div>
+      {description ? (
+        <div className="mt-2 text-[11px] leading-5 text-desktop-text-secondary">{description}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function ApiDetailCard({
+  api,
+}: {
+  api: NonNullable<FeatureDetail["apiDetails"]>[number];
+}) {
+  return (
+    <div className="rounded-sm border border-desktop-border bg-desktop-bg-secondary p-2.5">
+      <div className="flex items-center gap-2">
+        <span className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-semibold uppercase ${api.method === "GET"
+          ? "border-emerald-500/30 text-emerald-400"
+          : api.method === "POST"
+            ? "border-sky-500/30 text-sky-400"
+            : "border-amber-500/30 text-amber-400"}`}>
+          {api.method}
+        </span>
+        <span className="min-w-0 truncate font-mono text-[10px] text-desktop-text-primary">{api.endpoint}</span>
+      </div>
+      {api.group ? (
+        <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-desktop-text-secondary">{api.group}</div>
+      ) : null}
+      {api.description ? (
+        <div className="mt-2 text-[11px] leading-5 text-desktop-text-secondary">{api.description}</div>
+      ) : null}
+    </div>
   );
 }
 

@@ -248,6 +248,17 @@ const en: TranslationDictionary = {
     groupExecution: "Agent Execution",
     groupWorkflow: "Kanban Automation",
     groupGovernance: "Governance & Settings",
+    featureMetrics: "Feature metrics",
+    capabilityGroup: "Capability group",
+    groupDescription: "Group description",
+    statusLabel: "Status",
+    declaredPages: "Declared pages",
+    declaredApis: "Declared APIs",
+    sourceFilesLabel: "Source files",
+    domainObjectsLabel: "Domain objects",
+    surfaceLinksLabel: "Surface links",
+    noPagesDeclared: "No pages declared",
+    noApisDeclared: "No APIs declared",
   },
 
   settings: {

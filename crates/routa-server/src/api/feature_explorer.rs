@@ -65,6 +65,8 @@ struct FeatureDetailResponse {
     updated_at: String,
     file_tree: Vec<FileTreeNode>,
     surface_links: Vec<SurfaceLinkResponse>,
+    page_details: Vec<PageDetailResponse>,
+    api_details: Vec<ApiDetailResponse>,
 }
 
 #[derive(Debug, Serialize)]
@@ -83,6 +85,23 @@ struct SurfaceLinkResponse {
     kind: String,
     route: String,
     source_path: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PageDetailResponse {
+    name: String,
+    route: String,
+    description: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ApiDetailResponse {
+    group: String,
+    method: String,
+    endpoint: String,
+    description: String,
 }
 
 fn map_error(error: impl std::fmt::Display) -> (StatusCode, Json<Value>) {
@@ -238,6 +257,11 @@ fn collect_session_stats(
     stats
 }
 
+fn split_declared_api(declaration: &str) -> Option<(&str, &str)> {
+    let (method, endpoint) = declaration.split_once(' ')?;
+    Some((method.trim(), endpoint.trim()))
+}
+
 async fn get_feature_list(
     State(state): State<AppState>,
     Query(query): Query<RepoContextQuery>,
@@ -353,6 +377,51 @@ async fn get_feature_detail(
 
     let file_tree = build_file_tree(&all_files);
 
+    let page_details: Vec<PageDetailResponse> = feature
+        .pages
+        .iter()
+        .map(|route| {
+            if let Some(page) = feature_tree.frontend_page_for_route(route) {
+                PageDetailResponse {
+                    name: page.name.clone(),
+                    route: page.route.clone(),
+                    description: page.description.clone(),
+                }
+            } else {
+                PageDetailResponse {
+                    name: route.clone(),
+                    route: route.clone(),
+                    description: String::new(),
+                }
+            }
+        })
+        .collect();
+
+    let api_details: Vec<ApiDetailResponse> = feature
+        .apis
+        .iter()
+        .map(|declaration| {
+            if let Some(api) = feature_tree.api_endpoint_for_declaration(declaration) {
+                ApiDetailResponse {
+                    group: api.domain.clone(),
+                    method: api.method.clone(),
+                    endpoint: api.endpoint.clone(),
+                    description: api.description.clone(),
+                }
+            } else {
+                let (method, endpoint) = split_declared_api(declaration)
+                    .map(|(method, endpoint)| (method.to_string(), endpoint.to_string()))
+                    .unwrap_or_else(|| ("GET".to_string(), declaration.clone()));
+                ApiDetailResponse {
+                    group: String::new(),
+                    method,
+                    endpoint,
+                    description: String::new(),
+                }
+            }
+        })
+        .collect();
+
     let (session_count, changed_files, updated_at) = session_stats
         .get(&feature.id)
         .cloned()
@@ -378,6 +447,8 @@ async fn get_feature_detail(
         },
         file_tree,
         surface_links,
+        page_details,
+        api_details,
     };
 
     Ok(Json(serde_json::to_value(response).map_err(|e| map_error(e))?))

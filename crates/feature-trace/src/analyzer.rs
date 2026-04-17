@@ -151,7 +151,9 @@ mod tests {
                 source_files: vec![
                     "src/app/workspace/[workspaceId]/sessions/[sessionId]/page.tsx".to_string(),
                 ],
+                ..Default::default()
             }],
+            ..Default::default()
         };
         let input = FeatureTraceInput {
             session_id: "sess-1".to_string(),

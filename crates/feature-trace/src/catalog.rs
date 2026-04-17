@@ -69,9 +69,28 @@ pub struct ProductFeature {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FrontendPageDetail {
+    pub name: String,
+    pub route: String,
+    #[serde(default)]
+    pub description: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ApiEndpointDetail {
+    pub domain: String,
+    pub method: String,
+    pub endpoint: String,
+    #[serde(default)]
+    pub description: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FeatureTreeCatalog {
     pub capability_groups: Vec<CapabilityGroup>,
     pub features: Vec<ProductFeature>,
+    pub frontend_pages: Vec<FrontendPageDetail>,
+    pub api_endpoints: Vec<ApiEndpointDetail>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -187,9 +206,26 @@ impl FeatureTreeCatalog {
         let raw = fs::read_to_string(path)?;
         let frontmatter = extract_frontmatter(&raw).ok_or(FeatureTraceError::MissingFrontmatter)?;
         let parsed: FeatureTreeFrontmatter = serde_yaml::from_str(frontmatter)?;
+        let (frontend_pages, api_endpoints) = parse_feature_tree_tables(&raw);
         Ok(Self {
             capability_groups: parsed.feature_metadata.capability_groups,
             features: parsed.feature_metadata.features,
+            frontend_pages,
+            api_endpoints,
+        })
+    }
+
+    pub fn frontend_page_for_route(&self, route: &str) -> Option<&FrontendPageDetail> {
+        self.frontend_pages.iter().find(|page| page.route == route)
+    }
+
+    pub fn api_endpoint_for_declaration(
+        &self,
+        declaration: &str,
+    ) -> Option<&ApiEndpointDetail> {
+        let (method, endpoint) = split_declared_api(declaration)?;
+        self.api_endpoints.iter().find(|api| {
+            api.method.eq_ignore_ascii_case(method) && api.endpoint == endpoint
         })
     }
 
@@ -262,6 +298,139 @@ fn extract_frontmatter(raw: &str) -> Option<&str> {
     let trimmed = raw.strip_prefix("---\n")?;
     let end = trimmed.find("\n---\n")?;
     Some(&trimmed[..end])
+}
+
+fn parse_feature_tree_tables(raw: &str) -> (Vec<FrontendPageDetail>, Vec<ApiEndpointDetail>) {
+    let mut frontend_pages = Vec::new();
+    let mut api_endpoints = Vec::new();
+
+    let mut section = TableSection::None;
+    let mut active_table = ActiveTable::None;
+    let mut current_api_domain = String::new();
+
+    for line in raw.lines() {
+        let trimmed = line.trim();
+
+        match trimmed {
+            "## Frontend Pages" => {
+                section = TableSection::FrontendPages;
+                active_table = ActiveTable::None;
+                continue;
+            }
+            "## API Endpoints" => {
+                section = TableSection::ApiEndpoints;
+                active_table = ActiveTable::None;
+                continue;
+            }
+            _ if trimmed.starts_with("## ") => {
+                section = TableSection::None;
+                active_table = ActiveTable::None;
+                continue;
+            }
+            _ => {}
+        }
+
+        match section {
+            TableSection::FrontendPages => {
+                if trimmed == "| Page | Route | Description |" {
+                    active_table = ActiveTable::FrontendPages;
+                    continue;
+                }
+                if active_table == ActiveTable::FrontendPages {
+                    if trimmed == "|------|-------|-------------|" {
+                        continue;
+                    }
+                    if trimmed.is_empty() || trimmed == "---" {
+                        active_table = ActiveTable::None;
+                        continue;
+                    }
+                    if let Some(cells) = parse_markdown_row(trimmed) {
+                        if cells.len() >= 3 {
+                            frontend_pages.push(FrontendPageDetail {
+                                name: cells[0].clone(),
+                                route: strip_inline_code(&cells[1]),
+                                description: cells[2].clone(),
+                            });
+                        }
+                    }
+                }
+            }
+            TableSection::ApiEndpoints => {
+                if let Some(domain) = trimmed.strip_prefix("### ") {
+                    current_api_domain = domain
+                        .rsplit_once(" (")
+                        .map(|(label, _)| label.to_string())
+                        .unwrap_or_else(|| domain.to_string());
+                    active_table = ActiveTable::None;
+                    continue;
+                }
+                if trimmed == "| Method | Endpoint | Description |" {
+                    active_table = ActiveTable::ApiEndpoints;
+                    continue;
+                }
+                if active_table == ActiveTable::ApiEndpoints {
+                    if trimmed == "|--------|----------|-------------|" {
+                        continue;
+                    }
+                    if trimmed.is_empty() {
+                        active_table = ActiveTable::None;
+                        continue;
+                    }
+                    if let Some(cells) = parse_markdown_row(trimmed) {
+                        if cells.len() >= 3 {
+                            api_endpoints.push(ApiEndpointDetail {
+                                domain: current_api_domain.clone(),
+                                method: cells[0].clone(),
+                                endpoint: strip_inline_code(&cells[1]),
+                                description: cells[2].clone(),
+                            });
+                        }
+                    }
+                }
+            }
+            TableSection::None => {}
+        }
+    }
+
+    (frontend_pages, api_endpoints)
+}
+
+fn parse_markdown_row(line: &str) -> Option<Vec<String>> {
+    let trimmed = line.trim();
+    if !trimmed.starts_with('|') || !trimmed.ends_with('|') {
+        return None;
+    }
+    Some(
+        trimmed[1..trimmed.len() - 1]
+            .split('|')
+            .map(|cell| cell.trim().to_string())
+            .collect(),
+    )
+}
+
+fn strip_inline_code(value: &str) -> String {
+    value.trim().trim_matches('`').to_string()
+}
+
+fn split_declared_api(declaration: &str) -> Option<(&str, &str)> {
+    let (method, endpoint) = declaration.split_once(' ')?;
+    Some((method.trim(), endpoint.trim()))
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum TableSection {
+    #[default]
+    None,
+    FrontendPages,
+    ApiEndpoints,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum ActiveTable {
+    #[default]
+    None,
+    FrontendPages,
+    ApiEndpoints,
 }
 
 fn normalize_page_route(rel: &str) -> String {
@@ -359,6 +528,22 @@ feature_metadata:
 ---
 
 # Placeholder
+
+    ## Frontend Pages
+
+    | Page | Route | Description |
+    |------|-------|-------------|
+    | Workspace / Sessions | `/workspace/:workspaceId/sessions/:sessionId` | Session detail page |
+
+    ---
+
+    ## API Endpoints
+
+    ### Sessions (1)
+
+    | Method | Endpoint | Description |
+    |--------|----------|-------------|
+    | GET | `/api/sessions/{id}` | Get session by ID |
 "#,
         )
         .unwrap();
@@ -375,5 +560,9 @@ feature_metadata:
         assert_eq!(links.len(), 1);
         assert_eq!(links[0].feature_id, "session-recovery");
         assert_eq!(links[0].route.as_deref(), Some("/workspace/:workspaceId/sessions/:sessionId"));
+        assert_eq!(catalog.frontend_pages.len(), 1);
+        assert_eq!(catalog.frontend_pages[0].description, "Session detail page");
+        assert_eq!(catalog.api_endpoints.len(), 1);
+        assert_eq!(catalog.api_endpoints[0].domain, "Sessions");
     }
 }

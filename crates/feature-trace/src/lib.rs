@@ -4,8 +4,8 @@ pub mod error;
 
 pub use analyzer::{FeatureTraceInput, SessionAnalysis, SessionAnalyzer};
 pub use catalog::{
-    CapabilityGroup, FeatureSurface, FeatureSurfaceCatalog, FeatureSurfaceKind,
-    FeatureSurfaceLink, FeatureTreeCatalog, ProductFeature, ProductFeatureLink,
-    SurfaceLinkConfidence,
+    ApiEndpointDetail, CapabilityGroup, FeatureSurface, FeatureSurfaceCatalog,
+    FeatureSurfaceKind, FeatureSurfaceLink, FeatureTreeCatalog, FrontendPageDetail,
+    ProductFeature, ProductFeatureLink, SurfaceLinkConfidence,
 };
 pub use error::FeatureTraceError;
