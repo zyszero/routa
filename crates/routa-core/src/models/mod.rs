@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod artifact;
 pub mod canvas_artifact;
+pub mod canvas_generation_contract;
 pub mod codebase;
 pub mod kanban;
 pub mod kanban_config;
@@ -14,6 +15,7 @@ pub mod worktree;
 pub use agent::*;
 pub use artifact::*;
 pub use canvas_artifact::*;
+pub use canvas_generation_contract::*;
 pub use codebase::*;
 pub use kanban::*;
 pub use message::*;

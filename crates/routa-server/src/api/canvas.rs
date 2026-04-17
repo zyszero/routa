@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 
 use crate::error::ServerError;
 use routa_core::acp::SessionLaunchOptions;
+use routa_core::models::get_canvas_generation_contract;
 use routa_core::orchestration::SpecialistConfig;
 use routa_core::store::acp_session_store::CreateAcpSessionParams;
 
@@ -361,7 +362,10 @@ async fn create_canvas_from_specialist(
         let status = value
             .get("__status")
             .and_then(Value::as_u64)
-            .map(|code| axum::http::StatusCode::from_u16(code as u16).unwrap_or(axum::http::StatusCode::CREATED))
+            .map(|code| {
+                axum::http::StatusCode::from_u16(code as u16)
+                    .unwrap_or(axum::http::StatusCode::CREATED)
+            })
             .unwrap_or(axum::http::StatusCode::CREATED);
         let response = if status == axum::http::StatusCode::CREATED {
             value
@@ -434,9 +438,8 @@ async fn get_canvas(
         .filter(|artifact| artifact.artifact_type == ArtifactType::Canvas)
         .ok_or_else(|| ServerError::NotFound("Canvas artifact not found".to_string()))?;
 
-    let payload = parse_canvas_payload(artifact.content.as_deref()).ok_or_else(|| {
-        ServerError::Internal("Canvas artifact data is corrupted".to_string())
-    })?;
+    let payload = parse_canvas_payload(artifact.content.as_deref())
+        .ok_or_else(|| ServerError::Internal("Canvas artifact data is corrupted".to_string()))?;
 
     Ok(Json(json!({
         "id": artifact.id,
@@ -580,20 +583,66 @@ fn derive_allowed_native_tools(specialist_id: Option<&str>) -> Option<Vec<String
 }
 
 fn build_canvas_specialist_prompt(user_prompt: &str) -> String {
-    [
-        "Create a Routa browser canvas as TSX source code.",
-        "Return only the TSX source.",
-        "Do not include markdown code fences.",
-        "Do not include explanations, notes, or prose before or after the code.",
-        "The source must `export default function Canvas()` or `export default Canvas`.",
-        "Prefer a self-contained component with inline styles.",
-        "If you import anything, you may only import from `react` or `@canvas-sdk`.",
-        "Do not use browser globals or side effects such as `window`, `document`, `fetch`, or `localStorage`.",
-        "",
-        "User request:",
-        user_prompt.trim(),
-    ]
-    .join("\n")
+    let contract = get_canvas_generation_contract();
+    let default_export_forms = format_or_list(&contract.output.default_export_forms);
+    let allowed_modules = format_or_list(&contract.imports.allowed_modules);
+    let forbidden_globals = format_or_list(&contract.runtime.forbidden_globals);
+    let forbidden_shell_chrome = format_or_list(&contract.layout.forbidden_shell_chrome);
+    let mut lines = vec![contract.prompt.artifact_description.clone()];
+
+    if contract.prompt.require_source_only {
+        lines.push("Return only the TSX source.".to_string());
+    }
+    if !contract.prompt.allow_markdown_code_fences {
+        lines.push("Do not include markdown code fences.".to_string());
+    }
+    if !contract.prompt.allow_prose {
+        lines.push(
+            "Do not include explanations, notes, or prose before or after the code.".to_string(),
+        );
+    }
+
+    lines.extend([
+        format!("The source must {default_export_forms}."),
+        "Prefer a self-contained component with inline styles.".to_string(),
+        format!("If you import anything, you may only import from {allowed_modules}."),
+        format!("Do not use browser globals or side effects such as {forbidden_globals}."),
+        format!(
+            "Do not render fake shell chrome such as {forbidden_shell_chrome} unless the prompt explicitly asks for it."
+        ),
+        format!(
+            "Keep the composition {}; avoid {}.",
+            contract.style.principles.join(", "),
+            contract.style.forbidden_patterns.join(", ")
+        ),
+        String::new(),
+        "User request:".to_string(),
+        user_prompt.trim().to_string(),
+    ]);
+
+    lines
+        .into_iter()
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn format_or_list(values: &[String]) -> String {
+    let quoted = values
+        .iter()
+        .map(|value| format!("`{value}`"))
+        .collect::<Vec<_>>();
+
+    match quoted.as_slice() {
+        [] => String::new(),
+        [single] => single.clone(),
+        [left, right] => format!("{left} or {right}"),
+        _ => format!(
+            "{}, or {}",
+            quoted[..quoted.len() - 1].join(", "),
+            quoted[quoted.len() - 1]
+        ),
+    }
 }
 
 fn extract_text_from_prompt_result(value: &Value) -> String {
@@ -630,9 +679,9 @@ fn extract_text_from_process_output_line(data: &str) -> Option<String> {
             let tail = &data[start + marker.len()..];
             if let Some(end) = tail.rfind('"') {
                 let quoted = format!("\"{}\"", &tail[..end]);
-                return serde_json::from_str::<String>(&quoted).ok().or_else(|| {
-                    Some(tail[..end].replace("\\n", "\n").replace("\\\"", "\""))
-                });
+                return serde_json::from_str::<String>(&quoted)
+                    .ok()
+                    .or_else(|| Some(tail[..end].replace("\\n", "\n").replace("\\\"", "\"")));
             }
         }
     }
@@ -736,12 +785,15 @@ fn extract_canvas_source_from_specialist_output(output: &str) -> Option<String> 
         return None;
     }
 
+    let contract = get_canvas_generation_contract();
     let source_from_json = serde_json::from_str::<Value>(normalized)
         .ok()
         .and_then(|value| {
-            ["source", "tsx", "code", "canvasSource", "component"]
+            contract
+                .output
+                .json_source_keys
                 .iter()
-                .find_map(|key| value.get(*key).and_then(Value::as_str))
+                .find_map(|key| value.get(key).and_then(Value::as_str))
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
                 .map(ToOwned::to_owned)
@@ -757,10 +809,15 @@ fn extract_canvas_source_from_specialist_output(output: &str) -> Option<String> 
         fenced.unwrap_or_else(|| normalized.to_string())
     });
 
-    let start_index = ["import ", "export default", "function Canvas(", "const Canvas ="]
-        .iter()
-        .filter_map(|marker| candidate.find(marker))
-        .min();
+    let start_index = [
+        "import ",
+        "export default",
+        "function Canvas(",
+        "const Canvas =",
+    ]
+    .iter()
+    .filter_map(|marker| candidate.find(marker))
+    .min();
     let trimmed = start_index
         .map(|index| candidate[index..].trim().to_string())
         .unwrap_or(candidate);
@@ -843,6 +900,8 @@ mod tests {
         let prompt = build_canvas_specialist_prompt("Create a status card.");
 
         assert!(prompt.contains("Return only the TSX source."));
+        assert!(prompt.contains("fake shell chrome"));
+        assert!(prompt.contains("@canvas-sdk/*"));
         assert!(prompt.contains("Create a status card."));
     }
 

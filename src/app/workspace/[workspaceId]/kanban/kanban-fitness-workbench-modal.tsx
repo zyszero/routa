@@ -109,6 +109,14 @@ export function KanbanFitnessWorkbenchModal({
 }: KanbanFitnessWorkbenchModalProps) {
   const { t } = useTranslation();
   const acp = useAcp();
+  const {
+    connect,
+    createSession,
+    promptSession,
+    providers,
+    selectedProvider,
+    loading: acpLoading,
+  } = acp;
   const [specsState, setSpecsState] = useState<QueryState<FitnessSpecSummary[]>>({
     loading: false,
     error: null,
@@ -132,6 +140,13 @@ export function KanbanFitnessWorkbenchModal({
   const repoLabel = codebase?.label ?? (repoPath ? basename(repoPath) : "");
   const branch = codebase?.branch ?? null;
   const contextReady = open && Boolean(repoPath) && !specsState.loading && !planState.loading;
+  const preferredProvider = useMemo(() => {
+    const availableProviders = providers.filter((provider) => provider.status === "available");
+    return availableProviders.find((provider) => provider.id === selectedProvider)?.id
+      ?? availableProviders.find((provider) => provider.id === "opencode")?.id
+      ?? availableProviders[0]?.id
+      ?? (selectedProvider === "codex" ? "opencode" : selectedProvider || "opencode");
+  }, [providers, selectedProvider]);
 
   const canvasPrompt = useMemo(() => {
     if (!repoPath || !repoLabel) return null;
@@ -247,10 +262,10 @@ export function KanbanFitnessWorkbenchModal({
     startAttemptedRef.current = true;
 
     try {
-      await acp.connect();
-      const result = await acp.createSession(
+      await connect();
+      const result = await createSession(
         repoPath,
-        undefined,
+        preferredProvider,
         undefined,
         "DEVELOPER",
         workspaceId,
@@ -277,7 +292,16 @@ export function KanbanFitnessWorkbenchModal({
     } catch (error) {
       setPreviewError(toErrorMessage(error) || "Failed to create fitness specialist session");
     }
-  }, [acp, branch, canvasPrompt, onSessionIdChange, repoPath, workspaceId]);
+  }, [
+    branch,
+    canvasPrompt,
+    connect,
+    createSession,
+    onSessionIdChange,
+    preferredProvider,
+    repoPath,
+    workspaceId,
+  ]);
 
   useEffect(() => {
     if (!contextReady || sessionId || startAttemptedRef.current) {
@@ -295,13 +319,11 @@ export function KanbanFitnessWorkbenchModal({
     let cancelled = false;
 
     const sendPrompt = async () => {
+      pendingPromptSessionIdRef.current = null;
       try {
-        await acp.promptSession(sessionId, canvasPrompt);
-        if (cancelled) return;
-        pendingPromptSessionIdRef.current = null;
+        await promptSession(sessionId, canvasPrompt);
       } catch (error) {
         if (cancelled) return;
-        pendingPromptSessionIdRef.current = null;
         setPreviewError(toErrorMessage(error) || "Failed to start specialist prompt");
       }
     };
@@ -311,7 +333,7 @@ export function KanbanFitnessWorkbenchModal({
     return () => {
       cancelled = true;
     };
-  }, [acp, canvasPrompt, open, sessionId]);
+  }, [canvasPrompt, open, promptSession, sessionId]);
 
   useEffect(() => {
     if (!open || !sessionId) {
@@ -337,7 +359,11 @@ export function KanbanFitnessWorkbenchModal({
         );
         const extractedSource = extractCanvasSourceFromSpecialistOutput(rawOutput);
         if (extractedSource) {
-          setPreviewSource((current) => current === extractedSource ? current : extractedSource);
+          const compiled = compileCanvasTsx(extractedSource);
+          if (compiled.ok) {
+            setPreviewError(null);
+            setPreviewSource((current) => current === extractedSource ? current : extractedSource);
+          }
         }
       } catch (error) {
         if (cancelled) return;
@@ -483,7 +509,7 @@ export function KanbanFitnessWorkbenchModal({
                     <div className="max-w-md rounded-xl border border-dashed border-slate-300 bg-white/80 px-5 py-6 text-center text-[13px] leading-6 text-slate-600 dark:border-[#2a3142] dark:bg-[#131823] dark:text-slate-300">
                       {specsState.loading || planState.loading
                         ? t.kanban.fitnessWorkbenchContextLoading
-                        : acp.loading || pendingPromptSessionIdRef.current
+                        : acpLoading || pendingPromptSessionIdRef.current
                           ? t.kanban.fitnessWorkbenchGenerating
                           : t.kanban.fitnessWorkbenchWaiting}
                     </div>

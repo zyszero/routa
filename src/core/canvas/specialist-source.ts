@@ -1,4 +1,9 @@
-const JSON_SOURCE_KEYS = ["source", "tsx", "code", "canvasSource", "component"];
+import {
+  buildCanvasSpecialistContractLines,
+  getCanvasGenerationContract,
+} from "./generation-contract";
+
+const JSON_SOURCE_KEYS = getCanvasGenerationContract().output.jsonSourceKeys;
 
 export type CanvasSpecialistHistoryEntry = {
   update?: Record<string, unknown>;
@@ -69,14 +74,7 @@ function normalizeCanvasModuleSource(raw: string): string | null {
 
 export function buildCanvasSpecialistPrompt(userPrompt: string): string {
   return [
-    "Create a Routa browser canvas as TSX source code.",
-    "Return only the TSX source.",
-    "Do not include markdown code fences.",
-    "Do not include explanations, notes, or prose before or after the code.",
-    "The source must `export default function Canvas()` or `export default Canvas`.",
-    "Prefer a self-contained component with inline styles.",
-    'If you import anything, you may only import from `react` or `@canvas-sdk`.',
-    "Do not use browser globals or side effects such as `window`, `document`, `fetch`, or `localStorage`.",
+    ...buildCanvasSpecialistContractLines(),
     "",
     "User request:",
     userPrompt.trim(),

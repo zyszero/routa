@@ -11,6 +11,8 @@ describe("canvas specialist source helpers", () => {
     const prompt = buildCanvasSpecialistPrompt("Create a status card.");
 
     expect(prompt).toContain("Return only the TSX source");
+    expect(prompt).toContain("fake shell chrome");
+    expect(prompt).toContain("@canvas-sdk/*");
     expect(prompt).toContain("Create a status card.");
   });
 

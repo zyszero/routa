@@ -16,6 +16,7 @@ import { transform } from "sucrase";
 import React from "react";
 
 import * as CanvasSDK from "@/client/canvas-sdk";
+import { getCanvasGenerationContract } from "@/core/canvas/generation-contract";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,11 +55,7 @@ const MODULE_WHITELIST: Record<string, unknown> = {
 };
 
 function normalizeCanvasModuleSpecifier(specifier: string): string {
-  const sdkPrefixes = [
-    "./client/canvas-sdk",
-    "@/client/canvas-sdk",
-    "src/client/canvas-sdk",
-  ];
+  const sdkPrefixes = getCanvasGenerationContract().imports.normalizedPrefixes;
 
   for (const prefix of sdkPrefixes) {
     if (specifier === prefix) {
