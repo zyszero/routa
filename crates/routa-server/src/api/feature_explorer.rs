@@ -301,9 +301,9 @@ async fn get_feature_list(
         ResolveRepoRootOptions::default(),
     )
     .await
-    .map_err(|e| map_context_error(e))?;
+    .map_err(map_context_error)?;
 
-    let feature_tree = load_feature_tree(&repo_root).map_err(|e| map_error(e))?;
+    let feature_tree = load_feature_tree(&repo_root).map_err(map_error)?;
     let (session_stats, _file_stats) = collect_session_stats(&repo_root, &feature_tree);
 
     let capability_groups: Vec<CapabilityGroupResponse> = feature_tree
@@ -364,9 +364,9 @@ async fn get_feature_detail(
         ResolveRepoRootOptions::default(),
     )
     .await
-    .map_err(|e| map_context_error(e))?;
+    .map_err(map_context_error)?;
 
-    let feature_tree = load_feature_tree(&repo_root).map_err(|e| map_error(e))?;
+    let feature_tree = load_feature_tree(&repo_root).map_err(map_error)?;
     let (session_stats, file_stats) = collect_session_stats(&repo_root, &feature_tree);
 
     let feature = feature_tree
@@ -495,7 +495,7 @@ async fn get_feature_detail(
         file_stats: feature_file_stats,
     };
 
-    Ok(Json(serde_json::to_value(response).map_err(|e| map_error(e))?))
+    Ok(Json(serde_json::to_value(response).map_err(map_error)?))
 }
 
 async fn get_feature_files(
@@ -512,9 +512,9 @@ async fn get_feature_files(
         ResolveRepoRootOptions::default(),
     )
     .await
-    .map_err(|e| map_context_error(e))?;
+    .map_err(map_context_error)?;
 
-    let feature_tree = load_feature_tree(&repo_root).map_err(|e| map_error(e))?;
+    let feature_tree = load_feature_tree(&repo_root).map_err(map_error)?;
     let feature = feature_tree
         .features
         .iter()
@@ -560,9 +560,9 @@ async fn get_feature_apis(
         ResolveRepoRootOptions::default(),
     )
     .await
-    .map_err(|e| map_context_error(e))?;
+    .map_err(map_context_error)?;
 
-    let feature_tree = load_feature_tree(&repo_root).map_err(|e| map_error(e))?;
+    let feature_tree = load_feature_tree(&repo_root).map_err(map_error)?;
     let feature = feature_tree
         .features
         .iter()
