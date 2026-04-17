@@ -436,6 +436,14 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     fitnessSkipped: string;
     fitnessLast: string;
     fitnessOpenDetails: string;
+    fitnessWorkbenchTitle: string;
+    fitnessWorkbenchNoRepo: string;
+    fitnessWorkbenchProcess: string;
+    fitnessWorkbenchProcessHint: string;
+    fitnessWorkbenchGenerating: string;
+    fitnessWorkbenchWaiting: string;
+    fitnessWorkbenchContextLoading: string;
+    fitnessWorkbenchSaved: string;
     missing: string;
     sessionMismatch: string;
     backendAgents: string;

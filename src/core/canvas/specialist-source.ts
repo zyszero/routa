@@ -1,5 +1,10 @@
 const JSON_SOURCE_KEYS = ["source", "tsx", "code", "canvasSource", "component"];
 
+export type CanvasSpecialistHistoryEntry = {
+  update?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
 function normalizeRawOutput(raw: string): string {
   return raw.replace(/^\uFEFF/, "").trim();
 }
@@ -76,6 +81,114 @@ export function buildCanvasSpecialistPrompt(userPrompt: string): string {
     "User request:",
     userPrompt.trim(),
   ].join("\n");
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function extractUpdateText(update: Record<string, unknown>): string {
+  const data = update.data;
+  if (typeof data === "string") {
+    const nonDeltaMarker = 'Agent message (non-delta) received: "';
+    const deltaMarker = 'delta: "';
+    for (const marker of [nonDeltaMarker, deltaMarker]) {
+      const start = data.indexOf(marker);
+      if (start >= 0) {
+        const tail = data.slice(start + marker.length);
+        const end = tail.lastIndexOf("\"");
+        if (end >= 0) {
+          try {
+            return JSON.parse(`"${tail.slice(0, end)}"`) as string;
+          } catch {
+            return tail.slice(0, end).replaceAll("\\n", "\n");
+          }
+        }
+      }
+    }
+  }
+
+  if (typeof update.delta === "string") return update.delta;
+  if (typeof update.text === "string") return update.text;
+  if (typeof update.content === "string") return update.content;
+
+  const content = update.content;
+  if (isPlainObject(content) && typeof content.text === "string") {
+    return content.text;
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((entry) => {
+        if (!isPlainObject(entry)) return "";
+        if (typeof entry.text === "string") return entry.text;
+        if (typeof entry.content === "string") return entry.content;
+        return "";
+      })
+      .join("");
+  }
+
+  const message = update.message;
+  if (typeof message === "string") return message;
+  if (isPlainObject(message)) {
+    if (typeof message.text === "string") return message.text;
+
+    const nested = message.content;
+    if (typeof nested === "string") return nested;
+    if (isPlainObject(nested) && typeof nested.text === "string") {
+      return nested.text;
+    }
+    if (Array.isArray(nested)) {
+      return nested
+        .map((entry) => {
+          if (!isPlainObject(entry)) return "";
+          if (typeof entry.text === "string") return entry.text;
+          if (typeof entry.content === "string") return entry.content;
+          return "";
+        })
+        .join("");
+    }
+  }
+
+  return "";
+}
+
+export function extractCanvasSpecialistOutputFromHistory(
+  history: CanvasSpecialistHistoryEntry[],
+): string {
+  const directOutput = history
+    .map((entry) => {
+      const update = isPlainObject(entry.update) ? entry.update : null;
+      if (!update) return "";
+      const sessionUpdate = typeof update.sessionUpdate === "string"
+        ? update.sessionUpdate
+        : "";
+      if (
+        sessionUpdate === "agent_message"
+        || sessionUpdate === "agent_message_chunk"
+        || sessionUpdate === "agent_chunk"
+      ) {
+        return extractUpdateText(update);
+      }
+      return "";
+    })
+    .join("")
+    .trim();
+
+  if (directOutput) {
+    return directOutput;
+  }
+
+  return history
+    .map((entry) => {
+      const update = isPlainObject(entry.update) ? entry.update : null;
+      if (!update) return "";
+      return typeof update.sessionUpdate === "string" && update.sessionUpdate === "process_output"
+        ? extractUpdateText(update)
+        : "";
+    })
+    .join("")
+    .trim();
 }
 
 export function extractCanvasSourceFromSpecialistOutput(output: string): string | null {

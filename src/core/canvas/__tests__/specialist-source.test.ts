@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCanvasSpecialistPrompt,
+  extractCanvasSpecialistOutputFromHistory,
   extractCanvasSourceFromSpecialistOutput,
 } from "../specialist-source";
 
@@ -48,5 +49,22 @@ function Canvas() {
 
   it("returns null when no canvas component can be recovered", () => {
     expect(extractCanvasSourceFromSpecialistOutput("I cannot do that.")).toBeNull();
+  });
+
+  it("extracts specialist output from consolidated session history", () => {
+    const output = extractCanvasSpecialistOutputFromHistory([
+      {
+        update: {
+          sessionUpdate: "agent_message",
+          content: {
+            type: "text",
+            text: "export default function Canvas(){ return <div>History</div>; }",
+          },
+        },
+      },
+    ]);
+
+    expect(output).toContain("export default function Canvas()");
+    expect(output).toContain("History");
   });
 });

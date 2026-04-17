@@ -228,6 +228,8 @@ export function KanbanTab({
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentSessionId, setAgentSessionId] = useState<string | null>(null);
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
+  const [showFitnessWorkbench, setShowFitnessWorkbench] = useState(false);
+  const [fitnessWorkbenchSessionId, setFitnessWorkbenchSessionId] = useState<string | null>(null);
   const [detailSplitRatio, setDetailSplitRatio] = useState(0.48);
   const [isDraggingDetailSplit, setIsDraggingDetailSplit] = useState(false);
 
@@ -1999,14 +2001,7 @@ export function KanbanTab({
       // Could open provider settings or do nothing
     },
     onFitnessClick: () => {
-      const query = new URLSearchParams();
-      if (defaultCodebase?.id) {
-        query.set("codebaseId", defaultCodebase.id);
-      } else if (defaultCodebase?.repoPath) {
-        query.set("repoPath", defaultCodebase.repoPath);
-      }
-      const target = `/workspace/${encodeURIComponent(workspaceId)}/kanban/fitness${query.size > 0 ? `?${query.toString()}` : ""}`;
-      window.location.assign(target);
+      setShowFitnessWorkbench(true);
     },
     fileChangesOpen,
     gitLogOpen,
@@ -2014,6 +2009,16 @@ export function KanbanTab({
     runtimeFitness: runtimeFitness.data,
     runtimeFitnessLoading: runtimeFitness.loading,
     runtimeFitnessError: runtimeFitness.error,
+  };
+
+  const fitnessWorkbenchModalProps = {
+    open: showFitnessWorkbench,
+    workspaceId,
+    codebase: defaultCodebase,
+    runtimeFitness: runtimeFitness.data,
+    sessionId: fitnessWorkbenchSessionId,
+    onSessionIdChange: setFitnessWorkbenchSessionId,
+    onClose: () => setShowFitnessWorkbench(false),
   };
 
   return (
@@ -2032,6 +2037,7 @@ export function KanbanTab({
       deleteTaskModalProps={deleteTaskModalProps}
       moveBlockedModalProps={moveBlockedModalProps}
       statusBarProps={statusBarProps}
+      fitnessWorkbenchModalProps={fitnessWorkbenchModalProps}
     />
   );
 }

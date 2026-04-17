@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { KanbanTab } from "../kanban-tab";
@@ -19,6 +19,38 @@ vi.mock("@/client/utils/diagnostics", async () => {
 
 vi.mock("@/client/components/repo-picker", () => ({
   RepoPicker: () => <div data-testid="repo-picker-mock" />,
+}));
+
+vi.mock("@/client/hooks/use-acp", () => ({
+  useAcp: () => ({
+    connected: false,
+    sessionId: null,
+    updates: [],
+    providers: [],
+    selectedProvider: "opencode",
+    loading: false,
+    error: null,
+    authError: null,
+    dockerConfigError: null,
+    connect: vi.fn(async () => {}),
+    createSession: vi.fn(async () => null),
+    resumeSession: vi.fn(async () => null),
+    forkSession: vi.fn(async () => null),
+    selectSession: vi.fn(),
+    setProvider: vi.fn(),
+    setMode: vi.fn(async () => {}),
+    prompt: vi.fn(async () => {}),
+    promptSession: vi.fn(async () => {}),
+    respondToUserInput: vi.fn(async () => {}),
+    respondToUserInputForSession: vi.fn(async () => {}),
+    cancel: vi.fn(async () => {}),
+    disconnect: vi.fn(),
+    clearAuthError: vi.fn(),
+    clearDockerConfigError: vi.fn(),
+    listProviderModels: vi.fn(async () => []),
+    writeTerminal: vi.fn(async () => {}),
+    resizeTerminal: vi.fn(async () => {}),
+  }),
 }));
 
 vi.mock("../use-runtime-fitness-status", async () => {
@@ -68,6 +100,11 @@ beforeEach(() => {
   desktopAwareFetch.mockImplementation(
     () => new Promise<Response>(() => {}),
   );
+  vi.stubGlobal("localStorage", {
+    getItem: vi.fn(() => null),
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+  });
   window.history.replaceState({}, "", "/workspace/workspace-1/kanban");
 });
 
@@ -76,13 +113,7 @@ afterEach(() => {
 });
 
 describe("KanbanTab fitness navigation", () => {
-  it("opens the live kanban fitness canvas instead of fluency settings", () => {
-    const assignSpy = vi.fn();
-    vi.stubGlobal("location", {
-      ...window.location,
-      assign: assignSpy,
-    });
-
+  it("opens the fitness workbench modal from the status bar", async () => {
     render(
       <KanbanTab
         workspaceId="workspace-1"
@@ -105,10 +136,10 @@ describe("KanbanTab fitness navigation", () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId("kanban-runtime-fitness-status"));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("kanban-runtime-fitness-status"));
+    });
 
-    expect(assignSpy).toHaveBeenCalledWith(
-      "/workspace/workspace-1/kanban/fitness?codebaseId=codebase-1",
-    );
+    expect(screen.getByTestId("kanban-fitness-workbench-modal")).not.toBeNull();
   });
 });
