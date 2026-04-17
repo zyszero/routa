@@ -53,6 +53,25 @@ const MODULE_WHITELIST: Record<string, unknown> = {
   "@canvas-sdk/theme-context": CanvasSDK,
 };
 
+function normalizeCanvasModuleSpecifier(specifier: string): string {
+  const sdkPrefixes = [
+    "./client/canvas-sdk",
+    "@/client/canvas-sdk",
+    "src/client/canvas-sdk",
+  ];
+
+  for (const prefix of sdkPrefixes) {
+    if (specifier === prefix) {
+      return "@canvas-sdk";
+    }
+    if (specifier.startsWith(`${prefix}/`)) {
+      return `@canvas-sdk/${specifier.slice(prefix.length + 1)}`;
+    }
+  }
+
+  return specifier;
+}
+
 // ---------------------------------------------------------------------------
 // Compiler
 // ---------------------------------------------------------------------------
@@ -100,7 +119,8 @@ export function compileCanvasTsx(source: string): CompileOutcome {
     const fakeModule = { exports: moduleExports };
 
     const constrainedRequire = (specifier: string): unknown => {
-      const resolved = MODULE_WHITELIST[specifier];
+      const normalizedSpecifier = normalizeCanvasModuleSpecifier(specifier);
+      const resolved = MODULE_WHITELIST[normalizedSpecifier];
       if (resolved === undefined) {
         throw new Error(
           `Import "${specifier}" is not allowed. Canvas code may only import from: ${Object.keys(MODULE_WHITELIST).join(", ")}`,

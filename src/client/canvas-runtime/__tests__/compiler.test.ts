@@ -93,4 +93,25 @@ export default function() {
     const result = compileCanvasTsx(source);
     expect(result.ok).toBe(true);
   });
+
+  it("accepts local canvas sdk path aliases from generated specialist code", () => {
+    const source = `
+import type { JSX } from "react";
+import { Card, CardBody } from "./client/canvas-sdk/containers";
+import { H2, Text } from "@/client/canvas-sdk/primitives";
+
+export default function Canvas(): JSX.Element {
+  return (
+    <Card>
+      <H2>Specialist Canvas</H2>
+      <CardBody>
+        <Text>Ready for browser use.</Text>
+      </CardBody>
+    </Card>
+  );
+}
+`;
+    const result = compileCanvasTsx(source);
+    expect(result.ok).toBe(true);
+  });
 });
