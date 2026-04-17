@@ -12,6 +12,7 @@ import {
   getStoredFitnessCanvasPath,
   persistFitnessCanvasSource,
 } from "../local-canvas-storage";
+import { getProjectStorageDir } from "@/core/storage/folder-slug";
 
 describe("local canvas storage", () => {
   let tempHome: string;
@@ -51,6 +52,18 @@ describe("local canvas storage", () => {
     );
   });
 
+  it("stores canvases for managed clone repos under the current project storage root", () => {
+    const cloneRepoPath = path.join(process.cwd(), ".routa", "repos", "phodal--routa");
+
+    expect(getStoredFitnessCanvasPath(cloneRepoPath, "phodal/routa")).toBe(
+      path.join(
+        getProjectStorageDir(process.cwd()),
+        "canvases",
+        "phodal-routa-fitness-overview.canvas.tsx",
+      ),
+    );
+  });
+
   it("persists the generated canvas source to the project-local canvases directory", async () => {
     const result = await persistFitnessCanvasSource({
       repoPath: "/Users/phodal/ai/routa-js",
@@ -61,5 +74,23 @@ describe("local canvas storage", () => {
     await expect(fs.readFile(result.filePath, "utf-8")).resolves.toBe(
       "export default function Canvas(){ return <div />; }\n",
     );
+  });
+
+  it("persists managed clone canvases under the current project storage root", async () => {
+    const cloneRepoPath = path.join(process.cwd(), ".routa", "repos", "phodal--routa");
+    const result = await persistFitnessCanvasSource({
+      repoPath: cloneRepoPath,
+      repoLabel: "phodal/routa",
+      source: "export default function Canvas(){ return <div>Clone</div>; }",
+    });
+
+    expect(result.filePath).toBe(
+      path.join(
+        getProjectStorageDir(process.cwd()),
+        "canvases",
+        "phodal-routa-fitness-overview.canvas.tsx",
+      ),
+    );
+    await expect(fs.readFile(result.filePath, "utf-8")).resolves.toContain("Clone");
   });
 });
