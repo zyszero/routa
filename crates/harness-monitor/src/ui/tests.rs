@@ -1,4 +1,5 @@
 use super::*;
+use crate::feature_trace::SessionTraceMaterial;
 use crate::observe::ipc::RuntimeFeed;
 use crate::shared::models::{
     AttributionConfidence, DetectedAgent, EntryKind, EventLogEntry, EventSource, FileView,
@@ -385,6 +386,36 @@ fn sample_cache(state: &RuntimeState) -> AppCache {
     cache
 }
 
+fn seed_live_run_feature_trace(cache: &mut AppCache) {
+    cache.set_session_feature_trace_for_tests(
+        SessionTraceMaterial::new(
+            "live-hook-check",
+            vec!["crates/harness-monitor/src/tui.rs".to_string()],
+            vec!["Write".to_string()],
+        ),
+        trace_parser::SessionAnalysis {
+            session_id: "live-hook-check".to_string(),
+            changed_files: vec!["crates/harness-monitor/src/tui.rs".to_string()],
+            tool_call_counts: BTreeMap::from([("Write".to_string(), 1)]),
+            surface_links: vec![trace_parser::FeatureSurfaceLink {
+                kind: trace_parser::FeatureSurfaceKind::Page,
+                route: "/workspace/:workspaceId/feature-explorer".to_string(),
+                source_path: "src/app/workspace/[workspaceId]/feature-explorer/page.tsx"
+                    .to_string(),
+                via_path: "crates/harness-monitor/src/tui.rs".to_string(),
+                confidence: trace_parser::SurfaceLinkConfidence::Medium,
+            }],
+            feature_links: vec![trace_parser::ProductFeatureLink {
+                feature_id: "feature-explorer".to_string(),
+                feature_name: "Feature Explorer".to_string(),
+                route: Some("/workspace/:workspaceId/feature-explorer".to_string()),
+                via_path: "crates/harness-monitor/src/tui.rs".to_string(),
+                confidence: trace_parser::SurfaceLinkConfidence::Medium,
+            }],
+        },
+    );
+}
+
 fn render_snapshot(state: &RuntimeState, cache: &mut AppCache, width: u16, height: u16) -> String {
     let dir = tempdir().expect("tempdir");
     let feed = RuntimeFeed::open(&dir.path().join("events.jsonl")).expect("feed");
@@ -727,6 +758,7 @@ fn run_details_surface_run_centric_operator_context() {
     let mut state = sample_state();
     select_live_run(&mut state);
     let mut cache = sample_cache(&state);
+    seed_live_run_feature_trace(&mut cache);
 
     let snapshot = render_snapshot(&state, &mut cache, 180, 52);
 
@@ -737,6 +769,7 @@ fn run_details_surface_run_centric_operator_context() {
     assert!(snapshot.contains("Next: generate coverage evidence"));
     assert!(snapshot.contains("Evidence:"));
     assert!(snapshot.contains("Trace:"));
+    assert!(snapshot.contains("Feature Explorer"));
     assert!(snapshot.contains("commit: stabilize monitor journey"));
 }
 
@@ -745,6 +778,7 @@ fn tui_snapshot_run_details_decision_first() {
     let mut state = sample_state();
     select_live_run(&mut state);
     let mut cache = sample_cache(&state);
+    seed_live_run_feature_trace(&mut cache);
 
     insta::assert_snapshot!(
         "routa_watch_tui_run_details_decision_first",

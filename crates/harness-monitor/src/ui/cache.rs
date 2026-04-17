@@ -1,6 +1,9 @@
 use super::fitness;
 use super::review::{RepoReviewHint, ReviewHint, ReviewTriggerCache};
 use super::*;
+use crate::feature_trace::{
+    cache_key_for_session_trace, FeatureTraceCatalogs, SessionTraceMaterial,
+};
 use crate::observe::codex_transcript::recent_prompt_previews_from_transcript;
 use crate::ui::state::{FitnessViewMode, FocusPane};
 use ratatui::text::Text;
@@ -188,6 +191,7 @@ pub(super) struct AppCache {
     pub(super) diff_cache: BTreeMap<String, DetailCacheEntry>,
     pub(super) facts_cache: BTreeMap<String, FileFactsEntry>,
     prompt_history_cache: BTreeMap<String, Vec<String>>,
+    session_feature_trace_cache: BTreeMap<String, trace_parser::SessionAnalysis>,
     highlighted_detail_cache: BTreeMap<String, Text<'static>>,
     pending_stats_signature: Option<String>,
     pending_preview_request: Option<(String, FilePreviewScope)>,
@@ -206,6 +210,8 @@ pub(super) struct AppCache {
     fitness_is_running: bool,
     fitness_cache_key: Option<String>,
     fitness_repo_root: String,
+    feature_trace_catalogs: Option<FeatureTraceCatalogs>,
+    feature_trace_load_attempted: bool,
     test_mapping_snapshot: Option<TestMappingSnapshot>,
     test_mapping_full_history: BTreeMap<String, TestMappingHistoryEntry>,
     scc_summary: Option<SccSummary>,
@@ -293,6 +299,7 @@ impl AppCache {
             diff_cache: BTreeMap::new(),
             facts_cache: BTreeMap::new(),
             prompt_history_cache: BTreeMap::new(),
+            session_feature_trace_cache: BTreeMap::new(),
             highlighted_detail_cache: BTreeMap::new(),
             pending_stats_signature: None,
             pending_preview_request: None,
@@ -313,6 +320,8 @@ impl AppCache {
             fitness_is_running: false,
             fitness_cache_key: None,
             fitness_repo_root: repo_root.to_string(),
+            feature_trace_catalogs: None,
+            feature_trace_load_attempted: false,
             test_mapping_snapshot: None,
             test_mapping_full_history: BTreeMap::new(),
             scc_summary: None,
@@ -968,6 +977,16 @@ impl AppCache {
         self.test_mapping_full_refresh_note = Some(note);
     }
 
+    #[cfg(test)]
+    pub(super) fn set_session_feature_trace_for_tests(
+        &mut self,
+        material: SessionTraceMaterial,
+        analysis: trace_parser::SessionAnalysis,
+    ) {
+        let cache_key = cache_key_for_session_trace(&material);
+        self.session_feature_trace_cache.insert(cache_key, analysis);
+    }
+
     fn active_fitness_history(&self) -> Option<&FitnessHistoryEntry> {
         self.fitness_history_by_mode.get(self.fitness_mode.as_str())
     }
@@ -1103,6 +1122,27 @@ impl AppCache {
             .unwrap_or_default()
     }
 
+    pub(super) fn session_feature_trace(
+        &mut self,
+        material: SessionTraceMaterial,
+    ) -> Option<&trace_parser::SessionAnalysis> {
+        if material.changed_files.is_empty() {
+            return None;
+        }
+
+        let cache_key = cache_key_for_session_trace(&material);
+        if !self.session_feature_trace_cache.contains_key(&cache_key) {
+            let analysis = {
+                let catalogs = self.ensure_feature_trace_catalogs()?;
+                catalogs.analyze(&material)
+            };
+            self.session_feature_trace_cache
+                .insert(cache_key.clone(), analysis);
+        }
+
+        self.session_feature_trace_cache.get(&cache_key)
+    }
+
     pub(super) fn test_mapping(
         &self,
         file: &crate::shared::models::FileView,
@@ -1155,6 +1195,17 @@ impl AppCache {
     ) -> Vec<RepoReviewHint> {
         self.review_triggers
             .repo_review_context_for_file(file, files, |entry| self.diff_stat(entry))
+    }
+
+    fn ensure_feature_trace_catalogs(&mut self) -> Option<&FeatureTraceCatalogs> {
+        if !self.feature_trace_load_attempted {
+            self.feature_trace_catalogs =
+                FeatureTraceCatalogs::load(Path::new(&self.fitness_repo_root))
+                    .ok()
+                    .flatten();
+            self.feature_trace_load_attempted = true;
+        }
+        self.feature_trace_catalogs.as_ref()
     }
 }
 

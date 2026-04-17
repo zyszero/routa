@@ -2,6 +2,7 @@ mod attribute;
 #[allow(dead_code)]
 mod context;
 mod evaluate;
+mod feature_trace;
 mod govern;
 mod observe;
 mod run;
