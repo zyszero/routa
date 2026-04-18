@@ -223,6 +223,10 @@ function toPosix(value: string): string {
   return value.replace(/\\/g, "/");
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function extractFrontmatter(raw: string): string | null {
   const trimmed = raw.replace(/^\uFEFF/, "");
   const match = trimmed.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);

@@ -8,12 +8,9 @@ import {
   ChevronRight,
   Copy,
   RotateCcw,
-  X,
 } from "lucide-react";
 
 import { useTranslation } from "@/i18n";
-import type { AcpProviderInfo } from "@/client/acp-client";
-import { AcpProviderDropdown } from "@/client/components/acp-provider-dropdown";
 
 import type {
   AggregatedSelectionSession,
@@ -24,6 +21,7 @@ import {
   type ExplorerSurfaceItem,
   getHttpMethodBadgeClass,
 } from "./surface-navigation";
+export { SessionAnalysisDrawer } from "./session-analysis-drawer";
 import { sanitizeChangedFiles } from "./session-analysis";
 
 function formatShortDate(iso: string): string {
@@ -396,161 +394,6 @@ export function ContextPanel({
         </div>
       </ContextSection>
     </div>
-  );
-}
-
-export function SessionAnalysisDrawer({
-  open,
-  selectedFilePaths,
-  selectedScopeSessions,
-  providers,
-  selectedProvider,
-  onProviderChange,
-  isStartingSessionAnalysis = false,
-  sessionAnalysisError,
-  onClose,
-  onStartSessionAnalysis,
-  t,
-}: {
-  open: boolean;
-  selectedFilePaths: string[];
-  selectedScopeSessions: AggregatedSelectionSession[];
-  providers: AcpProviderInfo[];
-  selectedProvider: string;
-  onProviderChange: (provider: string) => void;
-  isStartingSessionAnalysis?: boolean;
-  sessionAnalysisError?: string | null;
-  onClose: () => void;
-  onStartSessionAnalysis: () => void;
-  t: ReturnType<typeof useTranslation>["t"];
-}) {
-  if (!open) {
-    return null;
-  }
-
-  return (
-    <>
-      <div
-        className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]"
-        onClick={onClose}
-        data-testid="feature-explorer-session-analysis-backdrop"
-      />
-      <aside
-        className="fixed inset-y-0 right-0 z-50 flex h-full w-[26rem] max-w-full flex-col overflow-hidden border-l border-desktop-border bg-desktop-bg-primary shadow-2xl"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t.featureExplorer.sessionAnalysisTitle}
-        data-testid="feature-explorer-session-analysis-drawer"
-      >
-        <div className="flex items-start justify-between gap-3 border-b border-desktop-border px-4 py-3">
-          <div className="min-w-0">
-            <div className="text-sm font-semibold text-desktop-text-primary">
-              {t.featureExplorer.sessionAnalysisTitle}
-            </div>
-            <div className="mt-1 text-[11px] leading-5 text-desktop-text-secondary">
-              {t.featureExplorer.sessionAnalysisDescription}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t.common.close}
-            title={t.common.close}
-            className="rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1 text-desktop-text-secondary hover:text-desktop-text-primary"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="border-b border-desktop-border bg-desktop-bg-secondary/40 px-4 py-2.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <InlineMetricPill label={t.featureExplorer.filesLabel} value={String(selectedFilePaths.length)} />
-            <InlineMetricPill label={t.featureExplorer.sessionsLabel} value={String(selectedScopeSessions.length)} />
-            <div className="ml-auto flex items-center gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">
-                {t.settings.provider}
-              </span>
-              <AcpProviderDropdown
-                providers={providers}
-                selectedProvider={selectedProvider}
-                onProviderChange={onProviderChange}
-                dataTestId="feature-explorer-session-analysis-provider"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-          <ContextSection title={t.featureExplorer.selectedFiles}>
-            <CompactFileList files={selectedFilePaths} />
-          </ContextSection>
-
-          <ContextSection title={t.featureExplorer.selectedFileSignals}>
-            <div className="space-y-2">
-              {selectedScopeSessions.map((session) => (
-                <div
-                  key={`${session.provider}:${session.sessionId}`}
-                  className="rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2.5 py-2"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span
-                          className={`rounded-sm border px-1.5 py-0.5 text-[10px] font-semibold ${getSignalProviderBadgeClass(session.provider)}`}
-                        >
-                          {formatSignalProvider(session.provider)}
-                        </span>
-                        <code className="min-w-0 flex-1 break-all text-[10px] text-desktop-text-primary">
-                          {session.sessionId}
-                        </code>
-                      </div>
-                      <div className="mt-1 text-[11px] leading-5 text-desktop-text-secondary">
-                        {session.promptSnippet || t.featureExplorer.noPromptHistory}
-                      </div>
-                    </div>
-                    <span className="shrink-0 text-[10px] text-desktop-text-secondary">
-                      {formatShortDate(session.updatedAt)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </ContextSection>
-
-          {sessionAnalysisError ? (
-            <div className="rounded-sm border border-red-400/40 bg-red-500/8 px-3 py-2 text-[11px] text-red-500">
-              {sessionAnalysisError}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="border-t border-desktop-border bg-desktop-bg-secondary/40 px-4 py-3">
-          <div className="flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-3 py-1.5 text-[11px] text-desktop-text-secondary hover:text-desktop-text-primary"
-            >
-              {t.common.close}
-            </button>
-            <button
-              type="button"
-              onClick={onStartSessionAnalysis}
-              disabled={isStartingSessionAnalysis}
-              className={`rounded-sm border px-3 py-1.5 text-[11px] font-medium transition-colors ${
-                isStartingSessionAnalysis
-                  ? "cursor-wait border-desktop-border bg-desktop-bg-primary/40 text-desktop-text-secondary/60"
-                  : "border-desktop-accent bg-desktop-bg-active text-desktop-text-primary hover:bg-desktop-bg-primary"
-              }`}
-            >
-              {isStartingSessionAnalysis
-                ? t.featureExplorer.sessionAnalysisStarting
-                : t.featureExplorer.sessionAnalysisAction}
-            </button>
-          </div>
-        </div>
-      </aside>
-    </>
   );
 }
 

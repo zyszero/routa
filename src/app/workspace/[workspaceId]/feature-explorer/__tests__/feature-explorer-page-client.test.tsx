@@ -59,7 +59,7 @@ const analysisAcpState = vi.hoisted(() => ({
   }),
   setMode: vi.fn(),
   prompt: vi.fn(),
-  promptSession: vi.fn(async (sessionId: string) => {
+  promptSession: vi.fn(async (sessionId: string, _text: string) => {
     analysisAcpState.sessionId = sessionId;
   }),
   respondToUserInput: vi.fn(),
@@ -995,6 +995,25 @@ describe("FeatureExplorerPageClient", () => {
                   "fatal: Unable to create '/Users/phodal/ai/routa-js/.git/index.lock': Operation not permitted",
                   "crates/routa-server/src/api/kanban.rs",
                 ],
+                diagnostics: {
+                  toolCallCount: 4,
+                  failedToolCallCount: 1,
+                  toolCallsByName: {
+                    exec_command: 3,
+                    apply_patch: 1,
+                  },
+                  readFiles: ["crates/routa-server/src/api/kanban.rs"],
+                  writtenFiles: ["crates/routa-server/src/api/kanban.rs"],
+                  repeatedReadFiles: ["crates/routa-server/src/api/kanban.rs x2"],
+                  repeatedCommands: ["sed -n 1,200p crates/routa-server/src/api/kanban.rs x2"],
+                  failedTools: [
+                    {
+                      toolName: "exec_command",
+                      command: "git status --short",
+                      message: "fatal: Unable to create '/Users/phodal/ai/routa-js/.git/index.lock'",
+                    },
+                  ],
+                },
                 resumeCommand: "codex resume 019d-kanban-analysis",
               },
             ],
@@ -1021,6 +1040,15 @@ describe("FeatureExplorerPageClient", () => {
     await waitFor(() => {
       expect(screen.getByTestId("feature-explorer-session-analysis-drawer")).toBeTruthy();
     });
+
+    expect(screen.getByText("Session diagnostics")).toBeTruthy();
+    expect(screen.getByText("Tool call breakdown")).toBeTruthy();
+    expect(screen.getAllByText("Read files").length).toBeGreaterThan(0);
+    expect(screen.getByText("Repeated reads")).toBeTruthy();
+    expect(screen.getByText("Repeated commands")).toBeTruthy();
+    expect(screen.getByText("Failed tools")).toBeTruthy();
+    expect(screen.getByText("git status --short")).toBeTruthy();
+    expect(screen.getByText("crates/routa-server/src/api/kanban.rs x2")).toBeTruthy();
 
     fireEvent.click(
       within(screen.getByTestId("feature-explorer-session-analysis-provider")).getByRole("button", { name: "Codex" }),
@@ -1059,7 +1087,8 @@ describe("FeatureExplorerPageClient", () => {
       );
     });
 
-    const [, prompt] = analysisAcpState.promptSession.mock.calls[0] as [string, string];
+    const prompt = analysisAcpState.promptSession.mock.calls[0]?.[1];
+    expect(prompt).toBeTruthy();
     expect(prompt).toContain("019d-kanban-analysis");
     expect(prompt).toContain("Summarize what context should have been provided earlier");
     expect(prompt).not.toContain("Operation not permitted");

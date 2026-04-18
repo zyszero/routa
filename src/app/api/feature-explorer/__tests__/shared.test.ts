@@ -420,6 +420,16 @@ describe("feature explorer transcript stats", () => {
       resumeCommand: "codex resume 019d-signal-session",
       changedFiles: ["src/app/page.tsx"],
     });
+    expect(signal?.sessions[0]?.diagnostics).toMatchObject({
+      toolCallCount: 3,
+      failedToolCallCount: 0,
+      readFiles: ["src/app/page.tsx"],
+      writtenFiles: ["src/app/page.tsx"],
+    });
+    expect(signal?.sessions[0]?.diagnostics?.toolCallsByName).toMatchObject({
+      apply_patch: 1,
+      exec_command: 2,
+    });
     expect(signal?.sessions[0]?.promptHistory[0]).toContain("feature explorer file signals");
     expect(signal?.sessions[0]?.toolNames).toContain("apply_patch");
     expect(signal?.toolHistory).toContain("exec_command");

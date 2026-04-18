@@ -134,6 +134,23 @@ export function commandFromUnknown(event: unknown): string | undefined {
   }
 
   const map = event as Record<string, unknown>;
+  if (map.type === "function_call" && typeof map.arguments === "string") {
+    const rawArguments = map.arguments.trim();
+    if (typeof map.name === "string" && map.name === "exec_command") {
+      try {
+        const parsed = JSON.parse(rawArguments) as Record<string, unknown>;
+        const command = stringifyCommand(parsed.command) ?? stringifyCommand(parsed.cmd);
+        if (command) {
+          return command;
+        }
+      } catch {
+        // Fall through to other heuristics when arguments are not JSON.
+      }
+    }
+
+    return rawArguments;
+  }
+
   const directCommand = stringifyCommand(map.command) ?? stringifyCommand(map.cmd);
   if (directCommand) return directCommand;
 
