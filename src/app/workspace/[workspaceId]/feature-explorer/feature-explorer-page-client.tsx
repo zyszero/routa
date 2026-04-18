@@ -874,6 +874,12 @@ export function FeatureExplorerPageClient({
     [features, inferredGroupId],
   );
   const hasCuratedFeatureTaxonomy = curatedFeatureCount > 0;
+  const hasInferredFeatureTaxonomy = inferredFeatureCount > 0;
+  const repositoryStatusTone = hasCuratedFeatureTaxonomy
+    ? "ready"
+    : hasInferredFeatureTaxonomy
+      ? "inferred"
+      : "missing";
   const fileTree = useMemo(
     () => (surfaceOnlySelection ? [] : resolvedFeatureDetail?.fileTree ?? []),
     [resolvedFeatureDetail, surfaceOnlySelection],
@@ -1372,23 +1378,29 @@ export function FeatureExplorerPageClient({
                   ))}
                 </div>
                 <div className={`mt-3 rounded-sm border px-2.5 py-2 ${
-                  hasCuratedFeatureTaxonomy
+                  repositoryStatusTone === "ready"
                     ? "border-emerald-300/60 bg-emerald-50/70 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
-                    : "border-amber-300/60 bg-amber-50/70 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
+                    : repositoryStatusTone === "inferred"
+                      ? "border-sky-300/60 bg-sky-50/70 text-sky-800 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200"
+                      : "border-amber-300/60 bg-amber-50/70 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
                 }`}>
                   <div className="flex items-center justify-between gap-3">
                     <div className="text-[10px] font-semibold uppercase tracking-[0.14em]">
                       {t.featureExplorer.repositoryStatus}
                     </div>
                     <div className="text-[10px] font-semibold">
-                      {hasCuratedFeatureTaxonomy
+                      {repositoryStatusTone === "ready"
                         ? t.featureExplorer.repositoryReady
+                        : repositoryStatusTone === "inferred"
+                          ? t.featureExplorer.repositoryInferred
                         : t.featureExplorer.repositoryMissingTaxonomy}
                     </div>
                   </div>
                   <div className="mt-1 text-[11px] leading-5">
-                    {hasCuratedFeatureTaxonomy
+                    {repositoryStatusTone === "ready"
                       ? t.featureExplorer.repositoryReadyDescription
+                      : repositoryStatusTone === "inferred"
+                        ? t.featureExplorer.repositoryInferredDescription
                       : t.featureExplorer.repositoryMissingTaxonomyDescription}
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">

@@ -539,6 +539,81 @@ describe("FeatureExplorerPageClient", () => {
     expect(screen.queryByText("feature-explorer")).toBeNull();
   });
 
+  it("shows inferred repository status when only auto-generated feature groups exist", async () => {
+    useFeatureExplorerData.mockReturnValue({
+      loading: false,
+      error: null,
+      capabilityGroups: [{ id: "inferred-surfaces", name: "Inferred Surfaces", description: "Auto-derived groups" }],
+      features: [
+        {
+          id: "feature-explorer",
+          name: "Feature Explorer",
+          group: "inferred-surfaces",
+          summary: "Auto-inferred from routes and APIs",
+          status: "inferred",
+          sessionCount: 2,
+          changedFiles: 1,
+          updatedAt: "-",
+          sourceFileCount: 0,
+          pageCount: 1,
+          apiCount: 1,
+        },
+      ],
+      surfaceIndex: {
+        generatedAt: "",
+        pages: [
+          {
+            route: "/workspace/:workspaceId/feature-explorer",
+            title: "Feature Explorer",
+            description: "Explore features.",
+            sourceFile: "",
+          },
+        ],
+        apis: [],
+        contractApis: [
+          {
+            domain: "feature-explorer",
+            method: "GET",
+            path: "/api/feature-explorer",
+            operationId: "listFeatureExplorer",
+            summary: "List features",
+          },
+        ],
+        nextjsApis: [],
+        rustApis: [],
+        metadata: {
+          schemaVersion: 1,
+          capabilityGroups: [{ id: "inferred-surfaces", name: "Inferred Surfaces", description: "Auto-derived groups" }],
+          features: [
+            {
+              id: "feature-explorer",
+              name: "Feature Explorer",
+              group: "inferred-surfaces",
+              summary: "Auto-inferred from routes and APIs",
+              status: "inferred",
+              pages: ["/workspace/:workspaceId/feature-explorer"],
+              apis: ["GET /api/feature-explorer"],
+              sourceFiles: [],
+            },
+          ],
+        },
+        repoRoot: "/repo/default",
+        warnings: [],
+      },
+      featureDetail: null,
+      featureDetailLoading: false,
+      initialFeatureId: "feature-explorer",
+      fetchFeatureDetail: vi.fn().mockResolvedValue(null),
+    });
+
+    render(<FeatureExplorerPageClient workspaceId="default" />);
+
+    expect(screen.getByText("Inferred feature map available")).toBeTruthy();
+    expect(screen.getByText("This codebase has no curated taxonomy yet, but inferred feature groups were derived from routes and APIs.")).toBeTruthy();
+    expect(screen.queryByText("Feature taxonomy missing")).toBeNull();
+    expect(screen.getByText("Inferred Surfaces")).toBeTruthy();
+  });
+
   it("keeps feature navigation in the incoming source order", async () => {
     useFeatureExplorerData.mockReturnValue({
       loading: false,
