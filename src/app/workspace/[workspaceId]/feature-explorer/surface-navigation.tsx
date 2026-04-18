@@ -399,6 +399,7 @@ export function SurfaceTreeRow({
   const badges = node.item?.badges ?? [];
   const metrics = node.item?.metrics ?? [];
   const chipClass = "inline-flex items-center rounded-sm border border-desktop-border bg-desktop-bg-primary px-1.5 py-0.5 text-[9px] font-medium text-current/80";
+  const kindChipClass = "inline-flex items-center rounded-sm border border-desktop-border bg-desktop-bg-primary px-1 py-0 text-[8px] font-semibold uppercase tracking-[0.08em] text-current/70";
   const toggleClass = isBranch
     ? "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border border-desktop-border bg-desktop-bg-primary font-mono text-[10px] text-desktop-text-secondary hover:text-desktop-text-primary"
     : "inline-flex h-4 w-4 shrink-0";
@@ -429,12 +430,25 @@ export function SurfaceTreeRow({
           <button
             type="button"
             onClick={() => onSelectSurface(node.item!)}
-            className={`min-w-0 flex-1 truncate text-left font-medium ${
+            aria-label={node.item?.label ?? node.label}
+            className={`min-w-0 flex-1 text-left ${
               isActive ? "text-desktop-text-primary" : "text-current"
             }`}
             title={node.item?.label ?? node.label}
           >
-            {node.label}
+            <div className="flex min-w-0 items-start gap-1.5">
+              {node.item ? (
+                <span className={kindChipClass}>{surfaceKindBadge(node.item.kind)}</span>
+              ) : null}
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-medium">{node.label}</div>
+                {node.item?.secondary ? (
+                  <div className="truncate text-[10px] font-normal text-current/70">
+                    {node.item.secondary}
+                  </div>
+                ) : null}
+              </div>
+            </div>
           </button>
         ) : (
           <span className="min-w-0 flex-1 truncate font-medium" title={node.label}>

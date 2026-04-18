@@ -485,7 +485,7 @@ describe("FeatureExplorerPageClient", () => {
 
     render(<FeatureExplorerPageClient workspaceId="default" />);
 
-    expect(screen.getByText("Execution")).toBeTruthy();
+    expect(screen.getAllByText("Execution").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Feature A").length).toBeGreaterThan(0);
     expect(screen.getByText("Feature Structure")).toBeTruthy();
     expect(screen.getByText("Summary")).toBeTruthy();
@@ -832,9 +832,9 @@ describe("FeatureExplorerPageClient", () => {
 
     fireEvent.click(screen.getByLabelText("Expand Feature Explorer"));
 
-    expect(screen.getAllByRole("button", { name: "Feature Explorer" }).length).toBeGreaterThan(1);
+    expect(screen.getByRole("button", { name: "Feature Explorer" })).toBeTruthy();
     await waitFor(() => {
-      expect(screen.getByText("/workspace/:workspaceId/feature-explorer")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "/workspace/:workspaceId/feature-explorer" })).toBeTruthy();
     });
   });
 

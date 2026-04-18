@@ -592,7 +592,7 @@ export function FeatureExplorerPageClient({
         const metadataItem = featureMetadataById.get(featureId);
         const pageChildren = (pageItemsByFeature.get(featureId) ?? []).map((item) => ({
           id: `capability:${group.id}:${item.key}`,
-          label: item.secondary || item.label,
+          label: item.label,
           item,
           children: [],
           itemCount: 1,
