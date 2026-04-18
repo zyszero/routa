@@ -350,6 +350,61 @@ describe("FeatureExplorerPageClient", () => {
     expect(window.localStorage.getItem("routa.repoSelection.featureExplorer.default")).toBeNull();
   });
 
+  it("opens the generate drawer and posts generation requests with the selected repo context", async () => {
+    sessionLaunchState.desktopAwareFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          generatedAt: "2026-04-18T07:50:22.614Z",
+          frameworksDetected: ["nextjs"],
+          wroteFiles: [
+            "docs/product-specs/FEATURE_TREE.md",
+            "docs/product-specs/feature-tree.index.json",
+          ],
+          warnings: [],
+          pagesCount: 28,
+          apisCount: 737,
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    render(<FeatureExplorerPageClient workspaceId="default" />);
+
+    fireEvent.click(screen.getByTestId("generate-feature-tree-button"));
+
+    expect(screen.getByTestId("generate-feature-tree-drawer")).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("Preview only"));
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+
+    await waitFor(() => {
+      expect(sessionLaunchState.desktopAwareFetch).toHaveBeenCalledWith(
+        "/spec/feature-tree/generate",
+        expect.objectContaining({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    });
+
+    const requestBody = JSON.parse(
+      (sessionLaunchState.desktopAwareFetch.mock.calls[0]?.[1] as RequestInit)?.body as string,
+    );
+    expect(requestBody).toEqual({
+      workspaceId: "default",
+      repoPath: "/repo/default",
+      dryRun: true,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("nextjs")).toBeTruthy();
+      expect(screen.getByText("737")).toBeTruthy();
+    });
+  });
+
   it("renders surface sections from the feature tree index", async () => {
     useFeatureExplorerData.mockReturnValue({
       loading: false,

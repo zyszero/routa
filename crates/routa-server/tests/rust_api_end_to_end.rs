@@ -1563,3 +1563,44 @@ paths:
         "expected missing surface index warning, got {missing_json:?}"
     );
 }
+
+#[tokio::test]
+async fn api_spec_feature_tree_generate_contract() {
+    let fixture = ApiFixture::new().await;
+    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|path| path.parent())
+        .expect("workspace root")
+        .to_path_buf();
+
+    let response = fixture
+        .client
+        .post(fixture.endpoint("/api/spec/feature-tree/generate"))
+        .json(&json!({
+            "repoPath": repo_root.to_string_lossy().to_string(),
+            "dryRun": true
+        }))
+        .send()
+        .await
+        .expect("generate feature tree");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let payload: Value = response
+        .json()
+        .await
+        .expect("decode feature tree generate response");
+
+    assert!(payload["generatedAt"].as_str().is_some());
+    assert_eq!(payload["frameworksDetected"], json!(["nextjs"]));
+    assert_eq!(
+        payload["wroteFiles"],
+        json!([
+            "docs/product-specs/FEATURE_TREE.md",
+            "docs/product-specs/feature-tree.index.json"
+        ])
+    );
+    assert!(payload["warnings"].as_array().is_some());
+    assert!(payload["pagesCount"].as_u64().is_some_and(|count| count > 0));
+    assert!(payload["apisCount"].as_u64().is_some_and(|count| count > 0));
+}
