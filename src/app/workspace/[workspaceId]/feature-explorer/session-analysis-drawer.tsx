@@ -209,17 +209,6 @@ export function SessionAnalysisDrawer({
           <div className="flex flex-wrap items-center gap-2">
             <InlineMetricPill label={t.featureExplorer.filesLabel} value={String(selectedFilePaths.length)} />
             <InlineMetricPill label={t.featureExplorer.sessionsLabel} value={String(selectedScopeSessions.length)} />
-            <div className="inline-flex items-center gap-2 rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">
-                {t.settings.provider}
-              </span>
-              <AcpProviderDropdown
-                providers={providers}
-                selectedProvider={selectedProvider}
-                onProviderChange={onProviderChange}
-                dataTestId="feature-explorer-session-analysis-provider"
-              />
-            </div>
             <InlineMetricPill label={t.featureExplorer.selectedSessionsLabel} value={String(selectedSessions.length)} />
           </div>
         </div>
@@ -514,28 +503,39 @@ export function SessionAnalysisDrawer({
                 : t.featureExplorer.noSessionsSelected}
             </div>
             <div className="flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-3 py-1.5 text-[11px] text-desktop-text-secondary hover:text-desktop-text-primary"
-            >
-              {t.common.close}
-            </button>
-            <button
-              type="button"
-              onClick={() => onStartSessionAnalysis(selectedSessions)}
-              disabled={isStartingSessionAnalysis || selectedSessions.length === 0}
-              className={`rounded-sm border px-3 py-1.5 text-[11px] font-medium transition-colors ${
-                isStartingSessionAnalysis || selectedSessions.length === 0
-                  ? "cursor-wait border-desktop-border bg-desktop-bg-primary/40 text-desktop-text-secondary/60"
-                  : "border-desktop-accent bg-desktop-bg-active text-desktop-text-primary hover:bg-desktop-bg-primary"
-              }`}
-            >
-              {isStartingSessionAnalysis
-                ? t.featureExplorer.sessionAnalysisStarting
-                : t.featureExplorer.sessionAnalysisAction}
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-3 py-1.5 text-[11px] text-desktop-text-secondary hover:text-desktop-text-primary"
+              >
+                {t.common.close}
+              </button>
+              <div className="inline-flex items-center gap-2 rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">
+                  {t.settings.provider}
+                </span>
+                <AcpProviderDropdown
+                  providers={providers}
+                  selectedProvider={selectedProvider}
+                  onProviderChange={onProviderChange}
+                  dataTestId="feature-explorer-session-analysis-provider"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => onStartSessionAnalysis(selectedSessions)}
+                disabled={isStartingSessionAnalysis || selectedSessions.length === 0}
+                className={`rounded-sm border px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                  isStartingSessionAnalysis || selectedSessions.length === 0
+                    ? "cursor-wait border-desktop-border bg-desktop-bg-primary/40 text-desktop-text-secondary/60"
+                    : "border-desktop-accent bg-desktop-bg-active text-desktop-text-primary hover:bg-desktop-bg-primary"
+                }`}
+              >
+                {isStartingSessionAnalysis
+                  ? t.featureExplorer.sessionAnalysisStarting
+                  : t.featureExplorer.sessionAnalysisAction}
+              </button>
+            </div>
           </div>
         </div>
       </aside>
