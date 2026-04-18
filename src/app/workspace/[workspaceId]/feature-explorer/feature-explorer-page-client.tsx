@@ -880,8 +880,8 @@ export function FeatureExplorerPageClient({
     [analysisProviders, analysisSessionProviderId],
   );
   const featureExplorerLayoutClassName = isAnalysisSessionPaneOpen
-    ? "grid min-h-0 flex-1 xl:grid-cols-[360px_minmax(0,1fr)_500px_minmax(24rem,36rem)] 2xl:grid-cols-[420px_minmax(0,1fr)_560px_minmax(26rem,40rem)]"
-    : "grid min-h-0 flex-1 xl:grid-cols-[360px_minmax(0,1fr)_500px] 2xl:grid-cols-[420px_minmax(0,1fr)_560px]";
+    ? "grid min-h-0 flex-1 xl:grid-cols-[360px_minmax(0,1fr)_540px_minmax(28rem,42rem)] 2xl:grid-cols-[420px_minmax(0,1fr)_620px_minmax(32rem,48rem)]"
+    : "grid min-h-0 flex-1 xl:grid-cols-[360px_minmax(0,1fr)_540px] 2xl:grid-cols-[420px_minmax(0,1fr)_620px]";
 
   const handleWorkspaceSelect = (nextWorkspaceId: string) => {
     router.push(`/workspace/${encodeURIComponent(nextWorkspaceId)}/feature-explorer`);
@@ -1093,8 +1093,8 @@ export function FeatureExplorerPageClient({
     setIsSessionAnalysisDrawerOpen(true);
   };
 
-  const handleStartSessionAnalysis = async () => {
-    if (!effectiveRepoSelection?.path || selectedFilePaths.length === 0 || selectedScopeSessions.length === 0) {
+  const handleStartSessionAnalysis = async (sessionsToAnalyze: AggregatedSelectionSession[] = selectedScopeSessions) => {
+    if (!effectiveRepoSelection?.path || selectedFilePaths.length === 0 || sessionsToAnalyze.length === 0) {
       return;
     }
 
@@ -1115,7 +1115,7 @@ export function FeatureExplorerPageClient({
         branch: effectiveRepoSelection.branch,
         featureDetail: surfaceOnlySelection ? null : resolvedFeatureDetail,
         selectedFilePaths,
-        sessions: selectedScopeSessions,
+        sessions: sessionsToAnalyze,
       });
 
       const response = await desktopAwareFetch("/api/acp", {
@@ -1597,6 +1597,7 @@ export function FeatureExplorerPageClient({
         </main>
 
         <SessionAnalysisDrawer
+          key={`session-analysis:${isSessionAnalysisDrawerOpen ? "open" : "closed"}:${selectedFilePaths.join("|")}:${selectedScopeSessions.map((session) => `${session.provider}:${session.sessionId}`).join("|")}`}
           open={isSessionAnalysisDrawerOpen}
           selectedFilePaths={selectedFilePaths}
           selectedScopeSessions={selectedScopeSessions}
