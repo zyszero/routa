@@ -268,6 +268,7 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     workViewLabel: string;
     sectionView: string;
     browserUrlView: string;
+    apiView: string;
     pathView: string;
     repositoryStatus: string;
     repositoryReady: string;

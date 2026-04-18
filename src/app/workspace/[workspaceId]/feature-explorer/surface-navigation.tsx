@@ -28,7 +28,7 @@ export type ExplorerSection = {
   metrics?: ExplorerSurfaceMetric[];
 };
 
-export type SurfaceNavigationView = "sections" | "browser-url" | "nextjs-api" | "rust-api" | "path";
+export type SurfaceNavigationView = "capabilities" | "surfaces" | "apis" | "paths";
 
 export type SurfaceTreeNode = {
   id: string;

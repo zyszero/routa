@@ -489,10 +489,11 @@ describe("FeatureExplorerPageClient", () => {
     expect(screen.getAllByText("Feature A").length).toBeGreaterThan(0);
     expect(screen.getByText("Feature Structure")).toBeTruthy();
     expect(screen.getByText("Summary")).toBeTruthy();
+    expect(screen.getByTestId("feature-metric-pages-feature-a").textContent).toContain("1");
+    expect(screen.getByTestId("feature-metric-apis-feature-a").textContent).toContain("1");
     expect(screen.getByText("/workspace/:workspaceId/feature-explorer")).toBeTruthy();
     expect(screen.getByText("/api/feature-explorer")).toBeTruthy();
-    expect(screen.getAllByText("Next.js API").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Rust API").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Expand Feature A")).toBeTruthy();
     expect(screen.getByText("Repository status")).toBeTruthy();
     expect(screen.getByText("Feature taxonomy ready")).toBeTruthy();
     expect(screen.getByText("Frontend routes")).toBeTruthy();
@@ -500,7 +501,7 @@ describe("FeatureExplorerPageClient", () => {
     expect(screen.getAllByText("Source files").length).toBeGreaterThan(0);
   });
 
-  it("switches surface navigation to browser-url tree mode", async () => {
+  it("switches surface navigation to surfaces tree mode", async () => {
     useFeatureExplorerData.mockReturnValue({
       loading: false,
       error: null,
@@ -532,7 +533,7 @@ describe("FeatureExplorerPageClient", () => {
 
     render(<FeatureExplorerPageClient workspaceId="default" />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Browser URL" }));
+    fireEvent.click(screen.getByRole("button", { name: "Surfaces" }));
 
     expect(screen.getByText("/workspace")).toBeTruthy();
     expect(screen.queryByText(":workspaceId")).toBeNull();
@@ -672,7 +673,7 @@ describe("FeatureExplorerPageClient", () => {
     expect(lowFeature.compareDocumentPosition(highFeature) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("switches to a Next.js API tree work view", async () => {
+  it("switches to the API tree work view", async () => {
     useFeatureExplorerData.mockReturnValue({
       loading: false,
       error: null,
@@ -743,14 +744,98 @@ describe("FeatureExplorerPageClient", () => {
 
     render(<FeatureExplorerPageClient workspaceId="default" />);
 
-    expect(screen.getByRole("button", { name: /Feature Next\.js/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Feature Hidden/ })).toBeTruthy();
+    expect(screen.getByLabelText("Expand Feature Next.js")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Feature Hidden" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Next.js API" }));
+    fireEvent.click(screen.getByRole("button", { name: "APIs" }));
 
     expect(screen.getByText("/feature-explorer")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Feature Next\.js/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /Feature Hidden/ })).toBeNull();
+  });
+
+  it("expands capability features into concrete page and api surfaces", async () => {
+    useFeatureExplorerData.mockReturnValue({
+      loading: false,
+      error: null,
+      capabilityGroups: [{ id: "execution", name: "Execution", description: "Execution surfaces" }],
+      features: [
+        {
+          id: "feature-explorer",
+          name: "Feature Explorer",
+          group: "execution",
+          summary: "Inspect workspace feature surfaces.",
+          status: "evolving",
+          sessionCount: 7,
+          changedFiles: 7,
+          updatedAt: "-",
+          sourceFileCount: 7,
+          pageCount: 1,
+          apiCount: 2,
+        },
+      ],
+      surfaceIndex: {
+        generatedAt: "",
+        pages: [
+          {
+            route: "/workspace/:workspaceId/feature-explorer",
+            title: "Feature Explorer",
+            description: "Explore features.",
+            sourceFile: "src/app/workspace/[workspaceId]/feature-explorer/page.tsx",
+          },
+        ],
+        apis: [],
+        contractApis: [
+          {
+            domain: "feature-explorer",
+            method: "GET",
+            path: "/api/feature-explorer",
+            operationId: "listFeatureExplorer",
+            summary: "List features",
+          },
+        ],
+        nextjsApis: [
+          {
+            domain: "feature-explorer",
+            method: "GET",
+            path: "/api/feature-explorer",
+            sourceFiles: ["src/app/api/feature-explorer/route.ts"],
+          },
+        ],
+        rustApis: [],
+        metadata: {
+          schemaVersion: 1,
+          capabilityGroups: [{ id: "execution", name: "Execution", description: "Execution surfaces" }],
+          features: [
+            {
+              id: "feature-explorer",
+              name: "Feature Explorer",
+              group: "execution",
+              pages: ["/workspace/:workspaceId/feature-explorer"],
+              apis: ["GET /api/feature-explorer"],
+              sourceFiles: ["src/app/workspace/[workspaceId]/feature-explorer/page.tsx"],
+            },
+          ],
+        },
+        repoRoot: "/repo/default",
+        warnings: [],
+      },
+      featureDetail: null,
+      featureDetailLoading: false,
+      initialFeatureId: "feature-explorer",
+      fetchFeatureDetail: vi.fn().mockResolvedValue(null),
+    });
+
+    render(<FeatureExplorerPageClient workspaceId="default" />);
+
+    expect(screen.getByLabelText("Expand Feature Explorer")).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("Expand Feature Explorer"));
+
+    expect(screen.getAllByRole("button", { name: "Feature Explorer" }).length).toBeGreaterThan(1);
+    await waitFor(() => {
+      expect(screen.getByText("/workspace/:workspaceId/feature-explorer")).toBeTruthy();
+    });
   });
 
   it("does not duplicate feature details in the inspector for feature selections", async () => {
