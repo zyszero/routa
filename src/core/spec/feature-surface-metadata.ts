@@ -662,9 +662,11 @@ export function normalizeSurfaceMetadata(params: {
     rustApis,
     implementationApis = [],
   } = params;
-  if (!metadata) {
-    return null;
-  }
+  const baseMetadata: SurfaceMetadata = metadata ?? {
+    schemaVersion: 1,
+    capabilityGroups: [],
+    features: [],
+  };
 
   const apiEntries = buildSurfaceApiEntries(
     contractApis,
@@ -673,11 +675,11 @@ export function normalizeSurfaceMetadata(params: {
     implementationApis,
   );
   const augmentedFeatures = reconcileFeatureApiDeclarations(
-    metadata.features.map((feature) => buildAugmentedFeature(feature, pages, apiEntries)),
+    baseMetadata.features.map((feature) => buildAugmentedFeature(feature, pages, apiEntries)),
     apiEntries,
   );
   const inferredFeatures = createInferredFeatures(augmentedFeatures, pages, apiEntries);
-  const capabilityGroups = [...metadata.capabilityGroups];
+  const capabilityGroups = [...baseMetadata.capabilityGroups];
 
   if (
     inferredFeatures.length > 0
@@ -691,7 +693,7 @@ export function normalizeSurfaceMetadata(params: {
   }
 
   return {
-    schemaVersion: metadata.schemaVersion,
+    schemaVersion: baseMetadata.schemaVersion,
     capabilityGroups,
     features: [...augmentedFeatures, ...inferredFeatures],
   };

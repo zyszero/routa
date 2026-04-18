@@ -506,7 +506,7 @@ feature_metadata:
     });
   });
 
-  it("accepts legacy generated markdown without feature metadata frontmatter", () => {
+  it("infers features from legacy generated markdown without feature metadata frontmatter", () => {
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "feature-explorer-legacy-"));
     const repoRoot = path.join(tempRoot, "repo");
 
@@ -537,8 +537,27 @@ purpose: Auto-generated route and API surface index for Routa.js.
 
     const featureTree = parseFeatureTree(repoRoot);
 
-    expect(featureTree.features).toEqual([]);
-    expect(featureTree.capabilityGroups).toEqual([]);
+    expect(featureTree.capabilityGroups).toEqual([
+      {
+        id: "inferred-surfaces",
+        name: "Inferred Surfaces",
+        description: "Auto-inferred surface clusters derived from generated page and API tables.",
+      },
+    ]);
+    expect(featureTree.features).toEqual([
+      {
+        id: "feature-explorer",
+        name: "Feature Explorer",
+        group: "inferred-surfaces",
+        summary: "Auto-inferred from FEATURE_TREE surfaces (1 page, 1 API).",
+        status: "inferred",
+        pages: ["/workspace/:workspaceId/feature-explorer"],
+        apis: ["GET /api/feature-explorer"],
+        sourceFiles: [],
+        relatedFeatures: [],
+        domainObjects: [],
+      },
+    ]);
     expect(featureTree.frontendPages).toEqual([
       {
         name: "Feature Explorer",
