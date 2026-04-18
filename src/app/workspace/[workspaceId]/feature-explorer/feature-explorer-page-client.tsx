@@ -34,6 +34,7 @@ import type {
   InspectorTab,
 } from "./types";
 import {
+  AnalysisSessionDrawer,
   ApiPanel,
   ContextPanel,
   SessionAnalysisDrawer,
@@ -879,9 +880,7 @@ export function FeatureExplorerPageClient({
     () => analysisProviders.find((provider) => provider.id === analysisSessionProviderId)?.name ?? analysisSessionProviderId,
     [analysisProviders, analysisSessionProviderId],
   );
-  const featureExplorerLayoutClassName = isAnalysisSessionPaneOpen
-    ? "grid min-h-0 flex-1 xl:grid-cols-[320px_minmax(260px,1fr)_minmax(340px,420px)_minmax(22rem,30rem)] 2xl:grid-cols-[380px_minmax(320px,1fr)_minmax(400px,500px)_minmax(24rem,34rem)]"
-    : "grid min-h-0 flex-1 xl:grid-cols-[320px_minmax(280px,1fr)_minmax(340px,420px)] 2xl:grid-cols-[380px_minmax(320px,1fr)_minmax(400px,500px)]";
+  const featureExplorerLayoutClassName = "grid min-h-0 flex-1 xl:grid-cols-[320px_minmax(280px,1fr)_minmax(340px,420px)] 2xl:grid-cols-[380px_minmax(320px,1fr)_minmax(400px,500px)]";
 
   const handleWorkspaceSelect = (nextWorkspaceId: string) => {
     router.push(`/workspace/${encodeURIComponent(nextWorkspaceId)}/feature-explorer`);
@@ -1537,62 +1536,6 @@ export function FeatureExplorerPageClient({
               </div>
             </aside>
 
-            {isAnalysisSessionPaneOpen && analysisSessionId ? (
-              <aside
-                className="flex min-h-0 flex-col border-l border-desktop-border bg-desktop-bg-primary"
-                data-testid="feature-explorer-analysis-session-pane"
-              >
-                <div className="flex items-center justify-between gap-3 border-b border-desktop-border px-4 py-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-desktop-text-primary">
-                      {analysisSessionName || t.featureExplorer.sessionAnalysisTitle}
-                    </div>
-                    <div
-                      className="mt-0.5 overflow-x-auto whitespace-nowrap text-[11px] text-desktop-text-secondary"
-                      title={analysisSessionId}
-                    >
-                      {analysisSessionProviderName || analysisSessionProviderId || analysisSelectedProvider} · {analysisSessionId}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={`/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(analysisSessionId)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-2 py-1 text-[11px] text-desktop-text-secondary hover:text-desktop-text-primary"
-                    >
-                      {t.common.openInNewTab}
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsAnalysisSessionPaneOpen(false);
-                        setAnalysisSessionId(null);
-                      }}
-                      className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-2 py-1 text-[11px] text-desktop-text-secondary hover:text-desktop-text-primary"
-                    >
-                      {t.common.close}
-                    </button>
-                  </div>
-                </div>
-                <div className="min-h-0 flex-1">
-                  <ChatPanel
-                    acp={analysisAcp}
-                    activeSessionId={analysisSessionId}
-                    onEnsureSession={async () => analysisSessionId}
-                    onSelectSession={async (sessionId) => {
-                      setAnalysisSessionId(sessionId);
-                      selectAnalysisSession(sessionId);
-                    }}
-                    repoSelection={effectiveRepoSelection}
-                    onRepoChange={() => {}}
-                    codebases={codebases}
-                    activeWorkspaceId={workspaceId}
-                    agentRole="ROUTA"
-                  />
-                </div>
-              </aside>
-            ) : null}
           </section>
         </main>
 
@@ -1610,6 +1553,37 @@ export function FeatureExplorerPageClient({
           onStartSessionAnalysis={handleStartSessionAnalysis}
           t={t}
         />
+
+        <AnalysisSessionDrawer
+          open={isAnalysisSessionPaneOpen && Boolean(analysisSessionId)}
+          title={analysisSessionName || t.featureExplorer.sessionAnalysisTitle}
+          subtitle={`${analysisSessionProviderName || analysisSessionProviderId || analysisSelectedProvider} · ${analysisSessionId ?? ""}`}
+          detailHref={analysisSessionId
+            ? `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(analysisSessionId)}`
+            : undefined}
+          onClose={() => {
+            setIsAnalysisSessionPaneOpen(false);
+            setAnalysisSessionId(null);
+          }}
+          t={t}
+        >
+          {analysisSessionId ? (
+            <ChatPanel
+              acp={analysisAcp}
+              activeSessionId={analysisSessionId}
+              onEnsureSession={async () => analysisSessionId}
+              onSelectSession={async (sessionId) => {
+                setAnalysisSessionId(sessionId);
+                selectAnalysisSession(sessionId);
+              }}
+              repoSelection={effectiveRepoSelection}
+              onRepoChange={() => {}}
+              codebases={codebases}
+              activeWorkspaceId={workspaceId}
+              agentRole="ROUTA"
+            />
+          ) : null}
+        </AnalysisSessionDrawer>
       </div>
     </DesktopAppShell>
   );

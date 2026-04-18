@@ -21,7 +21,7 @@ import {
   type ExplorerSurfaceItem,
   getHttpMethodBadgeClass,
 } from "./surface-navigation";
-export { SessionAnalysisDrawer } from "./session-analysis-drawer";
+export { AnalysisSessionDrawer, SessionAnalysisDrawer } from "./session-analysis-drawer";
 import { sanitizeChangedFiles } from "./session-analysis";
 
 function formatShortDate(iso: string): string {

@@ -542,3 +542,77 @@ export function SessionAnalysisDrawer({
     </>
   );
 }
+
+export function AnalysisSessionDrawer({
+  open,
+  title,
+  subtitle,
+  detailHref,
+  onClose,
+  children,
+  t,
+}: {
+  open: boolean;
+  title: string;
+  subtitle: string;
+  detailHref?: string;
+  onClose: () => void;
+  children: ReactNode;
+  t: ReturnType<typeof useTranslation>["t"];
+}) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-black/20 backdrop-blur-[1px]"
+        onClick={onClose}
+        data-testid="feature-explorer-analysis-session-backdrop"
+      />
+      <aside
+        className="fixed inset-y-0 right-0 z-[60] flex h-full w-full max-w-[56rem] flex-col overflow-hidden border-l border-desktop-border bg-desktop-bg-primary shadow-2xl 2xl:max-w-[64rem]"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        data-testid="feature-explorer-analysis-session-drawer"
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-desktop-border px-4 py-3">
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold text-desktop-text-primary">{title}</div>
+            <div
+              className="mt-0.5 overflow-x-auto whitespace-nowrap text-[11px] text-desktop-text-secondary"
+              title={subtitle}
+            >
+              {subtitle}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {detailHref ? (
+              <a
+                href={detailHref}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-2 py-1 text-[11px] text-desktop-text-secondary hover:text-desktop-text-primary"
+              >
+                {t.common.openInNewTab}
+              </a>
+            ) : null}
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-2 py-1 text-[11px] text-desktop-text-secondary hover:text-desktop-text-primary"
+            >
+              {t.common.close}
+            </button>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1">
+          {children}
+        </div>
+      </aside>
+    </>
+  );
+}
