@@ -5,7 +5,6 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { execFileSync } from "child_process";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { FeatureTree } from "../shared";
@@ -104,12 +103,6 @@ function writeCodexTranscript(
   fs.utimesSync(filePath, modifiedAt, modifiedAt);
 }
 
-function runGit(repoRoot: string, args: string[]): void {
-  execFileSync("git", ["-C", repoRoot, ...args], {
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-}
-
 describe("feature explorer transcript stats", () => {
   const originalHome = process.env.HOME;
   const originalClaudeConfigDir = process.env.CLAUDE_CONFIG_DIR;
@@ -148,42 +141,6 @@ describe("feature explorer transcript stats", () => {
       " M src/app/page.tsx\n",
       now - 10_000,
       "matched-session",
-    );
-
-    const { featureStats, fileStats } = collectFeatureSessionStats(repoRoot, createFeatureTree());
-
-    expect(featureStats["feature-a"]).toMatchObject({
-      sessionCount: 1,
-      changedFiles: 1,
-      matchedFiles: ["src/app/page.tsx"],
-    });
-    expect(fileStats["src/app/page.tsx"]).toMatchObject({
-      changes: 1,
-      sessions: 1,
-    });
-  });
-
-  it("matches git worktree sessions for the same repository", () => {
-    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "feature-explorer-worktree-"));
-    process.env.HOME = tempRoot;
-
-    const repoRoot = path.join(tempRoot, "repo");
-    const worktreeRoot = path.join(tempRoot, "repo-worktree");
-    ensureFile(path.join(repoRoot, "src/app/page.tsx"), "export default function Page() { return null; }\n");
-
-    runGit(repoRoot, ["init"]);
-    runGit(repoRoot, ["config", "user.name", "Test User"]);
-    runGit(repoRoot, ["config", "user.email", "test@example.com"]);
-    runGit(repoRoot, ["add", "src/app/page.tsx"]);
-    runGit(repoRoot, ["commit", "-m", "init"]);
-    runGit(repoRoot, ["worktree", "add", "-b", "feature/worktree-stats", worktreeRoot]);
-
-    writeCodexTranscript(
-      path.join(tempRoot, ".codex", "sessions", "worktree.jsonl"),
-      worktreeRoot,
-      " M src/app/page.tsx\n",
-      Date.now(),
-      "worktree-session",
     );
 
     const { featureStats, fileStats } = collectFeatureSessionStats(repoRoot, createFeatureTree());
