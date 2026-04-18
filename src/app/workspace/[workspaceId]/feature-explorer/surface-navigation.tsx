@@ -261,21 +261,6 @@ export function buildGroupedApiItems({
     .sort((left, right) => left.label.localeCompare(right.label));
 }
 
-export function surfaceKindBadge(kind: ExplorerSurfaceKind): string {
-  switch (kind) {
-    case "feature":
-      return "FT";
-    case "page":
-      return "PG";
-    case "contract-api":
-      return "API";
-    case "nextjs-api":
-      return "NX";
-    case "rust-api":
-      return "RS";
-  }
-}
-
 export function getHttpMethodBadgeClass(method: string, density: "default" | "compact" = "default"): string {
   const sizeClass = density === "compact"
     ? "inline-flex items-center rounded-sm px-1.5 py-0.5 text-[9px] font-semibold"
@@ -399,7 +384,6 @@ export function SurfaceTreeRow({
   const badges = node.item?.badges ?? [];
   const metrics = node.item?.metrics ?? [];
   const chipClass = "inline-flex items-center rounded-sm border border-desktop-border bg-desktop-bg-primary px-1.5 py-0.5 text-[9px] font-medium text-current/80";
-  const kindChipClass = "inline-flex items-center rounded-sm border border-desktop-border bg-desktop-bg-primary px-1 py-0 text-[8px] font-semibold uppercase tracking-[0.08em] text-current/70";
   const toggleClass = isBranch
     ? "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border border-desktop-border bg-desktop-bg-primary font-mono text-[10px] text-desktop-text-secondary hover:text-desktop-text-primary"
     : "inline-flex h-4 w-4 shrink-0";
@@ -437,9 +421,6 @@ export function SurfaceTreeRow({
             title={node.item?.label ?? node.label}
           >
             <div className="flex min-w-0 items-start gap-1.5">
-              {node.item ? (
-                <span className={kindChipClass}>{surfaceKindBadge(node.item.kind)}</span>
-              ) : null}
               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium">{node.label}</div>
                 {node.item?.secondary ? (
