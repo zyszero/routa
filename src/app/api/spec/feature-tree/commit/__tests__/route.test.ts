@@ -78,6 +78,7 @@ describe("POST /api/spec/feature-tree/commit", () => {
       metadata: null,
       dryRun: false,
     });
+    expect(mockPreflightFeatureTree).not.toHaveBeenCalled();
   });
 
   it("returns 400 for invalid JSON body", async () => {

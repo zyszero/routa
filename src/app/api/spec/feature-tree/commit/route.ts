@@ -51,10 +51,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const preflight = preflightFeatureTree(repoRoot);
+    const scanRoot = body.scanRoot
+      ? body.scanRoot
+      : preflightFeatureTree(repoRoot).selectedScanRoot;
     const result = await generateFeatureTree({
       repoRoot,
-      scanRoot: body.scanRoot ?? preflight.selectedScanRoot,
+      scanRoot,
       metadata: body.metadata ?? null,
       dryRun: false,
     });
