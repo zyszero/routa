@@ -90,4 +90,20 @@ describe("POST /api/spec/feature-tree/commit", () => {
     const res = await POST(req);
     expect(res.status).toBe(400);
   });
+
+  it("rejects scanRoot outside the repository", async () => {
+    mockResolveFitnessRepoRoot.mockResolvedValue("/tmp/repo");
+
+    const req = new NextRequest("http://localhost/api/spec/feature-tree/commit", {
+      method: "POST",
+      body: JSON.stringify({ repoPath: "/tmp/repo", scanRoot: "/etc/passwd" }),
+    });
+
+    const res = await POST(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error).toBe("scanRoot must be inside the repository");
+    expect(mockGenerateFeatureTree).not.toHaveBeenCalled();
+  });
 });

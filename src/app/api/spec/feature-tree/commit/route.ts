@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { NextRequest, NextResponse } from "next/server";
 
 import {
@@ -51,9 +53,20 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const scanRoot = body.scanRoot
-      ? body.scanRoot
-      : preflightFeatureTree(repoRoot).selectedScanRoot;
+    let scanRoot: string;
+    if (body.scanRoot) {
+      const resolved = path.resolve(body.scanRoot);
+      const resolvedRepo = path.resolve(repoRoot);
+      if (!resolved.startsWith(resolvedRepo + path.sep) && resolved !== resolvedRepo) {
+        return NextResponse.json(
+          { error: "scanRoot must be inside the repository" },
+          { status: 400 },
+        );
+      }
+      scanRoot = resolved;
+    } else {
+      scanRoot = preflightFeatureTree(repoRoot).selectedScanRoot;
+    }
     const result = await generateFeatureTree({
       repoRoot,
       scanRoot,
