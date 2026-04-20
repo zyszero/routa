@@ -41,6 +41,7 @@ import { AgentEventBridge, makeStartedEvent } from "../acp/agent-event-bridge";
 import type { WorkspaceAgentEvent } from "../acp/agent-event-bridge";
 import { LifecycleNotifier } from "../acp/lifecycle-notifier";
 import { createWorkspaceSessionSandbox } from "../sandbox/permissions";
+import { AgentMemoryWriter } from "../storage/agent-memory-writer";
 
 export interface DelegateWithSpawnParams {
   /** Task ID to delegate */
@@ -91,6 +92,7 @@ interface ChildAgentRecord {
   taskId: string;
   role: AgentRole;
   provider: string;
+  cwd: string;
   /** Tool call ID from the parent session's delegate_task_to_agent call (if available) */
   delegationToolCallId?: string;
 }
@@ -237,6 +239,8 @@ export class RoutaOrchestrator {
   private childAgentBridges = new Map<string, AgentEventBridge>();
   /** Map: agentId → set of WorkspaceAgentEvent subscribers */
   private childAgentEventSubscribers = new Map<string, Set<(event: WorkspaceAgentEvent) => void>>();
+  /** Map: cwd → AgentMemoryWriter for durable, file-backed agent memory */
+  private memoryWriters = new Map<string, AgentMemoryWriter>();
 
   constructor(
     system: RoutaSystem,
@@ -274,6 +278,15 @@ export class RoutaOrchestrator {
         });
       }
     });
+  }
+
+  private getMemoryWriter(cwd: string): AgentMemoryWriter {
+    let writer = this.memoryWriters.get(cwd);
+    if (!writer) {
+      writer = new AgentMemoryWriter(cwd);
+      this.memoryWriters.set(cwd, writer);
+    }
+    return writer;
   }
 
   /**
@@ -488,6 +501,7 @@ export class RoutaOrchestrator {
       taskId,
       role: specialistConfig.role,
       provider,
+      cwd,
     };
     this.childAgents.set(agentId, record);
     this.agentSessionMap.set(agentId, childSessionId);
@@ -546,6 +560,31 @@ export class RoutaOrchestrator {
       waitMode === "after_all"
         ? "You will be notified when ALL delegated agents in this group complete."
         : "You will be notified when this agent completes.";
+
+    try {
+      await this.getMemoryWriter(cwd).recordDelegation({
+        sessionId: callerSessionId,
+        parentAgentId: callerAgentId,
+        childAgentId: agentId,
+        childRole: specialistConfig.role,
+        taskId,
+        taskTitle: task.title,
+        provider,
+        waitMode,
+      });
+      await this.getMemoryWriter(cwd).recordChildSessionStart({
+        sessionId: childSessionId,
+        role: specialistConfig.role,
+        agentId,
+        taskId,
+        taskTitle: task.title,
+        parentAgentId: callerAgentId,
+        provider,
+        initialPrompt: delegationPrompt,
+      });
+    } catch (err) {
+      console.warn("[Orchestrator] Failed to persist agent memory:", err);
+    }
 
     console.log(
       `[Orchestrator] Delegated task "${task.title}" to ${specialistConfig.name} agent ${agentId} (provider: ${provider})`
@@ -1006,6 +1045,23 @@ export class RoutaOrchestrator {
     childAgentId: string,
     record: ChildAgentRecord
   ): Promise<void> {
+    const task = await this.system.taskStore.get(record.taskId);
+    try {
+      await this.getMemoryWriter(record.cwd).recordChildCompletion({
+        sessionId: record.sessionId,
+        role: record.role,
+        agentId: childAgentId,
+        taskId: record.taskId,
+        taskTitle: task?.title ?? record.taskId,
+        status: task?.status ?? "unknown",
+        summary: task?.completionSummary,
+        verificationVerdict: task?.verificationVerdict,
+        verificationReport: task?.verificationReport,
+      });
+    } catch (err) {
+      console.warn("[Orchestrator] Failed to write completion memory:", err);
+    }
+
     // Clean up the report file watcher
     this.cleanupReportWatcher(childAgentId);
 
