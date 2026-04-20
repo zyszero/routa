@@ -191,6 +191,12 @@ pub async fn update_card(
     Ok(())
 }
 
+pub async fn get_card(state: &AppState, card_id: &str) -> Result<(), String> {
+    let result = call_rpc(state, "tasks.get", json!({ "id": card_id })).await?;
+    render_result(&result, format_card_detail_text);
+    Ok(())
+}
+
 pub async fn delete_card(state: &AppState, card_id: &str) -> Result<(), String> {
     let result = call_rpc(state, "kanban.deleteCard", json!({ "cardId": card_id })).await?;
     render_result(&result, format_delete_card_text);
@@ -769,6 +775,185 @@ fn format_card_text(card: &Value, heading: &str) -> Option<String> {
     Some(lines.join("\n"))
 }
 
+fn format_card_detail_text(card: &Value) -> Option<String> {
+    let id = value_str(card, "id")?;
+    let title = value_str(card, "title").unwrap_or("untitled");
+    let workspace_id = value_str(card, "workspaceId").unwrap_or("default");
+    let board_id = value_str(card, "boardId").unwrap_or("-");
+    let column_id = value_str(card, "columnId").unwrap_or("backlog");
+    let position = card.get("position").and_then(Value::as_i64).unwrap_or(0);
+    let status = value_str(card, "status").unwrap_or("unknown");
+    let priority = value_str(card, "priority").unwrap_or("-");
+    let created_at = format_rfc3339_timestamp(card.get("createdAt").and_then(Value::as_str));
+    let updated_at = format_rfc3339_timestamp(card.get("updatedAt").and_then(Value::as_str));
+    let labels = format_labels(card.get("labels"));
+
+    let mut lines = vec![format!("Card: {title} [{id}]")];
+    lines.push(format!(
+        "  workspace={workspace_id} board={board_id} column={column_id} position={position}"
+    ));
+    lines.push(format!(
+        "  status={status} priority={priority} created={created_at} updated={updated_at}"
+    ));
+
+    if !labels.is_empty() {
+        lines.push(format!("  labels={labels}"));
+    }
+
+    let mut assignment = Vec::new();
+    if let Some(assignee) = value_str(card, "assignee").filter(|value| !value.is_empty()) {
+        assignment.push(format!("assignee={assignee}"));
+    }
+    if let Some(provider) = value_str(card, "assignedProvider").filter(|value| !value.is_empty()) {
+        assignment.push(format!("provider={provider}"));
+    }
+    if let Some(role) = value_str(card, "assignedRole").filter(|value| !value.is_empty()) {
+        assignment.push(format!("role={role}"));
+    }
+    if let Some(specialist) =
+        value_str(card, "assignedSpecialistName").filter(|value| !value.is_empty())
+    {
+        assignment.push(format!("specialist={specialist}"));
+    }
+    if !assignment.is_empty() {
+        lines.push(format!("  {}", assignment.join(" ")));
+    }
+
+    if let Some(trigger_session_id) =
+        value_str(card, "triggerSessionId").filter(|value| !value.is_empty())
+    {
+        lines.push(format!("  activeSession={trigger_session_id}"));
+    }
+
+    if let Some(repo) = value_str(card, "githubRepo").filter(|value| !value.is_empty()) {
+        let number = card
+            .get("githubNumber")
+            .and_then(Value::as_i64)
+            .unwrap_or(0);
+        let state = value_str(card, "githubState").unwrap_or("unknown");
+        let url = value_str(card, "githubUrl").unwrap_or("-");
+        lines.push(format!("  github={repo}#{number} state={state} url={url}"));
+    }
+
+    if let Some(sync_error) = value_str(card, "lastSyncError").filter(|value| !value.is_empty()) {
+        lines.push(format!("  lastSyncError={sync_error}"));
+    }
+
+    push_text_block(&mut lines, "Objective", value_str(card, "objective"));
+    push_text_block(&mut lines, "Comment", value_str(card, "comment"));
+    push_text_block(&mut lines, "Scope", value_str(card, "scope"));
+    push_string_list_block(
+        &mut lines,
+        "Acceptance criteria",
+        card.get("acceptanceCriteria"),
+    );
+    push_string_list_block(
+        &mut lines,
+        "Verification commands",
+        card.get("verificationCommands"),
+    );
+    push_string_list_block(&mut lines, "Test cases", card.get("testCases"));
+    push_string_list_block(&mut lines, "Dependencies", card.get("dependencies"));
+    push_string_list_block(&mut lines, "Codebases", card.get("codebaseIds"));
+
+    if let Some(story_readiness) = card.get("storyReadiness") {
+        let ready = story_readiness
+            .get("ready")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let missing = format_string_array(story_readiness.get("missing"));
+        let required_fields = format_string_array(story_readiness.get("requiredTaskFields"));
+        let mut row = format!("Story readiness: ready={}", yes_no(ready));
+        if !missing.is_empty() {
+            row.push_str(&format!(" missing={missing}"));
+        }
+        if !required_fields.is_empty() {
+            row.push_str(&format!(" requiredFields={required_fields}"));
+        }
+        lines.push(row);
+    }
+
+    if let Some(evidence_summary) = card.get("evidenceSummary") {
+        let artifact = evidence_summary.get("artifact").unwrap_or(&Value::Null);
+        let verification = evidence_summary.get("verification").unwrap_or(&Value::Null);
+        let completion = evidence_summary.get("completion").unwrap_or(&Value::Null);
+        let runs = evidence_summary.get("runs").unwrap_or(&Value::Null);
+        let artifact_total = artifact.get("total").and_then(Value::as_u64).unwrap_or(0);
+        let required_satisfied = artifact
+            .get("requiredSatisfied")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let missing_required = format_string_array(artifact.get("missingRequired"));
+        let verification_report = verification
+            .get("hasReport")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let verification_verdict = verification
+            .get("verdict")
+            .and_then(Value::as_str)
+            .unwrap_or("-");
+        let completion_summary = completion
+            .get("hasSummary")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let run_total = runs.get("total").and_then(Value::as_u64).unwrap_or(0);
+        let latest_status = runs
+            .get("latestStatus")
+            .and_then(Value::as_str)
+            .unwrap_or("none");
+
+        let mut artifact_row = format!(
+            "Evidence: artifacts={} requiredSatisfied={}",
+            artifact_total,
+            yes_no(required_satisfied)
+        );
+        if !missing_required.is_empty() {
+            artifact_row.push_str(&format!(" missingRequired={missing_required}"));
+        }
+        lines.push(artifact_row);
+        lines.push(format!(
+            "Verification: report={} verdict={verification_verdict}",
+            yes_no(verification_report)
+        ));
+        lines.push(format!(
+            "Runs: total={} latestStatus={} completionSummary={}",
+            run_total,
+            latest_status,
+            yes_no(completion_summary)
+        ));
+    }
+
+    if let Some(invest_validation) = card.get("investValidation") {
+        let source = invest_validation
+            .get("source")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        let overall_status = invest_validation
+            .get("overallStatus")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        let issues = format_string_array(invest_validation.get("issues"));
+        let mut row = format!("INVEST: overall={overall_status} source={source}");
+        if !issues.is_empty() {
+            row.push_str(&format!(" issues={issues}"));
+        }
+        lines.push(row);
+    }
+
+    push_text_block(
+        &mut lines,
+        "Completion summary",
+        value_str(card, "completionSummary"),
+    );
+    push_text_block(
+        &mut lines,
+        "Verification report",
+        value_str(card, "verificationReport"),
+    );
+
+    Some(lines.join("\n"))
+}
+
 fn format_delete_card_text(result: &Value) -> Option<String> {
     let card_id = value_str(result, "cardId").or_else(|| value_str(result, "card_id"))?;
     let deleted = value_bool(result, "deleted").unwrap_or(false);
@@ -1038,6 +1223,52 @@ fn format_string_array(value: Option<&Value>) -> String {
                 .join(",")
         })
         .unwrap_or_default()
+}
+
+fn push_text_block(lines: &mut Vec<String>, heading: &str, value: Option<&str>) {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return;
+    };
+
+    lines.push(format!("{heading}:"));
+    for line in value.lines() {
+        if line.is_empty() {
+            lines.push("  ".to_string());
+        } else {
+            lines.push(format!("  {line}"));
+        }
+    }
+}
+
+fn push_string_list_block(lines: &mut Vec<String>, heading: &str, value: Option<&Value>) {
+    let values: Vec<&str> = value
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|item| !item.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if values.is_empty() {
+        return;
+    }
+
+    lines.push(format!("{heading}:"));
+    for value in values {
+        lines.push(format!("  - {value}"));
+    }
+}
+
+fn yes_no(value: bool) -> &'static str {
+    if value {
+        "yes"
+    } else {
+        "no"
+    }
 }
 
 fn short_id(value: &str) -> &str {
@@ -1367,5 +1598,78 @@ mod tests {
 
         assert!(rendered.contains("Cards in workspace default (0) on board board-1"));
         assert!(rendered.contains("(no cards)"));
+    }
+
+    #[test]
+    fn card_detail_text_is_human_readable() {
+        let rendered = format_card_detail_text(&json!({
+            "id": "card-1",
+            "title": "Investigate flaky review lane",
+            "objective": "Find the root cause and capture the mitigation plan.",
+            "scope": "Review the review lane automation and evidence gate.",
+            "workspaceId": "default",
+            "boardId": "board-1",
+            "columnId": "review",
+            "position": 2,
+            "status": "REVIEW_REQUIRED",
+            "priority": "high",
+            "labels": ["bug", "automation"],
+            "assignee": "phodal",
+            "assignedProvider": "codex",
+            "assignedRole": "DEVELOPER",
+            "assignedSpecialistName": "KanbanTask Agent",
+            "triggerSessionId": "session-1",
+            "githubRepo": "phodal/routa",
+            "githubNumber": 503,
+            "githubState": "open",
+            "githubUrl": "https://github.com/phodal/routa/issues/503",
+            "acceptanceCriteria": ["Root cause identified", "Follow-up issue created"],
+            "verificationCommands": ["cargo test -p routa-cli kanban"],
+            "testCases": ["Create a card from CLI and verify live refresh"],
+            "dependencies": ["card-0"],
+            "codebaseIds": ["phodal/routa"],
+            "storyReadiness": {
+                "ready": false,
+                "missing": ["verification_plan"],
+                "requiredTaskFields": ["verification_plan"]
+            },
+            "evidenceSummary": {
+                "artifact": {
+                    "total": 2,
+                    "requiredSatisfied": false,
+                    "missingRequired": ["screenshot"]
+                },
+                "verification": {
+                    "hasReport": true,
+                    "verdict": "APPROVED"
+                },
+                "completion": {
+                    "hasSummary": false
+                },
+                "runs": {
+                    "total": 1,
+                    "latestStatus": "completed"
+                }
+            },
+            "investValidation": {
+                "source": "lane_rules",
+                "overallStatus": "warning",
+                "issues": ["verification_plan missing"]
+            },
+            "completionSummary": "Verification complete.",
+            "verificationReport": "All checks passed.",
+            "createdAt": "2026-04-20T06:00:00Z",
+            "updatedAt": "2026-04-20T06:30:00Z"
+        }))
+        .expect("card detail text");
+
+        assert!(rendered.contains("Card: Investigate flaky review lane [card-1]"));
+        assert!(rendered.contains("workspace=default board=board-1 column=review position=2"));
+        assert!(rendered.contains("github=phodal/routa#503 state=open"));
+        assert!(rendered.contains("Acceptance criteria:"));
+        assert!(rendered.contains("Story readiness: ready=no missing=verification_plan"));
+        assert!(rendered
+            .contains("Evidence: artifacts=2 requiredSatisfied=no missingRequired=screenshot"));
+        assert!(rendered.contains("Verification report:"));
     }
 }

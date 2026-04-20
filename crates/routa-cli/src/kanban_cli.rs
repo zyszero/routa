@@ -149,6 +149,11 @@ pub(crate) enum KanbanCardAction {
         #[arg(long, value_delimiter = ',')]
         labels: Option<Vec<String>>,
     },
+    /// Show detailed card information
+    Get {
+        #[arg(long)]
+        card_id: String,
+    },
     /// Create a linked GitHub issue for a card
     CreateIssue {
         #[arg(long)]
@@ -386,6 +391,7 @@ pub(crate) async fn handle_kanban_action(
                 )
                 .await
             }
+            KanbanCardAction::Get { card_id } => commands::kanban::get_card(state, &card_id).await,
             KanbanCardAction::CreateIssue { card_id, repo } => {
                 commands::kanban::create_issue_from_card(state, &card_id, repo.as_deref()).await
             }
