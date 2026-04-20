@@ -18,7 +18,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { TaskCreationSource } from "../kanban/task-creation-policy";
 import type { KanbanColumn } from "../models/kanban";
-import type { TaskCommentEntry, TaskDeliverySnapshot, TaskLaneHandoff, TaskLaneSession } from "../models/task";
+import type { FallbackAgent, TaskCommentEntry, TaskDeliverySnapshot, TaskLaneHandoff, TaskLaneSession } from "../models/task";
 
 // ─── Workspaces ─────────────────────────────────────────────────────
 
@@ -85,6 +85,9 @@ export const tasks = pgTable("tasks", {
   assignedRole: text("assigned_role"),
   assignedSpecialistId: text("assigned_specialist_id"),
   assignedSpecialistName: text("assigned_specialist_name"),
+  fallbackAgentChain: jsonb("fallback_agent_chain").$type<FallbackAgent[]>(),
+  enableAutomaticFallback: boolean("enable_automatic_fallback"),
+  maxFallbackAttempts: integer("max_fallback_attempts"),
   triggerSessionId: text("trigger_session_id"),
   /** All session IDs that have been associated with this task (history) */
   sessionIds: jsonb("session_ids").$type<string[]>().default([]),

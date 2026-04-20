@@ -860,6 +860,12 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     failedToSwitchRepo: "Failed to switch to the active session repo",
     failedToUpdateRepos: "Failed to update repositories",
     resetOverride: "Reset override",
+    fallbackAgentChain: "Fallback agent chain",
+    fallbackAgentChainHint: "Configure backup agents to try when the primary agent fails",
+    fallbackAgentsConfigured: "fallback(s)",
+    addFallbackAgent: "Add fallback agent",
+    enableAutomaticFallback: "Automatically try next fallback agent on failure",
+    fallbackProviderDefault: "Default provider",
   },
 
   kanbanModals: {

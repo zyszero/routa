@@ -860,6 +860,12 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     failedToSwitchRepo: "切换到活动会话仓库失败",
     failedToUpdateRepos: "更新仓库失败",
     resetOverride: "重置覆盖",
+    fallbackAgentChain: "备选 Agent 链",
+    fallbackAgentChainHint: "配置主 Agent 失败时自动尝试的备选 Agent",
+    fallbackAgentsConfigured: "个备选",
+    addFallbackAgent: "添加备选 Agent",
+    enableAutomaticFallback: "失败时自动尝试下一个备选 Agent",
+    fallbackProviderDefault: "默认提供商",
   },
 
   kanbanModals: {

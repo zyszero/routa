@@ -456,6 +456,9 @@ export async function PATCH(
   if (body.assignedRole !== undefined) nextTask.assignedRole = body.assignedRole;
   if (body.assignedSpecialistId !== undefined) nextTask.assignedSpecialistId = body.assignedSpecialistId;
   if (body.assignedSpecialistName !== undefined) nextTask.assignedSpecialistName = body.assignedSpecialistName;
+  if (body.fallbackAgentChain !== undefined) nextTask.fallbackAgentChain = body.fallbackAgentChain;
+  if (body.enableAutomaticFallback !== undefined) nextTask.enableAutomaticFallback = body.enableAutomaticFallback;
+  if (body.maxFallbackAttempts !== undefined) nextTask.maxFallbackAttempts = body.maxFallbackAttempts;
   if (body.triggerSessionId !== undefined) nextTask.triggerSessionId = body.triggerSessionId;
   if (body.githubId !== undefined) nextTask.githubId = body.githubId;
   if (body.githubNumber !== undefined) nextTask.githubNumber = body.githubNumber;

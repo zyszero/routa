@@ -20,7 +20,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 import type { TaskCreationSource } from "../kanban/task-creation-policy";
 import type { KanbanColumn } from "../models/kanban";
-import type { TaskCommentEntry, TaskDeliverySnapshot, TaskLaneHandoff, TaskLaneSession } from "../models/task";
+import type { FallbackAgent, TaskCommentEntry, TaskDeliverySnapshot, TaskLaneHandoff, TaskLaneSession } from "../models/task";
 
 // ─── Workspaces ─────────────────────────────────────────────────────
 
@@ -87,6 +87,9 @@ export const tasks = sqliteTable("tasks", {
   assignedRole: text("assigned_role"),
   assignedSpecialistId: text("assigned_specialist_id"),
   assignedSpecialistName: text("assigned_specialist_name"),
+  fallbackAgentChain: text("fallback_agent_chain", { mode: "json" }).$type<FallbackAgent[]>(),
+  enableAutomaticFallback: integer("enable_automatic_fallback", { mode: "boolean" }),
+  maxFallbackAttempts: integer("max_fallback_attempts"),
   triggerSessionId: text("trigger_session_id"),
   /** All session IDs that have been associated with this task (history) */
   sessionIds: text("session_ids", { mode: "json" }).$type<string[]>().default([]),

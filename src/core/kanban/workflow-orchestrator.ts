@@ -160,6 +160,8 @@ export interface ActiveAutomation {
   attempt: number;
   recoveryAttempts: number;
   signaledSessionIds: Set<string>;
+  /** Whether to automatically try the next fallback step on failure */
+  enableAutomaticFallback?: boolean;
 }
 
 /** Callback to create an agent session for a column automation */
@@ -287,7 +289,17 @@ export class KanbanWorkflowOrchestrator {
     const laneObjective = task?.objective?.trim() || data.cardTitle;
     const targetColumn = resolved.column;
     const automation = resolved.automation;
-    const steps = getKanbanAutomationSteps(automation);
+    const laneSteps = getKanbanAutomationSteps(automation);
+    const fallbackSteps = task?.enableAutomaticFallback && task.fallbackAgentChain?.length
+      ? task.fallbackAgentChain.map((agent, index) => ({
+        id: `fallback-${index + 1}`,
+        providerId: agent.providerId,
+        role: agent.role,
+        specialistId: agent.specialistId,
+        specialistName: agent.specialistName,
+      }))
+      : [];
+    const steps = [...laneSteps, ...fallbackSteps];
     if (steps.length === 0) return;
 
     if (hasExceededNonDevAutomationRepeatLimit(task, targetColumn.id, targetColumn.stage)) {
@@ -341,6 +353,7 @@ export class KanbanWorkflowOrchestrator {
       attempt: 1,
       recoveryAttempts: 0,
       signaledSessionIds: new Set(),
+      enableAutomaticFallback: task?.enableAutomaticFallback,
     };
 
     this.activeAutomations.set(data.cardId, automationEntry);
@@ -434,6 +447,22 @@ export class KanbanWorkflowOrchestrator {
           return;
         }
         failedToAdvanceWithinLane = true;
+      }
+
+      // Automatic fallback: on failure, try next fallback agent step instead of retrying
+      const canFallback = !successEvent
+        && automation.enableAutomaticFallback
+        && nextStepIndex < automation.steps.length;
+      if (task && canFallback) {
+        const maxAttempts = task.maxFallbackAttempts ?? automation.steps.length;
+        const fallbackAttemptCount = automation.currentStepIndex;
+        if (fallbackAttemptCount < maxAttempts) {
+          const startedFallback = await this.startNextAutomationStep(cardId, automation, task, nextStepIndex);
+          if (startedFallback) {
+            automation.signaledSessionIds.add(eventSessionId);
+            return;
+          }
+        }
       }
 
       if (task && shouldRecover) {
