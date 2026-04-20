@@ -41,6 +41,8 @@ import { AgentEventBridge, makeStartedEvent } from "../acp/agent-event-bridge";
 import type { WorkspaceAgentEvent } from "../acp/agent-event-bridge";
 import { LifecycleNotifier } from "../acp/lifecycle-notifier";
 import { createWorkspaceSessionSandbox } from "../sandbox/permissions";
+import { TraceReader } from "../trace/reader";
+import { buildTraceRunDigest, formatDigestForRole } from "../trace/trace-run-digest";
 
 export interface DelegateWithSpawnParams {
   /** Task ID to delegate */
@@ -425,6 +427,24 @@ export class RoutaOrchestrator {
 
     const agentId = (agentResult.data as { agentId: string }).agentId;
 
+    // 4.5. Build trace digest from parent session for specialist context
+    let enrichedAdditionalContext = additionalInstructions;
+    try {
+      const traceReader = new TraceReader(cwd);
+      const parentTraces = await traceReader.query({ sessionId: callerSessionId, limit: 500 });
+      if (parentTraces.length > 0) {
+        const digest = buildTraceRunDigest(callerSessionId, parentTraces);
+        const formatted = formatDigestForRole(digest, specialistConfig.role as AgentRole);
+        if (formatted) {
+          enrichedAdditionalContext = enrichedAdditionalContext
+            ? `${enrichedAdditionalContext}\n\n${formatted}`
+            : formatted;
+        }
+      }
+    } catch {
+      // Trace digest is best-effort; don't block delegation on failure
+    }
+
     // 5. Build the delegation prompt
     const delegationPrompt = buildDelegationPrompt({
       specialist: specialistConfig,
@@ -444,7 +464,7 @@ export class RoutaOrchestrator {
           ? `\n## Verification\n${task.verificationCommands.map((c) => `- \`${c}\``).join("\n")}\n`
           : ""),
       parentAgentId: callerAgentId,
-      additionalContext: additionalInstructions,
+      additionalContext: enrichedAdditionalContext,
     });
 
     // 6. Assign task to agent
