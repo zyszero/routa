@@ -22,6 +22,7 @@ import { CanonicalStoryRenderer } from "./canonical-story-renderer";
 import { MermaidRenderer } from "./mermaid-renderer";
 import { HtmlPreviewRenderer } from "./html-preview-renderer";
 import { parseCanonicalStory, type CanonicalStoryParseResult } from "@/core/kanban/canonical-story";
+import { openExternalUrl } from "@/client/utils/external-links";
 import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
@@ -292,8 +293,9 @@ function StaticMarkdownContent({
       const anchor = target.closest("a");
       if (anchor?.href) {
         e.preventDefault();
+        e.stopPropagation();
         if (anchor.href.startsWith("http://") || anchor.href.startsWith("https://")) {
-          window.open(anchor.href, "_blank");
+          void openExternalUrl(anchor.href);
         }
         return;
       }
@@ -414,7 +416,7 @@ function TiptapMarkdownContent({
         e.preventDefault();
         e.stopPropagation();
         if (anchor.href.startsWith("http")) {
-          window.open(anchor.href, "_blank");
+          void openExternalUrl(anchor.href);
         }
         return;
       }

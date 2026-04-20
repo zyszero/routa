@@ -117,6 +117,16 @@ fn update_tray_github_repos(app: tauri::AppHandle, repos: Vec<GitHubRepo>) -> Re
     tray::update_tray_repos(&app, &repos).map_err(|e| e.to_string())
 }
 
+/// Open an external URL in the user's default browser.
+#[tauri::command]
+fn open_external_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+
+    app.opener()
+        .open_url(&url, None::<&str>)
+        .map_err(|e| format!("Failed to open URL {url}: {e}"))
+}
+
 // ─── ACP Agent Installation State ─────────────────────────────────────────
 
 /// Shared state for ACP agent installation.
@@ -824,6 +834,7 @@ pub fn run() {
             get_home_dir,
             is_git_repo,
             log_frontend,
+            open_external_url,
             rpc_call,
             fetch_acp_registry,
             get_installed_agents,
