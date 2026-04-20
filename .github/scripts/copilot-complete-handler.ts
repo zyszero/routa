@@ -5,7 +5,7 @@
  * When GitHub Copilot marks an issue as Complete:
  * 1. Find the associated draft PR linked to the issue
  * 2. Convert it from draft to ready for review
- * 3. Add an @augment review comment on the PR
+ * 3. Add a trigger-aware @augment review comment on the PR
  *
  * Usage:
  *   npx tsx .github/scripts/copilot-complete-handler.ts --issue 123
@@ -16,6 +16,11 @@
  *   GITHUB_REPOSITORY  # Optional, defaults to current repo from git remote
  */
 
+import {
+  analyzePullRequestReviewTriggers,
+  buildAutomatedReviewComment,
+  type GitHubPullRequestFile,
+} from "@/core/github/review-trigger-pr-review";
 import { ghExec } from "@/core/utils/safe-exec";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -24,6 +29,7 @@ interface PullRequest {
   number: number;
   title: string;
   isDraft: boolean;
+  baseRefName: string;
   headRefName: string;
   url: string;
   body: string;
@@ -69,7 +75,7 @@ function findLinkedPRs(issueNumber: number, repo: string): PullRequest[] {
             "--repo",
             repo,
             "--json",
-            "number,title,isDraft,headRefName,url,body"
+            "number,title,isDraft,baseRefName,headRefName,url,body"
           ], { cwd: process.cwd() });
           const pr = JSON.parse(prDetails) as PullRequest;
           if (!linkedPRs.find((p) => p.number === pr.number)) {
@@ -98,7 +104,7 @@ function findLinkedPRs(issueNumber: number, repo: string): PullRequest[] {
         "--state",
         "open",
         "--json",
-        "number,title,isDraft,headRefName,url,body"
+        "number,title,isDraft,baseRefName,headRefName,url,body"
       ], { cwd: process.cwd() });
       const allPRs = JSON.parse(searchOutput) as PullRequest[];
       const issuePattern = new RegExp(
@@ -133,6 +139,32 @@ function findLinkedPRs(issueNumber: number, repo: string): PullRequest[] {
   return linkedPRs;
 }
 
+function getPullRequestFiles(prNumber: number, repo: string): GitHubPullRequestFile[] {
+  const output = ghExec([
+    "api",
+    `repos/${repo}/pulls/${prNumber}/files`,
+    "--paginate",
+    "--jq",
+    ".[] | {filename, status, additions, deletions, changes}",
+  ], { cwd: process.cwd() });
+
+  if (!output.trim()) {
+    return [];
+  }
+
+  return output
+    .trim()
+    .split("\n")
+    .map((line) => {
+      try {
+        return JSON.parse(line) as GitHubPullRequestFile;
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean) as GitHubPullRequestFile[];
+}
+
 // ─── Convert Draft to Ready ────────────────────────────────────────────────
 
 function convertDraftToReady(prNumber: number, repo: string, dryRun: boolean): boolean {
@@ -158,19 +190,41 @@ function convertDraftToReady(prNumber: number, repo: string, dryRun: boolean): b
 
 // ─── Add Augment Review Comment ────────────────────────────────────────────
 
-function addAugmentReviewComment(prNumber: number, repo: string, dryRun: boolean): boolean {
-  console.log(`\n💬 Adding @augment review comment on PR #${prNumber}...`);
+async function buildReviewComment(pr: PullRequest, repo: string): Promise<string> {
+  try {
+    const files = getPullRequestFiles(pr.number, repo);
+    const analysis = await analyzePullRequestReviewTriggers({
+      repoRoot: process.cwd(),
+      baseRef: pr.baseRefName,
+      files,
+    });
+    return buildAutomatedReviewComment({
+      report: analysis.report,
+      configRelativePath: analysis.configRelativePath,
+    });
+  } catch (error) {
+    console.warn(
+      "   ⚠️ Could not analyze review-trigger policy for this PR:",
+      error instanceof Error ? error.message : error,
+    );
+    return buildAutomatedReviewComment({ report: null });
+  }
+}
 
-  const comment = `@augment review`;
+async function addAugmentReviewComment(pr: PullRequest, repo: string, dryRun: boolean): Promise<boolean> {
+  console.log(`\n💬 Adding trigger-aware @augment review comment on PR #${pr.number}...`);
+
+  const comment = await buildReviewComment(pr, repo);
 
   if (dryRun) {
-    console.log(`   [DRY RUN] Would comment on PR #${prNumber}: "${comment}"`);
+    console.log(`   [DRY RUN] Would comment on PR #${pr.number}:`);
+    console.log(comment);
     return true;
   }
 
   try {
-    ghExec(["pr", "comment", prNumber.toString(), "--repo", repo, "--body", comment], { cwd: process.cwd() });
-    console.log(`   ✅ @augment review comment added to PR #${prNumber}`);
+    ghExec(["pr", "comment", pr.number.toString(), "--repo", repo, "--body", comment], { cwd: process.cwd() });
+    console.log(`   ✅ trigger-aware @augment review comment added to PR #${pr.number}`);
     return true;
   } catch (error) {
     console.error(
@@ -183,7 +237,7 @@ function addAugmentReviewComment(prNumber: number, repo: string, dryRun: boolean
 
 // ─── Main ──────────────────────────────────────────────────────────────────
 
-function main(): void {
+async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
 
@@ -226,7 +280,7 @@ function main(): void {
       console.log(`\n   ℹ️  PR #${pr.number} is already ready for review — skipping conversion`);
     }
 
-    const ok = addAugmentReviewComment(pr.number, repo, dryRun);
+    const ok = await addAugmentReviewComment(pr, repo, dryRun);
     if (ok) commented++;
   }
 
@@ -234,9 +288,7 @@ function main(): void {
   console.log(`✅ Done — converted ${converted} draft(s), commented on ${commented} PR(s)`);
 }
 
-try {
-  main();
-} catch (error) {
+void main().catch((error) => {
   console.error("Fatal error:", error);
   process.exit(1);
-}
+});

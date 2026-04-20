@@ -5,7 +5,7 @@ import {
   parseCodeownersContent,
   resolveOwnership,
 } from "../codeowners";
-import { parseReviewTriggerConfig } from "../review-triggers";
+import { evaluateReviewTriggers, parseReviewTriggerConfig } from "../review-triggers";
 
 describe("parseCodeownersContent", () => {
   it("parses rules with single owner", () => {
@@ -235,5 +235,51 @@ describe("resolveOwnership", () => {
     expect(rule?.provider).toBe("codex");
     expect(rule?.model).toBe("gpt-5.4");
     expect(rule?.context).toEqual(["graph_review_context"]);
+  });
+
+  it("evaluates staged review trigger reports with diff-size and path matches", () => {
+    const rules = parseReviewTriggerConfig([
+      "review_triggers:",
+      "  - name: high_risk_directory_change",
+      "    type: changed_paths",
+      "    severity: high",
+      "    action: staged",
+      "    confidence_threshold: 8",
+      "    fallback_action: require_human_review",
+      "    paths:",
+      "      - src/core/acp/**",
+      "  - name: oversized_change",
+      "    type: diff_size",
+      "    severity: medium",
+      "    action: advisory",
+      "    max_files: 2",
+      "    max_added_lines: 20",
+    ].join("\n"));
+
+    const report = evaluateReviewTriggers({
+      rules,
+      changedFiles: [
+        "src/core/acp/session.ts",
+        "src/core/orchestration/runner.ts",
+        "src/client/app.tsx",
+      ],
+      diffStats: {
+        fileCount: 3,
+        addedLines: 24,
+        deletedLines: 5,
+      },
+      base: "origin/main",
+    });
+
+    expect(report.base).toBe("origin/main");
+    expect(report.stagedReviewRequired).toBe(true);
+    expect(report.triggers.map((trigger) => trigger.name)).toEqual([
+      "high_risk_directory_change",
+      "oversized_change",
+    ]);
+    expect(report.triggers[0]?.action).toBe("staged");
+    expect(report.triggers[0]?.confidenceThreshold).toBe(8);
+    expect(report.triggers[1]?.action).toBe("advisory");
+    expect(report.advisoryOnly).toBe(false);
   });
 });

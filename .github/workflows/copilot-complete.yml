@@ -67,7 +67,7 @@ jobs:
             echo "dry_run=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Convert draft PR and request Augment review
+      - name: Convert draft PR and request trigger-aware review
         run: |
           ISSUE_NUMBER="${{ steps.issue.outputs.number }}"
           DRY_RUN="${{ steps.issue.outputs.dry_run }}"

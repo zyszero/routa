@@ -36,6 +36,36 @@ export type ReviewTriggerRule = {
   context: string[];
 };
 
+export type ReviewTriggerDiffStats = {
+  fileCount: number;
+  addedLines: number;
+  deletedLines: number;
+};
+
+export type ReviewTriggerMatch = {
+  name: string;
+  severity: string;
+  action: ReviewTriggerAction;
+  confidenceThreshold: number | null;
+  fallbackAction: ReviewTriggerAction | null;
+  specialistId: string | null;
+  provider: string | null;
+  model: string | null;
+  context: string[];
+  reasons: string[];
+};
+
+export type ReviewTriggerReport = {
+  blocked: boolean;
+  humanReviewRequired: boolean;
+  advisoryOnly: boolean;
+  stagedReviewRequired: boolean;
+  base: string;
+  changedFiles: string[];
+  diffStats: ReviewTriggerDiffStats;
+  triggers: ReviewTriggerMatch[];
+};
+
 type ReviewTriggerConfigFile = {
   review_triggers?: Array<Record<string, unknown>>;
 };
@@ -167,6 +197,168 @@ export async function loadReviewTriggerRules(repoRoot: string): Promise<{
   return {
     relativePath,
     rules: parseReviewTriggerConfig(source),
+  };
+}
+
+function countDirectFiles(repoRoot: string, directory: string): number {
+  const target = path.join(repoRoot, directory);
+  try {
+    return fs.readdirSync(target, { withFileTypes: true }).filter((entry) => entry.isFile()).length;
+  } catch {
+    return 0;
+  }
+}
+
+function changedFilesInDirectory(filePaths: string[], directory: string): string[] {
+  const normalized = directory.trim().replace(/^\/+|\/+$/g, "");
+  if (!normalized) {
+    return [];
+  }
+
+  return filePaths.filter((filePath) => directoryMatchesFile(filePath, normalized));
+}
+
+function pushTriggerIfAny(
+  triggers: ReviewTriggerMatch[],
+  rule: ReviewTriggerRule,
+  reasons: string[],
+) {
+  if (reasons.length === 0) {
+    return;
+  }
+
+  triggers.push({
+    name: rule.name,
+    severity: rule.severity,
+    action: rule.action,
+    confidenceThreshold: rule.confidenceThreshold,
+    fallbackAction: rule.fallbackAction,
+    specialistId: rule.specialistId,
+    provider: rule.provider,
+    model: rule.model,
+    context: [...rule.context],
+    reasons,
+  });
+}
+
+export function evaluateReviewTriggers(params: {
+  rules: ReviewTriggerRule[];
+  changedFiles: string[];
+  diffStats: ReviewTriggerDiffStats;
+  base?: string;
+  repoRoot?: string | null;
+}): ReviewTriggerReport {
+  const triggers: ReviewTriggerMatch[] = [];
+
+  for (const rule of params.rules) {
+    switch (rule.type) {
+      case "changed_paths":
+      case "sensitive_file_change": {
+        const label = rule.type === "sensitive_file_change"
+          ? "sensitive file changed"
+          : "changed path";
+        const reasons = params.changedFiles
+          .filter((filePath) => rule.paths.some((pattern) => patternMatchesFile(filePath, pattern)))
+          .map((filePath) => `${label}: ${filePath}`);
+        pushTriggerIfAny(triggers, rule, reasons);
+        break;
+      }
+      case "diff_size": {
+        const reasons: string[] = [];
+        if (rule.maxFiles !== null && params.diffStats.fileCount > rule.maxFiles) {
+          reasons.push(`diff touched ${params.diffStats.fileCount} files (threshold: ${rule.maxFiles})`);
+        }
+        if (rule.maxAddedLines !== null && params.diffStats.addedLines > rule.maxAddedLines) {
+          reasons.push(`diff added ${params.diffStats.addedLines} lines (threshold: ${rule.maxAddedLines})`);
+        }
+        if (rule.maxDeletedLines !== null && params.diffStats.deletedLines > rule.maxDeletedLines) {
+          reasons.push(`diff deleted ${params.diffStats.deletedLines} lines (threshold: ${rule.maxDeletedLines})`);
+        }
+        pushTriggerIfAny(triggers, rule, reasons);
+        break;
+      }
+      case "directory_file_count": {
+        if (!params.repoRoot || rule.maxFiles === null) {
+          break;
+        }
+
+        const reasons: string[] = [];
+        for (const directory of rule.directories) {
+          const touchedFiles = changedFilesInDirectory(params.changedFiles, directory);
+          if (touchedFiles.length === 0) {
+            continue;
+          }
+
+          const directFiles = countDirectFiles(params.repoRoot, directory);
+          if (directFiles <= rule.maxFiles) {
+            continue;
+          }
+
+          const changedSample = touchedFiles.slice(0, 3).join(", ");
+          const suffix = touchedFiles.length > 3 ? ", ..." : "";
+          reasons.push(
+            `directory '${directory}' has ${directFiles} direct files (threshold: ${rule.maxFiles}); changed files: ${changedSample}${suffix}`,
+          );
+        }
+        pushTriggerIfAny(triggers, rule, reasons);
+        break;
+      }
+      case "evidence_gap": {
+        const monitoredChanges = params.changedFiles.filter((filePath) =>
+          rule.paths.some((pattern) => patternMatchesFile(filePath, pattern))
+        );
+        if (monitoredChanges.length === 0) {
+          break;
+        }
+
+        const evidenceTouched = params.changedFiles.some((filePath) =>
+          rule.evidencePaths.some((pattern) => patternMatchesFile(filePath, pattern))
+        );
+        if (evidenceTouched) {
+          break;
+        }
+
+        const reasons = monitoredChanges.map(
+          (filePath) => `changed code path without evidence update: ${filePath}`,
+        );
+        reasons.push(`expected evidence path patterns: ${rule.evidencePaths.join(", ")}`);
+        pushTriggerIfAny(triggers, rule, reasons);
+        break;
+      }
+      case "cross_boundary_change": {
+        const boundaryHits = rule.boundaries
+          .map((boundary) => ({
+            name: boundary.name,
+            matches: params.changedFiles.filter((filePath) =>
+              boundary.paths.some((pattern) => patternMatchesFile(filePath, pattern))
+            ),
+          }))
+          .filter((boundary) => boundary.matches.length > 0);
+
+        if (boundaryHits.length < (rule.minBoundaries ?? 2)) {
+          break;
+        }
+
+        const reasons = boundaryHits.map((boundary) =>
+          `changed boundary '${boundary.name}': ${boundary.matches.join(", ")}`,
+        );
+        pushTriggerIfAny(triggers, rule, reasons);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  return {
+    blocked: triggers.some((trigger) => trigger.action === "block"),
+    humanReviewRequired: triggers.some((trigger) => trigger.action === "require_human_review"),
+    advisoryOnly: triggers.length > 0 && triggers.every((trigger) => trigger.action === "advisory"),
+    stagedReviewRequired: triggers.some((trigger) => trigger.action === "staged"),
+    base: params.base ?? "HEAD",
+    changedFiles: [...params.changedFiles],
+    diffStats: { ...params.diffStats },
+    triggers,
   };
 }
 

@@ -59,7 +59,19 @@ export {
   normalizeGitHubWorkflowEventTokens,
 } from "./workflow-classifier";
 
+export {
+  analyzePullRequestReviewTriggers,
+  buildAutomatedReviewComment,
+  buildPullRequestDiffStats,
+  collectReviewFocusAreas,
+  filterReviewTriggerFiles,
+} from "./review-trigger-pr-review";
+
 export type {
   GitHubWorkflowCategory,
   GitHubWorkflowSummary,
 } from "./workflow-classifier";
+
+export type {
+  GitHubPullRequestFile,
+} from "./review-trigger-pr-review";
