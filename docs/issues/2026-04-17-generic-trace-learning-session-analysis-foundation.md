@@ -2,7 +2,7 @@
 title: "Generic trace-learning session analysis foundation for provider-agnostic transcript ingestion"
 date: "2026-04-17"
 kind: issue
-status: investigating
+status: resolved
 severity: medium
 area: "trace-learning"
 tags: ["trace-learning", "sessions", "codex", "feature-tree", "normalization", "rust"]
@@ -12,8 +12,10 @@ related_issues:
   - "docs/issues/2026-04-16-global-kanban-flow-learning-via-agent-specialist.md"
   - "https://github.com/phodal/routa/issues/294"
 github_issue: 478
-github_state: open
+github_state: closed
 github_url: "https://github.com/phodal/routa/issues/478"
+resolved_at: "2026-04-20"
+resolution: "Acceptance criteria implemented via the generic session-normalization foundation introduced in commit 832c71fe and evolved into the current trace-parser + feature-trace split."
 ---
 
 # Generic trace-learning session analysis foundation for provider-agnostic transcript ingestion
@@ -65,6 +67,13 @@ Routa should have a generic Rust foundation for session analysis that:
 - Local Codex session JSONL already contains enough signal to recover session metadata, user prompts, tool calls, and file-change evidence.
 - The same evidence could support broader trace-learning use cases if it were exposed through a provider-agnostic library boundary.
 - Feature-tree-linked session management likely needs many-to-many attribution: one session can touch multiple surfaces, and one surface can aggregate many sessions.
+
+## Resolution
+
+- A dedicated Rust normalization boundary exists in the current `trace-parser` crate, which exports `NormalizedSession`, provider adapters, and `AdapterRegistry`.
+- Codex transcripts are parsed through `CodexSessionAdapter` into the shared model.
+- Feature-surface and feature-tree attribution now live in the companion `feature-trace` crate and are consumed from `trace-parser` and `routa-server`.
+- Unit tests covering transcript parsing and feature-surface mapping pass in the current tree (`cargo test -p trace-parser -p feature-trace`).
 
 ## References
 
