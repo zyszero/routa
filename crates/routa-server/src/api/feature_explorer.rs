@@ -5,8 +5,7 @@ use axum::{
     Json, Router,
 };
 use feature_trace::{
-    FeatureSurfaceCatalog, FeatureTraceInput, FeatureTreeCatalog, SessionAnalysis,
-    SessionAnalyzer,
+    FeatureSurfaceCatalog, FeatureTraceInput, FeatureTreeCatalog, SessionAnalysis, SessionAnalyzer,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -544,11 +543,9 @@ fn record_analysis(
                     prompt_history: Vec::new(),
                 });
 
-        if signal_entry.sessions.len() < MAX_FILE_SIGNAL_SESSIONS
-            && !signal_entry.sessions.iter().any(|session| {
-                session.provider == signal_context.provider && session.session_id == session_id
-            })
-        {
+        if !signal_entry.sessions.iter().any(|session| {
+            session.provider == signal_context.provider && session.session_id == session_id
+        }) {
             signal_entry.sessions.push(FileSessionSignalResponse {
                 provider: signal_context.provider.clone(),
                 session_id: session_id.to_string(),
@@ -560,6 +557,10 @@ fn record_analysis(
                 resume_command: signal_context.resume_command.clone(),
                 diagnostics: signal_context.diagnostics.clone(),
             });
+            signal_entry
+                .sessions
+                .sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+            signal_entry.sessions.truncate(MAX_FILE_SIGNAL_SESSIONS);
         }
 
         for tool_name in &tool_names {
@@ -1197,6 +1198,47 @@ fn extract_changed_files_from_command_output(command: &str, output: &str) -> Vec
     changed.into_iter().collect()
 }
 
+fn is_tool_like_feature_event(event: &Value) -> bool {
+    match event.get("type").and_then(Value::as_str) {
+        Some("function_call") | Some("exec_command_begin") | Some("exec_command_end") => true,
+        _ => {
+            event.get("tool_input").is_some()
+                || event.get("command").is_some()
+                || event.get("cmd").is_some()
+                || event.get("tool_name").is_some()
+                || event.get("name").is_some()
+        }
+    }
+}
+
+fn is_explicit_write_tool_name(tool_name: &str) -> bool {
+    let tool_name = tool_name.trim().to_ascii_lowercase();
+    matches!(
+        tool_name.as_str(),
+        "apply_patch"
+            | "create_file"
+            | "update_file"
+            | "delete_file"
+            | "write"
+            | "write_file"
+            | "write_stdin"
+            | "replace"
+            | "rename"
+            | "move"
+            | "copy"
+            | "edit"
+            | "modify"
+            | "fs/write_file"
+            | "fs/write_text_file"
+            | "fs/edit_file"
+    ) || tool_name.contains("write")
+        || tool_name.contains("edit")
+        || tool_name.contains("modify")
+        || tool_name.contains("rename")
+        || tool_name.contains("move")
+        || tool_name.contains("copy")
+}
+
 fn collect_changed_files_from_raw_events(
     raw_events: &[Value],
     repo_root: &Path,
@@ -1204,13 +1246,30 @@ fn collect_changed_files_from_raw_events(
 ) -> Vec<String> {
     let mut changed_files = BTreeSet::new();
     for event in raw_events {
+        if !is_tool_like_feature_event(event) {
+            continue;
+        }
         let mut candidates = HashSet::new();
-        collect_file_values(event, &mut candidates);
+        let tool_name = tool_name_from_feature_event(event).unwrap_or_default();
+        if is_explicit_write_tool_name(&tool_name) {
+            if let Some(tool_input) = event.get("tool_input") {
+                collect_file_values(tool_input, &mut candidates);
+            }
+
+            if event.get("type").and_then(Value::as_str) == Some("function_call") {
+                if let Some(arguments) = event.get("arguments").and_then(Value::as_str) {
+                    if let Ok(parsed) = serde_json::from_str::<Value>(arguments) {
+                        collect_file_values(&parsed, &mut candidates);
+                    } else {
+                        for path in parse_patch_block(arguments) {
+                            candidates.insert(path);
+                        }
+                    }
+                }
+            }
+        }
         if let Some(command) = command_from_feature_event(event) {
             for path in parse_patch_block(&command) {
-                candidates.insert(path);
-            }
-            for path in parse_command_paths(&command) {
                 candidates.insert(path);
             }
             if let Some(output) = command_output_from_feature_event(event) {
@@ -1419,9 +1478,6 @@ fn extract_file_paths_for_repo(tool_input: &Value, repo_root: &Path) -> Vec<Stri
         for path in parse_patch_block(command) {
             candidates.insert(path);
         }
-        for path in parse_command_paths(command) {
-            candidates.insert(path);
-        }
     }
 
     candidates
@@ -1497,36 +1553,6 @@ fn parse_patch_block(text: &str) -> Vec<String> {
         }
     }
     out
-}
-
-fn parse_command_paths(command: &str) -> Vec<String> {
-    let tokens = shell_like_split(command);
-    if tokens.is_empty() {
-        return Vec::new();
-    }
-
-    let mut candidates = Vec::new();
-    if let Some(separator_index) = tokens.iter().position(|token| token == "--") {
-        candidates.extend(
-            tokens[separator_index + 1..]
-                .iter()
-                .filter(|token| !token.starts_with('-'))
-                .cloned(),
-        );
-    } else if tokens.first().is_some_and(|token| token == "git")
-        && tokens
-            .get(1)
-            .is_some_and(|subcommand| matches!(subcommand.as_str(), "add" | "rm"))
-    {
-        candidates.extend(
-            tokens[2..]
-                .iter()
-                .filter(|token| !token.starts_with('-'))
-                .cloned(),
-        );
-    }
-
-    candidates
 }
 
 fn shell_like_split(command: &str) -> Vec<String> {
@@ -2008,5 +2034,139 @@ mod tests {
         assert_eq!(input.session_id, "sess-1");
         assert_eq!(input.changed_files, vec!["src/app/page.tsx".to_string()]);
         assert!(input.tool_call_names.contains(&"exec_command".to_string()));
+    }
+
+    #[test]
+    fn raw_changed_files_ignore_paths_mentioned_only_in_read_output() {
+        let dir = tempdir().expect("tempdir");
+        let repo_root = dir.path().join("repo");
+        let session_cwd = repo_root.clone();
+        std::fs::create_dir_all(repo_root.join("src/app")).expect("repo src dir");
+        std::fs::create_dir_all(repo_root.join("crates/routa-server/src/api"))
+            .expect("repo rust dir");
+        std::fs::write(
+            repo_root.join("src/app/page.tsx"),
+            "export default function Page() {}",
+        )
+        .expect("write page");
+        std::fs::write(
+            repo_root.join("crates/routa-server/src/api/feature_explorer.rs"),
+            "fn placeholder() {}",
+        )
+        .expect("write rust file");
+
+        let raw_events = vec![
+            json!({
+                "type": "exec_command_end",
+                "name": "exec_command",
+                "command": ["/bin/zsh", "-lc", "sed -n '1,10p' src/app/page.tsx"],
+                "aggregated_output": "related Rust implementation: crates/routa-server/src/api/feature_explorer.rs",
+                "status": "completed",
+                "exit_code": 0
+            }),
+            json!({
+                "type": "function_call",
+                "name": "apply_patch",
+                "arguments": "*** Begin Patch\n*** Update File: src/app/page.tsx\n@@\n-foo\n+bar\n*** End Patch\n"
+            }),
+        ];
+
+        let changed_files =
+            collect_changed_files_from_raw_events(&raw_events, &repo_root, &session_cwd);
+
+        assert_eq!(changed_files, vec!["src/app/page.tsx".to_string()]);
+    }
+
+    #[test]
+    fn raw_changed_files_ignore_command_arguments_without_change_evidence() {
+        let dir = tempdir().expect("tempdir");
+        let repo_root = dir.path().join("repo");
+        let session_cwd = repo_root.clone();
+        std::fs::create_dir_all(repo_root.join("crates/routa-server/src/api"))
+            .expect("repo rust dir");
+        std::fs::write(
+            repo_root.join("crates/routa-server/src/api/feature_explorer.rs"),
+            "fn placeholder() {}",
+        )
+        .expect("write rust file");
+
+        let raw_events = vec![
+            json!({
+                "type": "function_call",
+                "name": "exec_command",
+                "arguments": "{\"cmd\":\"git diff -- crates/routa-server/src/api/feature_explorer.rs\",\"workdir\":\"/repo\"}"
+            }),
+            json!({
+                "type": "function_call",
+                "name": "exec_command",
+                "arguments": "{\"cmd\":\"git restore -- crates/routa-server/src/api/feature_explorer.rs\",\"workdir\":\"/repo\"}"
+            }),
+            json!({
+                "type": "function_call",
+                "name": "exec_command",
+                "arguments": "{\"cmd\":\"git add crates/routa-server/src/api/feature_explorer.rs\",\"workdir\":\"/repo\"}"
+            }),
+        ];
+
+        let changed_files =
+            collect_changed_files_from_raw_events(&raw_events, &repo_root, &session_cwd);
+
+        assert!(changed_files.is_empty());
+    }
+
+    #[test]
+    fn record_analysis_keeps_most_recent_file_signal_sessions() {
+        let mut stats = HashMap::new();
+        let mut file_stats = HashMap::new();
+        let mut file_signals = HashMap::new();
+        let changed_files = ["src/app/page.tsx".to_string()];
+
+        for day in 1..=7 {
+            let signal_context = SessionSignalContext {
+                provider: "codex".to_string(),
+                prompt_history: vec![format!("prompt-{day}")],
+                tool_history: vec!["exec_command".to_string()],
+                resume_command: Some(format!("codex resume sess-{day}")),
+                diagnostics: None,
+            };
+            let analysis = SessionAnalysis {
+                session_id: format!("sess-{day}"),
+                changed_files: changed_files.to_vec(),
+                tool_call_counts: BTreeMap::new(),
+                prompt_previews: Vec::new(),
+                file_operation_counts: BTreeMap::new(),
+                surface_links: Vec::new(),
+                feature_links: vec![ProductFeatureLink {
+                    feature_id: "feature-a".to_string(),
+                    feature_name: "Feature A".to_string(),
+                    route: Some("/feature-a".to_string()),
+                    via_path: "src/app/page.tsx".to_string(),
+                    confidence: SurfaceLinkConfidence::High,
+                }],
+            };
+
+            record_analysis(
+                &mut stats,
+                &mut file_stats,
+                &mut file_signals,
+                &format!("sess-{day}"),
+                &signal_context,
+                &changed_files,
+                &analysis,
+                &format!("2026-04-0{day}T09:00:00"),
+            );
+        }
+
+        let sessions = &file_signals
+            .get("src/app/page.tsx")
+            .expect("file signal")
+            .sessions;
+
+        assert_eq!(sessions.len(), MAX_FILE_SIGNAL_SESSIONS);
+        assert_eq!(sessions[0].session_id, "sess-7");
+        assert_eq!(sessions[MAX_FILE_SIGNAL_SESSIONS - 1].session_id, "sess-2");
+        assert!(sessions
+            .iter()
+            .all(|session| session.session_id != "sess-1"));
     }
 }
