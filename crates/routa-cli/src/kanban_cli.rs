@@ -24,6 +24,7 @@ pub(crate) enum KanbanAction {
     Status {
         #[arg(long, default_value = "default")]
         workspace_id: String,
+        /// Optional board ID. Defaults to the workspace default board.
         #[arg(long)]
         board_id: Option<String>,
     },
@@ -115,8 +116,10 @@ pub(crate) enum KanbanCardAction {
         description: Option<String>,
         #[arg(long, default_value = "default")]
         workspace_id: String,
+        /// Optional board ID. Defaults to the workspace default board.
         #[arg(long)]
         board_id: Option<String>,
+        /// Optional column ID. Defaults to `backlog` on the resolved board.
         #[arg(long)]
         column_id: Option<String>,
         #[arg(long)]
@@ -165,6 +168,7 @@ pub(crate) enum KanbanCardAction {
         query: String,
         #[arg(long, default_value = "default")]
         workspace_id: String,
+        /// Optional board ID. Defaults to the workspace default board.
         #[arg(long)]
         board_id: Option<String>,
     },
@@ -174,6 +178,7 @@ pub(crate) enum KanbanCardAction {
         column_id: String,
         #[arg(long, default_value = "default")]
         workspace_id: String,
+        /// Optional board ID. Defaults to the workspace default board.
         #[arg(long)]
         board_id: Option<String>,
     },
@@ -181,6 +186,7 @@ pub(crate) enum KanbanCardAction {
     List {
         #[arg(long, default_value = "default")]
         workspace_id: String,
+        /// Optional board ID. Defaults to the workspace default board.
         #[arg(long)]
         board_id: Option<String>,
         #[arg(long)]
@@ -236,6 +242,7 @@ pub(crate) enum KanbanAutomationAction {
     List {
         #[arg(long, default_value = "default")]
         workspace_id: String,
+        /// Optional board ID. Defaults to the workspace default board.
         #[arg(long)]
         board_id: Option<String>,
     },
@@ -258,8 +265,10 @@ pub(crate) enum KanbanSyncAction {
     Github {
         #[arg(long, default_value = "default")]
         workspace_id: String,
+        /// Optional board ID. Defaults to the workspace default board.
         #[arg(long)]
         board_id: Option<String>,
+        /// Optional column ID. Defaults to `backlog` on the resolved board.
         #[arg(long)]
         column_id: Option<String>,
         #[arg(long)]

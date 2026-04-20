@@ -2,7 +2,7 @@
 title: "Kanban CLI should default to Desktop RPC and expose agent-friendly output"
 date: "2026-04-20"
 kind: issue
-status: open
+status: resolved
 severity: medium
 area: "cli"
 tags: ["kanban", "cli", "desktop", "rpc", "ai", "output"]
@@ -11,7 +11,7 @@ related_issues:
   - "docs/issues/2026-03-18-kanban-rust-core-cli-parity.md"
   - "https://github.com/phodal/routa/issues/492"
 github_issue: 503
-github_state: open
+github_state: closed
 github_url: "https://github.com/phodal/routa/issues/503"
 ---
 
@@ -74,3 +74,24 @@ Kanban CLI 在 Desktop/local server 运行时，应优先复用 `http://127.0.0.
 ## References
 
 - https://github.com/phodal/routa/issues/492
+- https://github.com/phodal/routa/issues/503
+
+## Resolution
+
+已通过以下提交落地：
+
+- `e6fa02be` `fix(cli): default kanban commands to desktop rpc (#503)`
+- `2410a88d` `fix(core): make kanban default-board switching atomic (#503)`
+
+实际验证结果：
+
+- `routa kanban ...` 默认优先命中 `http://127.0.0.1:3210/api/rpc`
+- 当本地服务不可达时，CLI 会显式 warning 并回退到本地 DB
+- `board list`、`status`、`card list/search/create/delete` 默认输出为 CLI/agent 友好的文本摘要
+- `--json` 保留纯 `result` 输出，不再暴露 JSON-RPC envelope
+- 在 live Desktop surface 上完成了默认 board 切换、card create、card delete、页面可见性与回收验证
+
+剩余非阻断项：
+
+- 当前 workspace 里仍然保留了历史测试 board；仓库里还没有一条正式的 board cleanup / delete path
+- CLI help / docs 还可以进一步强调 `card create` 默认会落到默认 board 和 `backlog` 列，减少 agent 先 `board list` 的依赖
