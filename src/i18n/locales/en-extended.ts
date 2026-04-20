@@ -928,6 +928,8 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     moveBlockedHint: "This manual move is blocked by the current lane workflow. Finish or rerun the remaining step before moving the card again.",
     moveBlockedStoryReadinessHint: "This move is blocked by the story-readiness gate for the target lane.",
     moveBlockedToolHint: "Use `update_task` to fill structured fields such as scope, acceptance criteria, verification commands, or test cases. `update_card` only changes card text and does not satisfy this gate.",
+    moveBlockedDelegate: "Ask Kanban Agent to Fix",
+    moveBlockedDelegating: "Delegating...",
     more: "more",
   },
 

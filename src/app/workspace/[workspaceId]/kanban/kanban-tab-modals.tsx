@@ -1085,6 +1085,8 @@ export function KanbanMoveBlockedModal({
   blocked,
   onClose,
   onOpenCard,
+  onDelegateFix,
+  isDelegating = false,
 }: {
   blocked: {
     message: string;
@@ -1093,6 +1095,8 @@ export function KanbanMoveBlockedModal({
   } | null;
   onClose: () => void;
   onOpenCard?: () => void;
+  onDelegateFix?: () => void;
+  isDelegating?: boolean;
 }) {
   const { t } = useTranslation();
 
@@ -1160,6 +1164,15 @@ export function KanbanMoveBlockedModal({
             </div>
           </div>
           <div className="mt-6 flex justify-end gap-3">
+            {onDelegateFix ? (
+              <button
+                onClick={onDelegateFix}
+                disabled={isDelegating}
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400 dark:disabled:bg-slate-700 dark:disabled:text-slate-300"
+              >
+                {isDelegating ? t.kanbanModals.moveBlockedDelegating : t.kanbanModals.moveBlockedDelegate}
+              </button>
+            ) : null}
             {onOpenCard ? (
               <button
                 onClick={onOpenCard}

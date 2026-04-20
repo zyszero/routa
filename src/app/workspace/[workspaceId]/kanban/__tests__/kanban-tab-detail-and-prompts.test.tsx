@@ -142,6 +142,7 @@ describe("kanban move blocked modal", () => {
           missingTaskFields: ["scope", "verification plan"],
         }}
         onClose={vi.fn()}
+        onDelegateFix={vi.fn()}
         onOpenCard={vi.fn()}
       />,
     );
@@ -151,6 +152,7 @@ describe("kanban move blocked modal", () => {
     expect(screen.getByText(/Required for next move:/)).toBeTruthy();
     expect(screen.getByText(/Missing fields:/)).toBeTruthy();
     expect(screen.getByText(/Use `update_task` to fill structured fields/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Ask Kanban Agent to Fix" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Open" })).toBeTruthy();
   });
 });

@@ -125,6 +125,7 @@ function createTask(id: string, title: string, overrides: Partial<TaskInfo> = {}
 beforeEach(() => {
   resetDesktopAwareFetchToGlobalFetch(desktopAwareFetch);
   dndKitHarness.reset();
+  vi.useRealTimers();
 });
 
 describe("KanbanTab delete flow", () => {
@@ -305,6 +306,164 @@ describe("KanbanTab drag and drop", () => {
       });
     });
   });
+
+  it("delegates story-readiness repair to the Kanban agent and retries the move", async () => {
+    const dragBoard: KanbanBoardInfo = {
+      ...board,
+      columns: [
+        { id: "backlog", name: "Backlog", position: 0, stage: "backlog" },
+        {
+          id: "dev",
+          name: "Dev",
+          position: 1,
+          stage: "dev",
+          automation: {
+            enabled: true,
+            requiredTaskFields: ["scope", "acceptance_criteria", "verification_plan"],
+          },
+        },
+      ],
+    };
+
+    let currentTask = createTask("task-1", "Story One");
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "PATCH" && url === "/api/tasks/task-1") {
+        const body = init.body ? JSON.parse(String(init.body)) : {};
+        if (Array.isArray(body.codebaseIds)) {
+          currentTask = {
+            ...currentTask,
+            codebaseIds: body.codebaseIds,
+          };
+          return {
+            ok: true,
+            json: async () => ({ task: currentTask }),
+          } as Response;
+        }
+        if (body.columnId === "dev") {
+          if (!currentTask.storyReadiness?.ready) {
+            return {
+              ok: false,
+              json: async () => ({
+                error: 'Cannot move task to "Dev": missing required task fields: scope, verification plan.',
+                storyReadiness: {
+                  ready: false,
+                  missing: ["scope", "verification_plan"],
+                  requiredTaskFields: ["scope", "acceptance_criteria", "verification_plan"],
+                  checks: {
+                    scope: false,
+                    acceptanceCriteria: false,
+                    verificationCommands: false,
+                    testCases: false,
+                    verificationPlan: false,
+                    dependenciesDeclared: false,
+                  },
+                },
+                missingTaskFields: ["scope", "verification plan"],
+              }),
+            } as Response;
+          }
+
+          currentTask = {
+            ...currentTask,
+            columnId: "dev",
+            position: 0,
+            status: "IN_PROGRESS",
+          };
+          return {
+            ok: true,
+            json: async () => ({ task: currentTask }),
+          } as Response;
+        }
+      }
+      if (!init?.method && url === "/api/tasks/task-1") {
+        currentTask = {
+          ...currentTask,
+          scope: "Repair the missing story-readiness fields before entering Dev.",
+          acceptanceCriteria: ["The card includes explicit scope and verifiable acceptance criteria."],
+          verificationCommands: ["npm run test:run:fast"],
+          storyReadiness: {
+            ready: true,
+            missing: [],
+            requiredTaskFields: ["scope", "acceptance_criteria", "verification_plan"],
+            checks: {
+              scope: true,
+              acceptanceCriteria: true,
+              verificationCommands: true,
+              testCases: false,
+              verificationPlan: true,
+              dependenciesDeclared: false,
+            },
+          },
+        };
+        return {
+          ok: true,
+          json: async () => ({ task: currentTask }),
+        } as Response;
+      }
+      throw new Error(`Unexpected fetch: ${init?.method ?? "GET"} ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const onAgentPrompt = vi.fn().mockResolvedValue("session-123");
+
+    render(
+      <KanbanTab
+        workspaceId="workspace-1"
+        boards={[dragBoard]}
+        tasks={[createTask("task-1", "Story One")]}
+        sessions={[]}
+        providers={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude", status: "available" }]}
+        specialists={[]}
+        codebases={[{
+          id: "codebase-1",
+          workspaceId: "workspace-1",
+          repoPath: "/tmp/repo",
+          isDefault: true,
+          label: "Repo",
+          branch: "main",
+          sourceType: "local",
+          createdAt: "2025-01-01T00:00:00.000Z",
+          updatedAt: "2025-01-01T00:00:00.000Z",
+        }]}
+        onRefresh={vi.fn()}
+        onAgentPrompt={onAgentPrompt}
+      />,
+    );
+
+    dndKitHarness.emitDragEnd({
+      active: {
+        id: "task-1",
+        data: { current: { columnId: "backlog" } },
+      },
+      over: { id: "column:dev" },
+    });
+
+    expect(await screen.findByRole("button", { name: "Ask Kanban Agent to Fix" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ask Kanban Agent to Fix" }));
+
+    await waitFor(() => {
+      expect(onAgentPrompt).toHaveBeenCalled();
+    });
+    expect(onAgentPrompt.mock.calls[0]?.[0]).toContain("task-1");
+    expect(onAgentPrompt.mock.calls[0]?.[1]).toMatchObject({
+      mcpProfile: "kanban-planning",
+      toolMode: "full",
+      allowedNativeTools: [],
+    });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/tasks/task-1", { cache: "no-store" });
+    }, { timeout: 4_000 });
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/tasks/task-1", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ columnId: "dev", position: 0 }),
+      });
+    }, { timeout: 4_000 });
+  }, 10_000);
 });
 
 describe("KanbanTab stale worktree recovery", () => {

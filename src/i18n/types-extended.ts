@@ -934,6 +934,8 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     moveBlockedHint: string;
     moveBlockedStoryReadinessHint: string;
     moveBlockedToolHint: string;
+    moveBlockedDelegate: string;
+    moveBlockedDelegating: string;
     more: string;
   };
 
