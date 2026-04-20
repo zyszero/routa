@@ -1428,20 +1428,32 @@ mod tests {
 
     #[test]
     fn transcript_candidate_filter_skips_index_and_qoder_sidecar() {
+        let dir = tempdir().expect("tempdir");
+        let sessions_index = dir.path().join("sessions-index.json");
+        let sidecar = dir.path().join("demo-session.json");
+        let transcript_jsonl = dir.path().join("demo.jsonl");
+        let transcript_json = dir.path().join("demo.json");
+
+        for path in [
+            &sessions_index,
+            &sidecar,
+            &transcript_jsonl,
+            &transcript_json,
+        ] {
+            std::fs::write(path, "{}\n").expect("write transcript fixture");
+        }
+
         assert!(!should_keep_transcript_candidate(
-            Path::new("/tmp/sessions-index.json"),
+            &sessions_index,
             &["jsonl"]
         ));
-        assert!(!should_keep_transcript_candidate(
-            Path::new("/tmp/demo-session.json"),
-            &["json"]
-        ));
+        assert!(!should_keep_transcript_candidate(&sidecar, &["json"]));
         assert!(should_keep_transcript_candidate(
-            Path::new("/tmp/demo.jsonl"),
+            &transcript_jsonl,
             &["jsonl"]
         ));
         assert!(should_keep_transcript_candidate(
-            Path::new("/tmp/demo.json"),
+            &transcript_json,
             &["json"]
         ));
     }
