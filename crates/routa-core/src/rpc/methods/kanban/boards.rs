@@ -203,13 +203,17 @@ pub async fn update_board(
         board.columns = normalize_columns(columns)?;
     }
 
-    if let Some(is_default) = params.is_default {
-        board.is_default = is_default;
+    let should_promote_to_default = params.is_default == Some(true) && !board.is_default;
+    let should_update_default_flag = !should_promote_to_default;
+    if should_update_default_flag {
+        if let Some(is_default) = params.is_default {
+            board.is_default = is_default;
+        }
     }
 
     board.updated_at = Utc::now();
     state.kanban_store.update(&board).await?;
-    if board.is_default {
+    if should_promote_to_default {
         state
             .kanban_store
             .set_default_for_workspace(&board.workspace_id, &board.id)
@@ -425,4 +429,117 @@ pub(super) async fn build_board_result(
         created_at: board.created_at,
         updated_at: board.updated_at,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::db::Database;
+    use crate::state::{AppState, AppStateInner};
+
+    async fn setup_state() -> AppState {
+        let db = Database::open_in_memory().expect("in-memory db should open");
+        let state: AppState = Arc::new(AppStateInner::new(db));
+        state
+            .workspace_store
+            .ensure_default()
+            .await
+            .expect("default workspace should exist");
+        state
+    }
+
+    #[tokio::test]
+    async fn update_board_can_switch_workspace_default_board() {
+        let state = setup_state().await;
+
+        let first = create_board(
+            &state,
+            CreateBoardParams {
+                workspace_id: "default".to_string(),
+                name: "First".to_string(),
+                columns: None,
+                is_default: Some(true),
+                id: Some("board-first".to_string()),
+            },
+        )
+        .await
+        .expect("first board create should succeed");
+        assert!(first.board.is_default);
+
+        let second = create_board(
+            &state,
+            CreateBoardParams {
+                workspace_id: "default".to_string(),
+                name: "Second".to_string(),
+                columns: None,
+                is_default: Some(false),
+                id: Some("board-second".to_string()),
+            },
+        )
+        .await
+        .expect("second board create should succeed");
+        assert!(!second.board.is_default);
+
+        let updated = update_board(
+            &state,
+            UpdateBoardParams {
+                board_id: "board-second".to_string(),
+                name: None,
+                columns: None,
+                is_default: Some(true),
+            },
+        )
+        .await
+        .expect("promoting second board should succeed");
+
+        assert!(updated.board.is_default);
+
+        let first_board = state
+            .kanban_store
+            .get("board-first")
+            .await
+            .expect("first board lookup should succeed")
+            .expect("first board should exist");
+        let second_board = state
+            .kanban_store
+            .get("board-second")
+            .await
+            .expect("second board lookup should succeed")
+            .expect("second board should exist");
+
+        assert!(!first_board.is_default);
+        assert!(second_board.is_default);
+
+        let reverted = update_board(
+            &state,
+            UpdateBoardParams {
+                board_id: "board-first".to_string(),
+                name: None,
+                columns: None,
+                is_default: Some(true),
+            },
+        )
+        .await
+        .expect("promoting first board back to default should succeed");
+
+        assert!(reverted.board.is_default);
+
+        let first_board = state
+            .kanban_store
+            .get("board-first")
+            .await
+            .expect("first board lookup after revert should succeed")
+            .expect("first board should still exist");
+        let second_board = state
+            .kanban_store
+            .get("board-second")
+            .await
+            .expect("second board lookup after revert should succeed")
+            .expect("second board should still exist");
+
+        assert!(first_board.is_default);
+        assert!(!second_board.is_default);
+    }
 }

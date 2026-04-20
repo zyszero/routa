@@ -99,8 +99,12 @@ impl KanbanStore {
                 }
 
                 conn.execute(
-                    "UPDATE kanban_boards SET is_default = CASE WHEN id = ?1 THEN 1 ELSE 0 END, updated_at = ?2 WHERE workspace_id = ?3",
-                    rusqlite::params![board_id, now, ws],
+                    "UPDATE kanban_boards SET is_default = 0, updated_at = ?1 WHERE workspace_id = ?2 AND is_default != 0",
+                    rusqlite::params![now, ws],
+                )?;
+                conn.execute(
+                    "UPDATE kanban_boards SET is_default = 1, updated_at = ?1 WHERE workspace_id = ?2 AND id = ?3",
+                    rusqlite::params![now, ws, board_id],
                 )?;
                 Ok(())
             })
