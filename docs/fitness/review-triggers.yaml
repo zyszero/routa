@@ -6,7 +6,11 @@ review_triggers:
       - src/core/orchestration/**
       - crates/routa-server/src/api/**
     severity: high
-    action: require_human_review
+    action: staged
+    confidence_threshold: 8
+    fallback_action: require_human_review
+    context:
+      - graph_review_context
 
   - name: sensitive_contract_or_governance_change
     type: sensitive_file_change
@@ -16,7 +20,11 @@ review_triggers:
       - docs/fitness/review-triggers.yaml
       - .github/workflows/defense.yaml
     severity: high
-    action: require_human_review
+    action: staged
+    confidence_threshold: 8
+    fallback_action: require_human_review
+    context:
+      - graph_review_context
 
   - name: fitness_evidence_gap_for_core_paths
     type: evidence_gap
@@ -29,7 +37,9 @@ review_triggers:
       - crates/entrix/**
       - .github/workflows/defense.yaml
     severity: medium
-    action: require_human_review
+    action: staged
+    confidence_threshold: 8
+    fallback_action: require_human_review
 
   - name: api_contract_evidence_gap
     type: evidence_gap
@@ -44,7 +54,11 @@ review_triggers:
       - docs/fitness/unit-test.md
       - docs/fitness/rust-api-test.md
     severity: high
-    action: require_human_review
+    action: staged
+    confidence_threshold: 8
+    fallback_action: require_human_review
+    context:
+      - graph_review_context
 
   - name: cross_boundary_change_web_rust
     type: cross_boundary_change
@@ -57,7 +71,11 @@ review_triggers:
         - apps/desktop/src-tauri/**
     min_boundaries: 2
     severity: medium
-    action: require_human_review
+    action: staged
+    confidence_threshold: 8
+    fallback_action: require_human_review
+    context:
+      - graph_review_context
 
   - name: directory_file_count_guard
     type: directory_file_count
@@ -65,7 +83,9 @@ review_triggers:
       - scripts
     max_files: 20
     severity: medium
-    action: require_human_review
+    action: staged
+    confidence_threshold: 8
+    fallback_action: require_human_review
 
   - name: oversized_change
     type: diff_size
@@ -73,4 +93,6 @@ review_triggers:
     max_added_lines: 600
     max_deleted_lines: 400
     severity: medium
-    action: require_human_review
+    action: staged
+    confidence_threshold: 8
+    fallback_action: require_human_review

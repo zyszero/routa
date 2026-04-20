@@ -209,4 +209,31 @@ describe("resolveOwnership", () => {
     expect(routing.crossOwnerTriggers).toEqual(["cross_boundary_change_web_rust"]);
     expect(routing.triggerCorrelations).toHaveLength(2);
   });
+
+  it("parses staged review trigger fields with normalized actions", () => {
+    const [rule] = parseReviewTriggerConfig([
+      "review_triggers:",
+      "  - name: staged_security_review",
+      "    type: changed_paths",
+      "    severity: high",
+      "    action: review",
+      "    fallback_action: human_review",
+      "    confidence_threshold: 12",
+      "    specialist_id: security-reviewer",
+      "    provider: codex",
+      "    model: gpt-5.4",
+      "    context:",
+      "      - graph_review_context",
+      "    paths:",
+      "      - src/core/acp/**",
+    ].join("\n"));
+
+    expect(rule?.action).toBe("staged");
+    expect(rule?.fallbackAction).toBe("require_human_review");
+    expect(rule?.confidenceThreshold).toBe(10);
+    expect(rule?.specialistId).toBe("security-reviewer");
+    expect(rule?.provider).toBe("codex");
+    expect(rule?.model).toBe("gpt-5.4");
+    expect(rule?.context).toEqual(["graph_review_context"]);
+  });
 });

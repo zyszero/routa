@@ -186,9 +186,11 @@ describe("runReviewTriggerPhase", () => {
       });
     runReviewTriggerSpecialistMock.mockResolvedValueOnce({
       allowed: false,
+      outcome: "block",
       summary: "Automatic review specialist found a regression risk.",
+      confidence: 9,
       findings: [{ severity: "high", title: "Regression risk", reason: "Control flow changed without safeguards." }],
-      raw: "{\"verdict\":\"fail\"}",
+      raw: "{\"decision\":\"block\",\"confidence\":9}",
     });
     buildOwnershipRoutingContextMock.mockReturnValueOnce({
       changedFiles: ["tools/hook-runtime/src/review.ts"],
@@ -210,6 +212,228 @@ describe("runReviewTriggerPhase", () => {
     expect(result.workingTreeFiles).toEqual(["tools/hook-runtime/src/runtime.ts"]);
     expect(result.untrackedFiles).toEqual(["tmp/debug.txt"]);
     expect(result.message).toContain("regression risk");
+  });
+
+  it("passes advisory-only triggers without invoking the specialist", async () => {
+    runCommandMock
+      .mockResolvedValueOnce({
+        command: "git rev-parse",
+        durationMs: 5,
+        exitCode: 0,
+        output: "origin/main\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git rev-parse --show-toplevel",
+        durationMs: 5,
+        exitCode: 0,
+        output: `${process.cwd()}\n`,
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR origin/main",
+        durationMs: 5,
+        exitCode: 0,
+        output: "docs/fitness/README.md\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR",
+        durationMs: 5,
+        exitCode: 0,
+        output: "",
+      })
+      .mockResolvedValueOnce({
+        command: "git ls-files --others --exclude-standard",
+        durationMs: 5,
+        exitCode: 0,
+        output: "",
+      })
+      .mockResolvedValueOnce({
+        command: "entrix review-trigger",
+        durationMs: 10,
+        exitCode: 3,
+        output: JSON.stringify({
+          base: "origin/main",
+          triggers: [{ action: "advisory", name: "docs_change", severity: "low" }],
+          committed_files: ["docs/fitness/README.md"],
+          diff_stats: { file_count: 1, added_lines: 5, deleted_lines: 0 },
+        }),
+      });
+
+    const result = await runReviewTriggerPhase("jsonl");
+
+    expect(result.allowed).toBe(true);
+    expect(result.status).toBe("passed");
+    expect(result.message).toContain("Review advisory");
+    expect(runReviewTriggerSpecialistMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks immediately when a trigger explicitly requires human review", async () => {
+    runCommandMock
+      .mockResolvedValueOnce({
+        command: "git rev-parse",
+        durationMs: 5,
+        exitCode: 0,
+        output: "origin/main\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git rev-parse --show-toplevel",
+        durationMs: 5,
+        exitCode: 0,
+        output: `${process.cwd()}\n`,
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR origin/main",
+        durationMs: 5,
+        exitCode: 0,
+        output: "api-contract.yaml\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR",
+        durationMs: 5,
+        exitCode: 0,
+        output: "",
+      })
+      .mockResolvedValueOnce({
+        command: "git ls-files --others --exclude-standard",
+        durationMs: 5,
+        exitCode: 0,
+        output: "",
+      })
+      .mockResolvedValueOnce({
+        command: "entrix review-trigger",
+        durationMs: 10,
+        exitCode: 3,
+        output: JSON.stringify({
+          base: "origin/main",
+          triggers: [{ action: "require_human_review", name: "api_contract_change", severity: "high" }],
+          committed_files: ["api-contract.yaml"],
+          diff_stats: { file_count: 1, added_lines: 4, deleted_lines: 1 },
+        }),
+      });
+
+    const result = await runReviewTriggerPhase("jsonl");
+
+    expect(result.allowed).toBe(false);
+    expect(result.status).toBe("blocked");
+    expect(result.message).toContain("Human review required before push");
+    expect(runReviewTriggerSpecialistMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks immediately when a trigger uses block action", async () => {
+    runCommandMock
+      .mockResolvedValueOnce({
+        command: "git rev-parse",
+        durationMs: 5,
+        exitCode: 0,
+        output: "origin/main\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git rev-parse --show-toplevel",
+        durationMs: 5,
+        exitCode: 0,
+        output: `${process.cwd()}\n`,
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR origin/main",
+        durationMs: 5,
+        exitCode: 0,
+        output: "src/core/acp/process.ts\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR",
+        durationMs: 5,
+        exitCode: 0,
+        output: "",
+      })
+      .mockResolvedValueOnce({
+        command: "git ls-files --others --exclude-standard",
+        durationMs: 5,
+        exitCode: 0,
+        output: "",
+      })
+      .mockResolvedValueOnce({
+        command: "entrix review-trigger",
+        durationMs: 10,
+        exitCode: 3,
+        output: JSON.stringify({
+          base: "origin/main",
+          triggers: [{ action: "block", name: "forbidden_change", severity: "high" }],
+          committed_files: ["src/core/acp/process.ts"],
+          diff_stats: { file_count: 1, added_lines: 12, deleted_lines: 3 },
+        }),
+      });
+
+    const result = await runReviewTriggerPhase("jsonl");
+
+    expect(result.allowed).toBe(false);
+    expect(result.status).toBe("blocked");
+    expect(result.message).toContain("Review trigger blocked the push");
+    expect(runReviewTriggerSpecialistMock).not.toHaveBeenCalled();
+  });
+
+  it("escalates staged review to human review when confidence is below threshold", async () => {
+    runCommandMock
+      .mockResolvedValueOnce({
+        command: "git rev-parse",
+        durationMs: 5,
+        exitCode: 0,
+        output: "origin/main\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git rev-parse --show-toplevel",
+        durationMs: 5,
+        exitCode: 0,
+        output: `${process.cwd()}\n`,
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR origin/main",
+        durationMs: 5,
+        exitCode: 0,
+        output: "src/core/acp/process.ts\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --name-only --diff-filter=ACMR",
+        durationMs: 5,
+        exitCode: 0,
+        output: "",
+      })
+      .mockResolvedValueOnce({
+        command: "git ls-files --others --exclude-standard",
+        durationMs: 5,
+        exitCode: 0,
+        output: "",
+      })
+      .mockResolvedValueOnce({
+        command: "entrix review-trigger",
+        durationMs: 10,
+        exitCode: 3,
+        output: JSON.stringify({
+          base: "origin/main",
+          triggers: [{
+            action: "staged",
+            confidence_threshold: 9,
+            fallback_action: "require_human_review",
+            name: "high_risk_directory_change",
+            severity: "high",
+          }],
+          committed_files: ["src/core/acp/process.ts"],
+          diff_stats: { file_count: 1, added_lines: 20, deleted_lines: 6 },
+        }),
+      });
+    runReviewTriggerSpecialistMock.mockResolvedValueOnce({
+      allowed: true,
+      outcome: "pass",
+      summary: "Automatic review specialist approved the push.",
+      confidence: 7,
+      findings: [],
+      raw: "{\"decision\":\"pass\",\"confidence\":7}",
+    });
+
+    const result = await runReviewTriggerPhase("jsonl");
+
+    expect(result.allowed).toBe(false);
+    expect(result.status).toBe("blocked");
+    expect(result.message).toContain("below the required 9/10");
+    expect(result.message).toContain("Human review fallback required");
   });
 
   it("prints a compact human summary table for matched triggers", async () => {
@@ -281,9 +505,11 @@ describe("runReviewTriggerPhase", () => {
       });
     runReviewTriggerSpecialistMock.mockResolvedValueOnce({
       allowed: false,
+      outcome: "block",
       summary: "Automatic review specialist found a regression risk.",
+      confidence: 9,
       findings: [{ severity: "high", title: "Regression risk", reason: "Control flow changed without safeguards." }],
-      raw: "{\"verdict\":\"fail\"}",
+      raw: "{\"decision\":\"block\",\"confidence\":9}",
     });
     buildOwnershipRoutingContextMock.mockReturnValueOnce({
       changedFiles: ["src/a.ts", "src/b.ts", "api-contract.yaml"],
@@ -300,7 +526,7 @@ describe("runReviewTriggerPhase", () => {
 
     expect(result.allowed).toBe(false);
     const output = consoleLogSpy.mock.calls.map((call: unknown[]) => String(call[0])).join("\n");
-    expect(output).toContain("Human review required: 2 triggers across 3 committed files.");
+    expect(output).toContain("Automatic review required: 2 triggers across 3 committed files.");
     expect(output).toMatch(/\|\s+Base\s+\|\s+origin\/main\s+\|/);
     expect(output).toMatch(/\|\s+Added lines\s+\|\s+942 \(limit 600\)\s+\|/);
     expect(output).toMatch(/\|\s+Workspace residue\s+\|\s+1 tracked, 1 untracked\s+\|/);
@@ -376,9 +602,11 @@ describe("runReviewTriggerPhase", () => {
       });
     runReviewTriggerSpecialistMock.mockResolvedValueOnce({
       allowed: false,
+      outcome: "block",
       summary: "Automatic review specialist found a regression risk.",
+      confidence: 9,
       findings: [],
-      raw: "{\"verdict\":\"fail\"}",
+      raw: "{\"decision\":\"block\",\"confidence\":9}",
     });
 
     const result = await runReviewTriggerPhase("human");
@@ -490,9 +718,11 @@ describe("runReviewTriggerPhase", () => {
       });
     runReviewTriggerSpecialistMock.mockResolvedValueOnce({
       allowed: true,
+      outcome: "pass",
       summary: "Automatic review specialist approved the push.",
+      confidence: 9,
       findings: [],
-      raw: "{\"verdict\":\"pass\"}",
+      raw: "{\"decision\":\"pass\",\"confidence\":9}",
     });
 
     const result = await runReviewTriggerPhase("jsonl");

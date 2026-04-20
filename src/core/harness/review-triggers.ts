@@ -9,11 +9,17 @@ export type ReviewTriggerBoundary = {
   paths: string[];
 };
 
+export type ReviewTriggerAction =
+  | "advisory"
+  | "block"
+  | "require_human_review"
+  | "staged";
+
 export type ReviewTriggerRule = {
   name: string;
   type: string;
   severity: string;
-  action: string;
+  action: ReviewTriggerAction;
   paths: string[];
   evidencePaths: string[];
   boundaries: ReviewTriggerBoundary[];
@@ -22,6 +28,12 @@ export type ReviewTriggerRule = {
   maxFiles: number | null;
   maxAddedLines: number | null;
   maxDeletedLines: number | null;
+  confidenceThreshold: number | null;
+  fallbackAction: ReviewTriggerAction | null;
+  specialistId: string | null;
+  provider: string | null;
+  model: string | null;
+  context: string[];
 };
 
 type ReviewTriggerConfigFile = {
@@ -45,6 +57,43 @@ function normalizeInteger(value: unknown): number | null {
   return null;
 }
 
+function normalizeOptionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function normalizeConfidenceThreshold(value: unknown): number | null {
+  const parsed = normalizeInteger(value);
+  if (parsed === null) {
+    return null;
+  }
+
+  return Math.min(10, Math.max(1, parsed));
+}
+
+export function normalizeReviewTriggerAction(
+  value: unknown,
+  fallback: ReviewTriggerAction = "require_human_review",
+): ReviewTriggerAction {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  switch (normalized) {
+    case "advisory":
+    case "warn":
+      return "advisory";
+    case "block":
+    case "block_push":
+      return "block";
+    case "review":
+    case "auto_review":
+    case "staged":
+      return "staged";
+    case "require_human_review":
+    case "human_review":
+      return "require_human_review";
+    default:
+      return fallback;
+  }
+}
+
 function patternMatchesFile(filePath: string, pattern: string): boolean {
   if (!pattern) {
     return false;
@@ -65,27 +114,40 @@ function directoryMatchesFile(filePath: string, directory: string): boolean {
 export function parseReviewTriggerConfig(source: string): ReviewTriggerRule[] {
   const parsed = (yaml.load(source) ?? {}) as ReviewTriggerConfigFile;
   const rawRules = Array.isArray(parsed.review_triggers) ? parsed.review_triggers : [];
-  return rawRules.map((rule) => ({
-    name: typeof rule.name === "string" && rule.name.trim().length > 0 ? rule.name : "unknown",
-    type: typeof rule.type === "string" && rule.type.trim().length > 0 ? rule.type : "unknown",
-    severity: typeof rule.severity === "string" && rule.severity.trim().length > 0 ? rule.severity : "medium",
-    action: typeof rule.action === "string" && rule.action.trim().length > 0 ? rule.action : "require_human_review",
-    paths: normalizeStringList(rule.paths),
-    evidencePaths: normalizeStringList(rule.evidence_paths),
-    boundaries: rule.boundaries && typeof rule.boundaries === "object"
-      ? Object.entries(rule.boundaries as Record<string, unknown>)
-        .filter(([name]) => typeof name === "string" && name.trim().length > 0)
-        .map(([name, value]) => ({
-          name,
-          paths: normalizeStringList(value),
-        }))
-      : [],
-    directories: normalizeStringList(rule.directories),
-    minBoundaries: normalizeInteger(rule.min_boundaries),
-    maxFiles: normalizeInteger(rule.max_files),
-    maxAddedLines: normalizeInteger(rule.max_added_lines),
-    maxDeletedLines: normalizeInteger(rule.max_deleted_lines),
-  }));
+  return rawRules.map((rule) => {
+    const action = normalizeReviewTriggerAction(rule.action);
+    const fallbackAction = normalizeOptionalString(rule.fallback_action)
+      ? normalizeReviewTriggerAction(rule.fallback_action, "require_human_review")
+      : null;
+
+    return {
+      name: typeof rule.name === "string" && rule.name.trim().length > 0 ? rule.name : "unknown",
+      type: typeof rule.type === "string" && rule.type.trim().length > 0 ? rule.type : "unknown",
+      severity: typeof rule.severity === "string" && rule.severity.trim().length > 0 ? rule.severity : "medium",
+      action,
+      paths: normalizeStringList(rule.paths),
+      evidencePaths: normalizeStringList(rule.evidence_paths),
+      boundaries: rule.boundaries && typeof rule.boundaries === "object"
+        ? Object.entries(rule.boundaries as Record<string, unknown>)
+          .filter(([name]) => typeof name === "string" && name.trim().length > 0)
+          .map(([name, value]) => ({
+            name,
+            paths: normalizeStringList(value),
+          }))
+        : [],
+      directories: normalizeStringList(rule.directories),
+      minBoundaries: normalizeInteger(rule.min_boundaries),
+      maxFiles: normalizeInteger(rule.max_files),
+      maxAddedLines: normalizeInteger(rule.max_added_lines),
+      maxDeletedLines: normalizeInteger(rule.max_deleted_lines),
+      confidenceThreshold: normalizeConfidenceThreshold(rule.confidence_threshold),
+      fallbackAction: action === "staged" ? (fallbackAction ?? "require_human_review") : fallbackAction,
+      specialistId: normalizeOptionalString(rule.specialist_id),
+      provider: normalizeOptionalString(rule.provider),
+      model: normalizeOptionalString(rule.model),
+      context: normalizeStringList(rule.context),
+    };
+  });
 }
 
 export async function loadReviewTriggerRules(repoRoot: string): Promise<{

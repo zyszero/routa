@@ -32,6 +32,18 @@ pub struct ReviewTriggerRule {
     pub evidence_paths: Vec<String>,
     pub boundaries: Vec<ReviewTriggerBoundary>,
     pub min_boundaries: usize,
+    #[serde(default)]
+    pub confidence_threshold: Option<u8>,
+    #[serde(default)]
+    pub fallback_action: Option<String>,
+    #[serde(default)]
+    pub specialist_id: Option<String>,
+    #[serde(default)]
+    pub provider: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub context: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -40,12 +52,27 @@ pub struct TriggerMatch {
     pub severity: String,
     pub action: String,
     #[serde(default)]
+    pub confidence_threshold: Option<u8>,
+    #[serde(default)]
+    pub fallback_action: Option<String>,
+    #[serde(default)]
+    pub specialist_id: Option<String>,
+    #[serde(default)]
+    pub provider: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub context: Vec<String>,
+    #[serde(default)]
     pub reasons: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewTriggerReport {
+    pub blocked: bool,
     pub human_review_required: bool,
+    pub advisory_only: bool,
+    pub staged_review_required: bool,
     pub base: String,
     pub changed_files: Vec<String>,
     pub diff_stats: DiffStats,
@@ -77,6 +104,13 @@ struct ReviewTriggerRuleEntry {
     #[serde(default)]
     boundaries: BTreeMap<String, Vec<String>>,
     min_boundaries: Option<usize>,
+    confidence_threshold: Option<u8>,
+    fallback_action: Option<String>,
+    specialist_id: Option<String>,
+    provider: Option<String>,
+    model: Option<String>,
+    #[serde(default)]
+    context: Vec<String>,
 }
 
 pub fn load_review_triggers(config_path: &Path) -> Result<Vec<ReviewTriggerRule>, String> {
@@ -89,11 +123,10 @@ pub fn load_review_triggers(config_path: &Path) -> Result<Vec<ReviewTriggerRule>
         .review_triggers
         .into_iter()
         .map(|entry| ReviewTriggerRule {
+            action: normalize_action(entry.action.as_deref(), "require_human_review"),
             name: normalize_string(entry.name).unwrap_or_else(|| "unknown".to_string()),
             type_field: normalize_string(entry.type_field).unwrap_or_else(|| "unknown".to_string()),
             severity: normalize_string(entry.severity).unwrap_or_else(|| "medium".to_string()),
-            action: normalize_string(entry.action)
-                .unwrap_or_else(|| "require_human_review".to_string()),
             paths: sanitize_strings(entry.paths),
             directories: sanitize_strings(entry.directories),
             max_files: entry.max_files,
@@ -112,6 +145,18 @@ pub fn load_review_triggers(config_path: &Path) -> Result<Vec<ReviewTriggerRule>
                 })
                 .collect(),
             min_boundaries: entry.min_boundaries.unwrap_or(2),
+            confidence_threshold: normalize_confidence_threshold(entry.confidence_threshold),
+            fallback_action: normalize_optional_action(entry.fallback_action.as_deref()),
+            specialist_id: normalize_string(entry.specialist_id),
+            provider: normalize_string(entry.provider),
+            model: normalize_string(entry.model),
+            context: sanitize_strings(entry.context),
+        })
+        .map(|mut rule| {
+            if rule.action == "staged" && rule.fallback_action.is_none() {
+                rule.fallback_action = Some("require_human_review".to_string());
+            }
+            rule
         })
         .collect())
 }
@@ -344,8 +389,19 @@ pub fn evaluate_review_triggers(
         }
     }
 
+    let blocked = triggers.iter().any(|trigger| trigger.action == "block");
+    let human_review_required = triggers
+        .iter()
+        .any(|trigger| trigger.action == "require_human_review");
+    let advisory_only =
+        !triggers.is_empty() && triggers.iter().all(|trigger| trigger.action == "advisory");
+    let staged_review_required = triggers.iter().any(|trigger| trigger.action == "staged");
+
     ReviewTriggerReport {
-        human_review_required: !triggers.is_empty(),
+        blocked,
+        human_review_required,
+        advisory_only,
+        staged_review_required,
         base: base.to_string(),
         changed_files: changed_files.to_vec(),
         diff_stats: diff_stats.clone(),
@@ -357,6 +413,26 @@ fn normalize_string(value: Option<String>) -> Option<String> {
     value
         .map(|item| item.trim().to_string())
         .filter(|item| !item.is_empty())
+}
+
+fn normalize_action(value: Option<&str>, fallback: &str) -> String {
+    match value.unwrap_or_default().trim().to_lowercase().as_str() {
+        "advisory" | "warn" => "advisory".to_string(),
+        "block" | "block_push" => "block".to_string(),
+        "review" | "auto_review" | "staged" => "staged".to_string(),
+        "require_human_review" | "human_review" => "require_human_review".to_string(),
+        _ => fallback.to_string(),
+    }
+}
+
+fn normalize_optional_action(value: Option<&str>) -> Option<String> {
+    value
+        .map(|item| normalize_action(Some(item), "require_human_review"))
+        .filter(|item| !item.is_empty())
+}
+
+fn normalize_confidence_threshold(value: Option<u8>) -> Option<u8> {
+    value.map(|threshold| threshold.clamp(1, 10))
 }
 
 fn sanitize_strings(values: Vec<String>) -> Vec<String> {
@@ -424,6 +500,12 @@ fn push_trigger_if_any(
         name: rule.name.clone(),
         severity: rule.severity.clone(),
         action: rule.action.clone(),
+        confidence_threshold: rule.confidence_threshold,
+        fallback_action: rule.fallback_action.clone(),
+        specialist_id: rule.specialist_id.clone(),
+        provider: rule.provider.clone(),
+        model: rule.model.clone(),
+        context: rule.context.clone(),
         reasons,
     });
 }
@@ -447,6 +529,12 @@ mod tests {
             evidence_paths: Vec::new(),
             boundaries: Vec::new(),
             min_boundaries: 2,
+            confidence_threshold: None,
+            fallback_action: None,
+            specialist_id: None,
+            provider: None,
+            model: None,
+            context: Vec::new(),
         };
 
         let report = evaluate_review_triggers(
@@ -462,6 +550,8 @@ mod tests {
         );
 
         assert!(report.human_review_required);
+        assert!(!report.blocked);
+        assert!(!report.advisory_only);
         assert_eq!(report.triggers.len(), 1);
         assert_eq!(report.triggers[0].reasons.len(), 3);
     }
@@ -490,6 +580,12 @@ mod tests {
                 },
             ],
             min_boundaries: 2,
+            confidence_threshold: None,
+            fallback_action: None,
+            specialist_id: None,
+            provider: None,
+            model: None,
+            context: Vec::new(),
         };
 
         let report = evaluate_review_triggers(
@@ -504,6 +600,89 @@ mod tests {
         );
 
         assert!(report.human_review_required);
+        assert!(!report.blocked);
+        assert!(!report.advisory_only);
         assert_eq!(report.triggers[0].reasons.len(), 2);
+    }
+
+    #[test]
+    fn load_review_triggers_normalizes_staged_fields() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let config_path = dir.path().join("review-triggers.yaml");
+        std::fs::write(
+            &config_path,
+            r#"
+review_triggers:
+  - name: staged_security_review
+    type: changed_paths
+    severity: high
+    action: review
+    fallback_action: human_review
+    confidence_threshold: 99
+    specialist_id: security-reviewer
+    provider: codex
+    model: gpt-5.4
+    context:
+      - graph_review_context
+    paths:
+      - src/core/acp/**
+"#,
+        )
+        .expect("write config");
+
+        let rules = load_review_triggers(&config_path).expect("load rules");
+
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].action, "staged");
+        assert_eq!(
+            rules[0].fallback_action.as_deref(),
+            Some("require_human_review")
+        );
+        assert_eq!(rules[0].confidence_threshold, Some(10));
+        assert_eq!(rules[0].specialist_id.as_deref(), Some("security-reviewer"));
+        assert_eq!(rules[0].provider.as_deref(), Some("codex"));
+        assert_eq!(rules[0].model.as_deref(), Some("gpt-5.4"));
+        assert_eq!(rules[0].context, vec!["graph_review_context".to_string()]);
+    }
+
+    #[test]
+    fn advisory_action_sets_advisory_only_report() {
+        let rule = ReviewTriggerRule {
+            name: "docs_change".to_string(),
+            type_field: "changed_paths".to_string(),
+            severity: "low".to_string(),
+            action: "advisory".to_string(),
+            paths: vec!["docs/**".to_string()],
+            directories: Vec::new(),
+            max_files: None,
+            max_added_lines: None,
+            max_deleted_lines: None,
+            evidence_paths: Vec::new(),
+            boundaries: Vec::new(),
+            min_boundaries: 2,
+            confidence_threshold: None,
+            fallback_action: None,
+            specialist_id: None,
+            provider: None,
+            model: None,
+            context: Vec::new(),
+        };
+
+        let report = evaluate_review_triggers(
+            &[rule],
+            &["docs/fitness/README.md".to_string()],
+            &DiffStats {
+                file_count: 1,
+                added_lines: 3,
+                deleted_lines: 0,
+            },
+            "HEAD~1",
+            None,
+        );
+
+        assert!(!report.blocked);
+        assert!(!report.human_review_required);
+        assert!(report.advisory_only);
+        assert!(!report.staged_review_required);
     }
 }

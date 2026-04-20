@@ -51,6 +51,13 @@ type ReviewTriggerRuleSummary = {
   maxFiles: number | null;
   maxAddedLines: number | null;
   maxDeletedLines: number | null;
+  confidenceThreshold?: number | null;
+  fallbackAction?: string | null;
+  specialistId?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  context?: string[];
+  contextCount?: number;
 };
 
 type ReviewTriggerConfigSummary = {
@@ -197,6 +204,40 @@ function normalizeInteger(value: unknown): number | null {
   return null;
 }
 
+function normalizeOptionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function normalizeConfidenceThreshold(value: unknown): number | null {
+  const parsed = normalizeInteger(value);
+  if (parsed === null) {
+    return null;
+  }
+
+  return Math.min(10, Math.max(1, parsed));
+}
+
+function normalizeReviewTriggerAction(value: unknown, fallback = "require_human_review"): string {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  switch (normalized) {
+    case "advisory":
+    case "warn":
+      return "advisory";
+    case "block":
+    case "block_push":
+      return "block";
+    case "review":
+    case "auto_review":
+    case "staged":
+      return "staged";
+    case "require_human_review":
+    case "human_review":
+      return "require_human_review";
+    default:
+      return fallback;
+  }
+}
+
 function normalizeNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -281,6 +322,7 @@ async function loadReviewTriggerConfigSource(repoRoot: string): Promise<HooksRes
   const parsed = (yaml.load(source) ?? {}) as ReviewTriggerConfigFile;
   const rawRules = Array.isArray(parsed.review_triggers) ? parsed.review_triggers : [];
   const rules = rawRules.map((rule) => {
+    const action = normalizeReviewTriggerAction(rule.action);
     const boundaries = rule.boundaries && typeof rule.boundaries === "object"
       ? Object.entries(rule.boundaries as Record<string, unknown>)
         .filter(([boundaryName]) => typeof boundaryName === "string" && boundaryName.trim().length > 0)
@@ -292,12 +334,16 @@ async function loadReviewTriggerConfigSource(repoRoot: string): Promise<HooksRes
     const paths = normalizeStringList(rule.paths);
     const evidencePaths = normalizeStringList(rule.evidence_paths);
     const directories = normalizeStringList(rule.directories);
+    const context = normalizeStringList(rule.context);
+    const fallbackAction = normalizeOptionalString(rule.fallback_action)
+      ? normalizeReviewTriggerAction(rule.fallback_action, "require_human_review")
+      : null;
 
     return {
       name: typeof rule.name === "string" && rule.name.trim().length > 0 ? rule.name : "unknown",
       type: typeof rule.type === "string" && rule.type.trim().length > 0 ? rule.type : "unknown",
       severity: typeof rule.severity === "string" && rule.severity.trim().length > 0 ? rule.severity : "medium",
-      action: typeof rule.action === "string" && rule.action.trim().length > 0 ? rule.action : "require_human_review",
+      action,
       paths,
       evidencePaths,
       boundaries,
@@ -310,6 +356,13 @@ async function loadReviewTriggerConfigSource(repoRoot: string): Promise<HooksRes
       maxFiles: normalizeInteger(rule.max_files),
       maxAddedLines: normalizeInteger(rule.max_added_lines),
       maxDeletedLines: normalizeInteger(rule.max_deleted_lines),
+      confidenceThreshold: normalizeConfidenceThreshold(rule.confidence_threshold),
+      fallbackAction: action === "staged" ? (fallbackAction ?? "require_human_review") : fallbackAction,
+      specialistId: normalizeOptionalString(rule.specialist_id),
+      provider: normalizeOptionalString(rule.provider),
+      model: normalizeOptionalString(rule.model),
+      context,
+      contextCount: context.length,
     } satisfies ReviewTriggerRuleSummary;
   });
 

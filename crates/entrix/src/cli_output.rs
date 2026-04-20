@@ -364,6 +364,7 @@ pub(crate) fn print_release_trigger_report(report: &ReleaseTriggerReport) {
 }
 
 pub(crate) fn print_review_trigger_report(report: &ReviewTriggerReport) {
+    println!("blocked: {}", if report.blocked { "yes" } else { "no" });
     println!(
         "human review required: {}",
         if report.human_review_required {
@@ -371,6 +372,18 @@ pub(crate) fn print_review_trigger_report(report: &ReviewTriggerReport) {
         } else {
             "no"
         }
+    );
+    println!(
+        "staged review required: {}",
+        if report.staged_review_required {
+            "yes"
+        } else {
+            "no"
+        }
+    );
+    println!(
+        "advisory only: {}",
+        if report.advisory_only { "yes" } else { "no" }
     );
     println!("base: {}", report.base);
     println!("changed files: {}", report.changed_files.len());

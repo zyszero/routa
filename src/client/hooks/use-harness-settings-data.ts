@@ -87,6 +87,13 @@ export type ReviewTriggerRuleSummary = {
   maxFiles: number | null;
   maxAddedLines: number | null;
   maxDeletedLines: number | null;
+  confidenceThreshold?: number | null;
+  fallbackAction?: string | null;
+  specialistId?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  context?: string[];
+  contextCount?: number;
 };
 
 export type ReleaseTriggerRuleSummary = {

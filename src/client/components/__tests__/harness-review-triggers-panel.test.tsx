@@ -1,7 +1,38 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { HooksResponse } from "@/client/hooks/use-harness-settings-data";
+import type { HooksResponse, ReviewTriggerRuleSummary } from "@/client/hooks/use-harness-settings-data";
 import { HarnessReviewTriggersPanel } from "../harness-review-triggers-panel";
+
+function createReviewTriggerRule(
+  overrides: Partial<ReviewTriggerRuleSummary>,
+): ReviewTriggerRuleSummary {
+  return {
+    name: "rule",
+    type: "changed_paths",
+    severity: "medium",
+    action: "require_human_review",
+    paths: [],
+    evidencePaths: [],
+    boundaries: [],
+    directories: [],
+    pathCount: 0,
+    evidencePathCount: 0,
+    boundaryCount: 0,
+    directoryCount: 0,
+    minBoundaries: null,
+    maxFiles: null,
+    maxAddedLines: null,
+    maxDeletedLines: null,
+    confidenceThreshold: null,
+    fallbackAction: null,
+    specialistId: null,
+    provider: null,
+    model: null,
+    context: [],
+    contextCount: 0,
+    ...overrides,
+  };
+}
 
 function createHooksResponse(): HooksResponse {
   return {
@@ -18,7 +49,7 @@ function createHooksResponse(): HooksResponse {
       source: "review_triggers: []",
       ruleCount: 7,
       rules: [
-        {
+        createReviewTriggerRule({
           name: "high_risk_directory_change",
           type: "changed_paths",
           severity: "high",
@@ -39,8 +70,8 @@ function createHooksResponse(): HooksResponse {
           maxFiles: null,
           maxAddedLines: null,
           maxDeletedLines: null,
-        },
-        {
+        }),
+        createReviewTriggerRule({
           name: "sensitive_contract_or_governance_change",
           type: "sensitive_file_change",
           severity: "high",
@@ -62,8 +93,8 @@ function createHooksResponse(): HooksResponse {
           maxFiles: null,
           maxAddedLines: null,
           maxDeletedLines: null,
-        },
-        {
+        }),
+        createReviewTriggerRule({
           name: "fitness_evidence_gap_for_core_paths",
           type: "evidence_gap",
           severity: "medium",
@@ -88,8 +119,8 @@ function createHooksResponse(): HooksResponse {
           maxFiles: null,
           maxAddedLines: null,
           maxDeletedLines: null,
-        },
-        {
+        }),
+        createReviewTriggerRule({
           name: "api_contract_evidence_gap",
           type: "evidence_gap",
           severity: "high",
@@ -114,8 +145,8 @@ function createHooksResponse(): HooksResponse {
           maxFiles: null,
           maxAddedLines: null,
           maxDeletedLines: null,
-        },
-        {
+        }),
+        createReviewTriggerRule({
           name: "cross_boundary_change_web_rust",
           type: "cross_boundary_change",
           severity: "medium",
@@ -141,8 +172,8 @@ function createHooksResponse(): HooksResponse {
           maxFiles: null,
           maxAddedLines: null,
           maxDeletedLines: null,
-        },
-        {
+        }),
+        createReviewTriggerRule({
           name: "directory_file_count_guard",
           type: "directory_file_count",
           severity: "medium",
@@ -159,8 +190,8 @@ function createHooksResponse(): HooksResponse {
           maxFiles: 20,
           maxAddedLines: null,
           maxDeletedLines: null,
-        },
-        {
+        }),
+        createReviewTriggerRule({
           name: "oversized_change",
           type: "diff_size",
           severity: "medium",
@@ -177,7 +208,7 @@ function createHooksResponse(): HooksResponse {
           maxFiles: 12,
           maxAddedLines: 600,
           maxDeletedLines: 400,
-        },
+        }),
       ],
     },
     hookFiles: [

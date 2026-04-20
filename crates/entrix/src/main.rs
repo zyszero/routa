@@ -952,7 +952,7 @@ fn cmd_release_trigger(args: ReleaseTriggerArgs) -> i32 {
     if report.blocked && (args.fail_on_trigger || args.fail_on_block) {
         return 4;
     }
-    if report.human_review_required && args.fail_on_trigger {
+    if !report.triggers.is_empty() && args.fail_on_trigger {
         return 3;
     }
     0

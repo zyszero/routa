@@ -24,6 +24,12 @@ export type ReviewTrigger = {
   name: string;
   reasons?: string[];
   severity: string;
+  confidence_threshold?: number | null;
+  fallback_action?: string | null;
+  specialist_id?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  context?: string[];
 };
 
 export type ReviewReportPayload = {
@@ -49,18 +55,27 @@ type SpecialistFinding = {
 };
 
 type SpecialistResponse = {
+  decision?: string;
   verdict?: string;
   summary?: string;
-  confidence?: string;
+  confidence?: number | string;
   findings?: SpecialistFinding[];
 };
 
 export type SpecialistReviewDecision = {
   allowed: boolean;
+  outcome: "advisory" | "block" | "escalate" | "pass";
   summary: string;
-  confidence?: string;
+  confidence: number | null;
   findings: SpecialistFinding[];
   raw: string;
+};
+
+export type ReviewTriggerReviewOverrides = {
+  context?: string[];
+  model?: string | null;
+  provider?: string | null;
+  specialistId?: string | null;
 };
 
 function shellQuote(value: string): string {
@@ -139,15 +154,64 @@ function parseJsonLoose(value: string): SpecialistResponse {
   return {};
 }
 
+function findSpecialistFile(rootDir: string, specialistId: string): string | null {
+  const normalizedId = specialistId.trim().toLowerCase();
+  if (!normalizedId) {
+    return null;
+  }
+
+  const stack = [rootDir];
+  while (stack.length > 0) {
+    const currentDir = stack.pop();
+    if (!currentDir) {
+      continue;
+    }
+
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        if (entry.name === "locales") {
+          continue;
+        }
+        stack.push(path.join(currentDir, entry.name));
+        continue;
+      }
+
+      if (!entry.isFile() || !entry.name.endsWith(".yaml")) {
+        continue;
+      }
+
+      const filePath = path.join(currentDir, entry.name);
+      try {
+        const parsed = (yaml.load(fs.readFileSync(filePath, "utf-8")) ?? {}) as SpecialistFile;
+        if ((parsed.id ?? "").trim().toLowerCase() === normalizedId) {
+          return filePath;
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return null;
+}
+
 function loadSpecialistDefinition(specialistId: string): {
   systemPrompt: string;
   roleReminder?: string;
   model?: string;
   defaultAdapter?: string;
 } {
-  const filePath = path.join(process.cwd(), "resources", "specialists", "harness", "review-trigger-guard.yaml");
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Missing specialist file for ${specialistId}: ${filePath}`);
+  const rootDir = path.join(process.cwd(), "resources", "specialists");
+  const filePath = findSpecialistFile(rootDir, specialistId);
+  if (!filePath || !fs.existsSync(filePath)) {
+    throw new Error(`Missing specialist file for ${specialistId}.`);
   }
 
   const parsed = (yaml.load(fs.readFileSync(filePath, "utf-8")) ?? {}) as SpecialistFile;
@@ -214,8 +278,8 @@ async function callAnthropicCompatible(prompt: string, model: string): Promise<s
     .trim() ?? "";
 }
 
-function resolveReviewProvider(defaultAdapter?: string): string {
-  const provider = process.env.ROUTA_REVIEW_PROVIDER?.trim() || defaultAdapter?.trim() || "claude";
+function resolveReviewProvider(defaultAdapter?: string, providerOverride?: string | null): string {
+  const provider = providerOverride?.trim() || process.env.ROUTA_REVIEW_PROVIDER?.trim() || defaultAdapter?.trim() || "claude";
   return provider.toLowerCase();
 }
 
@@ -223,15 +287,23 @@ function isClaudeProvider(provider: string): boolean {
   return ["claude", "claude-code", "claude-code-sdk", "claudecode"].includes(provider);
 }
 
-function normalizeOptionalProvider(value: string | undefined): string | undefined {
+function normalizeOptionalProvider(value: string | null | undefined): string | undefined {
   const normalized = value?.trim().toLowerCase();
   return normalized ? normalized : undefined;
 }
 
-function resolveFallbackReviewProvider(primaryProvider: string, defaultAdapter?: string): string | undefined {
+function resolveFallbackReviewProvider(
+  primaryProvider: string,
+  defaultAdapter?: string,
+  providerOverride?: string | null,
+): string | undefined {
   const configuredFallback = normalizeOptionalProvider(process.env.ROUTA_REVIEW_FALLBACK_PROVIDER);
   if (configuredFallback) {
     return configuredFallback === primaryProvider ? undefined : configuredFallback;
+  }
+
+  if (normalizeOptionalProvider(providerOverride)) {
+    return undefined;
   }
 
   const explicitProvider = normalizeOptionalProvider(process.env.ROUTA_REVIEW_PROVIDER);
@@ -314,10 +386,11 @@ async function callReviewProvider(params: {
   prompt: string;
   model: string;
   defaultAdapter?: string;
+  providerOverride?: string | null;
   validate?: (raw: string) => boolean;
 }): Promise<string> {
-  const primaryProvider = resolveReviewProvider(params.defaultAdapter);
-  const fallbackProvider = resolveFallbackReviewProvider(primaryProvider, params.defaultAdapter);
+  const primaryProvider = resolveReviewProvider(params.defaultAdapter, params.providerOverride);
+  const fallbackProvider = resolveFallbackReviewProvider(primaryProvider, params.defaultAdapter, params.providerOverride);
   const validate = params.validate;
 
   try {
@@ -356,12 +429,86 @@ async function callReviewProvider(params: {
   }
 }
 
-async function buildReviewPayload(reviewRoot: string, base: string, report: ReviewReportPayload): Promise<string> {
+function normalizeOutcome(value: string | undefined): SpecialistReviewDecision["outcome"] | null {
+  const normalized = value?.trim().toLowerCase();
+  switch (normalized) {
+    case "pass":
+      return "pass";
+    case "advisory":
+      return "advisory";
+    case "escalate":
+    case "needs_human_review":
+      return "escalate";
+    case "block":
+    case "fail":
+      return "block";
+    default:
+      return null;
+  }
+}
+
+function normalizeConfidence(value: number | string | undefined): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.min(10, Math.max(1, Math.round(value)));
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(trimmed);
+  if (Number.isFinite(parsed)) {
+    return Math.min(10, Math.max(1, Math.round(parsed)));
+  }
+
+  switch (trimmed) {
+    case "high":
+      return 9;
+    case "medium":
+      return 7;
+    case "low":
+      return 4;
+    default:
+      return null;
+  }
+}
+
+async function loadGraphReviewContext(reviewRoot: string, base: string): Promise<unknown | null> {
+  const command = `entrix graph review-context --base ${shellQuote(base)} --json`;
+  const result = await runCommand(command, { cwd: reviewRoot, stream: false });
+  if (result.exitCode !== 0 || !result.output.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(result.output);
+  } catch {
+    return result.output.trim();
+  }
+}
+
+async function buildReviewPayload(
+  reviewRoot: string,
+  base: string,
+  report: ReviewReportPayload,
+  contextHints: string[] = [],
+): Promise<string> {
   const diffRange = `${base}...HEAD`;
   const [diffStatResult, diffResult] = await Promise.all([
     runCommand(`git diff --stat ${shellQuote(diffRange)}`, { cwd: reviewRoot, stream: false }),
     runCommand(`git diff --unified=3 ${shellQuote(diffRange)}`, { cwd: reviewRoot, stream: false }),
   ]);
+  const normalizedContext = contextHints
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  const graphReviewContext = normalizedContext.includes("graph_review_context")
+    ? await loadGraphReviewContext(reviewRoot, base)
+    : null;
 
   return JSON.stringify({
     repoRoot: reviewRoot,
@@ -376,6 +523,8 @@ async function buildReviewPayload(reviewRoot: string, base: string, report: Revi
     diffStats: report.diff_stats ?? {},
     diffStat: diffStatResult.output.trim(),
     diff: truncate(diffResult.output, MAX_DIFF_CHARS),
+    requestedContext: normalizedContext,
+    graphReviewContext,
   }, null, 2);
 }
 
@@ -383,12 +532,17 @@ export async function runReviewTriggerSpecialist(params: {
   reviewRoot: string;
   base: string;
   report: ReviewReportPayload;
-  specialistId?: string;
+  overrides?: ReviewTriggerReviewOverrides;
 }): Promise<SpecialistReviewDecision> {
-  const specialistId = params.specialistId ?? DEFAULT_SPECIALIST_ID;
+  const specialistId = params.overrides?.specialistId?.trim() || DEFAULT_SPECIALIST_ID;
   const specialist = loadSpecialistDefinition(specialistId);
 
-  const payloadJson = await buildReviewPayload(params.reviewRoot, params.base, params.report);
+  const payloadJson = await buildReviewPayload(
+    params.reviewRoot,
+    params.base,
+    params.report,
+    params.overrides?.context ?? [],
+  );
   let prompt = specialist.systemPrompt;
   if (specialist.roleReminder?.trim()) {
     prompt += `\n\n---\n**Reminder:** ${specialist.roleReminder.trim()}`;
@@ -400,28 +554,38 @@ export async function runReviewTriggerSpecialist(params: {
     payloadJson,
   ].join("\n\n")}`;
 
-  const model = specialist.model ?? process.env.ANTHROPIC_MODEL ?? DEFAULT_ANTHROPIC_MODEL;
+  const model = params.overrides?.model?.trim() || specialist.model || process.env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL;
   const raw = await callReviewProvider({
     prompt,
     model,
     defaultAdapter: specialist.defaultAdapter,
+    providerOverride: params.overrides?.provider ?? null,
     validate: (candidate) => {
       const parsed = parseJsonLoose(candidate);
-      const verdict = parsed.verdict?.toLowerCase();
-      return verdict === "pass" || verdict === "fail";
+      return normalizeOutcome(parsed.decision ?? parsed.verdict) !== null;
     },
   });
   const parsed = parseJsonLoose(raw);
-  const verdict = parsed.verdict?.toLowerCase();
+  const outcome = normalizeOutcome(parsed.decision ?? parsed.verdict);
+  const confidence = normalizeConfidence(parsed.confidence);
 
-  if (verdict !== "pass" && verdict !== "fail") {
+  if (!outcome) {
     throw new Error(`Automatic review specialist returned an invalid verdict: ${raw || "(empty response)"}`);
   }
 
   return {
-    allowed: verdict === "pass",
-    summary: parsed.summary?.trim() || (verdict === "pass" ? "Automatic review specialist approved the push." : "Automatic review specialist blocked the push."),
-    confidence: parsed.confidence,
+    allowed: outcome === "pass" || outcome === "advisory",
+    outcome,
+    summary: parsed.summary?.trim() || (
+      outcome === "pass"
+        ? "Automatic review specialist approved the push."
+        : outcome === "advisory"
+          ? "Automatic review specialist returned advisory findings."
+          : outcome === "escalate"
+            ? "Automatic review specialist requested escalation."
+            : "Automatic review specialist blocked the push."
+    ),
+    confidence,
     findings: Array.isArray(parsed.findings) ? parsed.findings : [],
     raw,
   };

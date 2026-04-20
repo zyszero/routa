@@ -37,6 +37,7 @@ const LOW_SIGNAL_REVIEW_EXTENSIONS = new Set([".css", ".scss", ".sass", ".less",
 
 type ReviewReport = ReviewReportPayload;
 type ReviewTone = "danger" | "warning" | "success" | "info" | "muted";
+type EffectiveReviewTriggerAction = "advisory" | "block" | "require_human_review" | "staged";
 type ReviewTableRow = {
   key: string;
   value: string;
@@ -48,6 +49,17 @@ type OversizedMetricSummary = Partial<Record<OversizedMetricKey, {
   threshold: number;
   severity: string;
 }>>;
+type StagedReviewGroup = {
+  confidenceThreshold: number;
+  context: string[];
+  fallbackAction: EffectiveReviewTriggerAction;
+  model: string | null;
+  provider: string | null;
+  specialistId: string | null;
+  triggers: ReviewTrigger[];
+};
+
+const DEFAULT_STAGED_CONFIDENCE_THRESHOLD = 8;
 
 export type ReviewPhaseResult = {
   base: string;
@@ -230,6 +242,120 @@ function compareSeverity(left: string | undefined, right: string | undefined): n
     ["low", 1],
   ]);
   return (order.get((left ?? "").toLowerCase()) ?? 0) - (order.get((right ?? "").toLowerCase()) ?? 0);
+}
+
+function normalizeTriggerAction(action: string | undefined): EffectiveReviewTriggerAction {
+  const normalized = action?.trim().toLowerCase();
+  switch (normalized) {
+    case "advisory":
+    case "warn":
+      return "advisory";
+    case "block":
+    case "block_push":
+      return "block";
+    case "review":
+    case "auto_review":
+    case "staged":
+      return "staged";
+    case "require_human_review":
+    case "human_review":
+    default:
+      return "require_human_review";
+  }
+}
+
+function normalizeTriggerConfidenceThreshold(value: number | null | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_STAGED_CONFIDENCE_THRESHOLD;
+  }
+
+  return Math.min(10, Math.max(1, Math.round(value)));
+}
+
+function summarizeTriggerTitles(triggers: ReviewTrigger[], maxItems = 3): string {
+  const names = triggers.map((trigger) => titleCaseTriggerName(trigger.name));
+  if (names.length <= maxItems) {
+    return names.join(", ");
+  }
+
+  return `${names.slice(0, maxItems).join(", ")}, +${names.length - maxItems} more`;
+}
+
+function summarizeReviewIntent(triggers: ReviewTrigger[]): {
+  label: string;
+  tone: ReviewTone;
+} {
+  const actions = triggers.map((trigger) => normalizeTriggerAction(trigger.action));
+  if (actions.includes("block")) {
+    return { label: "Push blocked", tone: "danger" };
+  }
+  if (actions.includes("require_human_review")) {
+    return { label: "Human review required", tone: "danger" };
+  }
+  if (actions.includes("staged")) {
+    return { label: "Automatic review required", tone: "warning" };
+  }
+
+  return { label: "Review advisory", tone: "info" };
+}
+
+function buildStagedReviewGroups(triggers: ReviewTrigger[]): StagedReviewGroup[] {
+  const groups = new Map<string, StagedReviewGroup>();
+
+  for (const trigger of triggers) {
+    const context = [...(trigger.context ?? [])]
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .sort();
+    const group: Omit<StagedReviewGroup, "triggers"> = {
+      confidenceThreshold: normalizeTriggerConfidenceThreshold(trigger.confidence_threshold),
+      context,
+      fallbackAction: normalizeTriggerAction(trigger.fallback_action ?? "require_human_review"),
+      model: trigger.model?.trim() || null,
+      provider: trigger.provider?.trim() || null,
+      specialistId: trigger.specialist_id?.trim() || null,
+    };
+    const key = JSON.stringify(group);
+    const existing = groups.get(key);
+    if (existing) {
+      existing.triggers.push(trigger);
+      continue;
+    }
+
+    groups.set(key, {
+      ...group,
+      triggers: [trigger],
+    });
+  }
+
+  return [...groups.values()];
+}
+
+function printDecisionFindings(findings: Array<{
+  severity?: string;
+  title?: string;
+  reason?: string;
+  location?: string;
+}>): void {
+  if (findings.length === 0) {
+    return;
+  }
+
+  for (const finding of findings) {
+    const severity = finding.severity?.toUpperCase() ?? "INFO";
+    const title = finding.title?.trim() || "Unnamed finding";
+    const reason = finding.reason?.trim();
+    const location = finding.location?.trim();
+    console.log(`- [${severity}] ${title}${location ? ` (${location})` : ""}`);
+    if (reason) {
+      console.log(`  ${reason}`);
+    }
+  }
+}
+
+function buildActionMessage(prefix: string, triggers: ReviewTrigger[], suffix?: string): string {
+  const summary = summarizeTriggerTitles(triggers);
+  return `${prefix}: ${summary}.${suffix ? ` ${suffix}` : ""}`;
 }
 
 function highestTriggerSeverity(triggers: ReviewTrigger[]): string | undefined {
@@ -460,6 +586,7 @@ function printReviewReport(report: ReviewReport, ownershipRouting?: OwnershipRou
   const committedFiles = report.committed_files ?? report.changed_files ?? [];
   const triggers = report.triggers ?? [];
   const highestSeverity = highestTriggerSeverity(triggers);
+  const intent = summarizeReviewIntent(triggers);
   const diffStats = report.diff_stats;
   const oversizedMetrics = parseOversizedMetricSummary(triggers);
   const workingTreeFiles = report.working_tree_files ?? [];
@@ -474,8 +601,8 @@ function printReviewReport(report: ReviewReport, ownershipRouting?: OwnershipRou
   console.log(
     colorByTone(
       stream,
-      highestSeverity ? severityToTone(highestSeverity) : "warning",
-      `Human review required: ${triggers.length} trigger${triggers.length === 1 ? "" : "s"} across ${committedFiles.length} committed file${committedFiles.length === 1 ? "" : "s"}.`,
+      highestSeverity ? severityToTone(highestSeverity) : intent.tone,
+      `${intent.label}: ${triggers.length} trigger${triggers.length === 1 ? "" : "s"} across ${committedFiles.length} committed file${committedFiles.length === 1 ? "" : "s"}.`,
     ),
   );
   for (const line of renderKeyValueTable([
@@ -581,41 +708,129 @@ async function parseDecision(
     return buildResultBase(base, report, "passed", true, true, ownershipRouting, message);
   }
 
-  try {
-    const decision = await runReviewTriggerSpecialist({
-      reviewRoot,
-      base,
-      report: {
-        ...report,
-        ownership_routing: ownershipRouting,
-      },
-    });
-    const message = decision.summary;
+  const triggers = report.triggers ?? [];
+  const advisoryTriggers = triggers.filter((trigger) => normalizeTriggerAction(trigger.action) === "advisory");
+  const directBlockTriggers = triggers.filter((trigger) => normalizeTriggerAction(trigger.action) === "block");
+  const humanReviewTriggers = triggers.filter((trigger) => normalizeTriggerAction(trigger.action) === "require_human_review");
+  const stagedTriggers = triggers.filter((trigger) => normalizeTriggerAction(trigger.action) === "staged");
+
+  if (directBlockTriggers.length > 0) {
+    const message = buildActionMessage(
+      "Review trigger blocked the push",
+      directBlockTriggers,
+      "The configured trigger action is block.",
+    );
     if (outputMode === "human") {
       console.log(message);
-      if (decision.findings.length > 0) {
-        for (const finding of decision.findings) {
-          const severity = finding.severity?.toUpperCase() ?? "INFO";
-          const title = finding.title?.trim() || "Unnamed finding";
-          const reason = finding.reason?.trim();
-          const location = finding.location?.trim();
-          console.log(`- [${severity}] ${title}${location ? ` (${location})` : ""}`);
-          if (reason) {
-            console.log(`  ${reason}`);
-          }
-        }
-      }
       console.log("");
     }
-    return buildResultBase(
-      base,
-      report,
-      decision.allowed ? "passed" : "blocked",
-      decision.allowed,
-      false,
-      ownershipRouting,
-      message,
+    return buildResultBase(base, report, "blocked", false, false, ownershipRouting, message);
+  }
+
+  if (humanReviewTriggers.length > 0) {
+    const message = buildActionMessage(
+      "Human review required before push",
+      humanReviewTriggers,
+      "The matched trigger configuration requires manual review.",
     );
+    if (outputMode === "human") {
+      console.log(message);
+      console.log("");
+    }
+    return buildResultBase(base, report, "blocked", false, false, ownershipRouting, message);
+  }
+
+  if (stagedTriggers.length === 0) {
+    const message = advisoryTriggers.length > 0
+      ? buildActionMessage("Review advisory", advisoryTriggers, "Push allowed.")
+      : "No blocking review action matched.";
+    if (outputMode === "human") {
+      console.log(message);
+      console.log("");
+    }
+    return buildResultBase(base, report, "passed", true, false, ownershipRouting, message);
+  }
+
+  try {
+    const advisoryNotes = advisoryTriggers.length > 0
+      ? [buildActionMessage("Review advisory", advisoryTriggers, "Push allowed.")]
+      : [];
+    const stagedGroups = buildStagedReviewGroups(stagedTriggers);
+    const passNotes: string[] = [];
+
+    for (const group of stagedGroups) {
+      const decision = await runReviewTriggerSpecialist({
+        reviewRoot,
+        base,
+        report: {
+          ...report,
+          triggers: group.triggers,
+          ownership_routing: ownershipRouting,
+        },
+        overrides: {
+          context: group.context,
+          model: group.model,
+          provider: group.provider,
+          specialistId: group.specialistId,
+        },
+      });
+      const decisionOutcome = decision.outcome ?? (decision.allowed ? "pass" : "block");
+      const decisionConfidence = decision.confidence ?? null;
+
+      const lowConfidence =
+        decisionConfidence === null || decisionConfidence < group.confidenceThreshold;
+      const shouldFallback = decisionOutcome === "escalate" || lowConfidence;
+      const triggerSummary = summarizeTriggerTitles(group.triggers);
+
+      if (outputMode === "human") {
+        console.log(decision.summary);
+        printDecisionFindings(decision.findings);
+        console.log("");
+      }
+
+      if (decisionOutcome === "block") {
+        return buildResultBase(
+          base,
+          report,
+          "blocked",
+          false,
+          false,
+          ownershipRouting,
+          decision.summary,
+        );
+      }
+
+      if (shouldFallback) {
+        const fallbackAction = group.fallbackAction;
+        const suffix = decisionConfidence === null
+          ? `Automatic review did not return usable confidence for ${triggerSummary}.`
+          : `Automatic review confidence ${decisionConfidence}/10 was below the required ${group.confidenceThreshold}/10 for ${triggerSummary}.`;
+
+        if (fallbackAction === "advisory") {
+          advisoryNotes.push(`${decision.summary} ${suffix} Advisory fallback applied.`);
+          continue;
+        }
+
+        if (fallbackAction === "block") {
+          const message = `${decision.summary} ${suffix} Blocking fallback applied.`;
+          return buildResultBase(base, report, "blocked", false, false, ownershipRouting, message);
+        }
+
+        const message = `${decision.summary} ${suffix} Human review fallback required.`;
+        return buildResultBase(base, report, "blocked", false, false, ownershipRouting, message);
+      }
+
+      if (decisionOutcome === "advisory") {
+        advisoryNotes.push(decision.summary);
+        continue;
+      }
+
+      passNotes.push(decision.summary);
+    }
+
+    const message = [...advisoryNotes, ...passNotes].filter(Boolean).join(" ").trim()
+      || "Automatic review specialist approved the push.";
+    return buildResultBase(base, report, "passed", true, false, ownershipRouting, message);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     if (shouldBypassUnavailableReviewGate()) {

@@ -275,4 +275,48 @@ describe("runReviewTriggerSpecialist", () => {
     expect(runCommandMock.mock.calls[2]?.[0]).toContain("claude -p --permission-mode bypassPermissions");
     expect(runCommandMock.mock.calls[3]?.[0]).toContain("codex -a never exec -s read-only");
   });
+
+  it("accepts the upgraded decision schema with numeric confidence", async () => {
+    process.env.ROUTA_REVIEW_PROVIDER = "codex";
+
+    runCommandMock
+      .mockResolvedValueOnce({
+        command: "git diff --stat 'origin/main...HEAD'",
+        durationMs: 5,
+        exitCode: 0,
+        output: " tools/hook-runtime/src/specialist-review.ts | 10 +++++-----\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git diff --unified=3 'origin/main...HEAD'",
+        durationMs: 5,
+        exitCode: 0,
+        output: "diff --git a/file b/file\n+change\n",
+      })
+      .mockImplementationOnce(async (command: string) => {
+        const match = command.match(/--output-last-message '([^']+)'/);
+        if (!match?.[1]) {
+          throw new Error(`Missing output file in command: ${command}`);
+        }
+        fs.writeFileSync(match[1], "{\"decision\":\"advisory\",\"summary\":\"warn only\",\"confidence\":8,\"findings\":[]}");
+        return {
+          command,
+          durationMs: 5,
+          exitCode: 0,
+          output: "",
+        };
+      });
+
+    const result = await runReviewTriggerSpecialist({
+      reviewRoot: process.cwd(),
+      base: "origin/main",
+      report: {
+        triggers: [{ action: "staged", name: "oversized_change", severity: "high" }],
+        committed_files: ["tools/hook-runtime/src/specialist-review.ts"],
+      },
+    });
+
+    expect(result.allowed).toBe(true);
+    expect(result.outcome).toBe("advisory");
+    expect(result.confidence).toBe(8);
+  });
 });
