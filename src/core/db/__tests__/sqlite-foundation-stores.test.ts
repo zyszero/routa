@@ -86,6 +86,9 @@ describe("sqlite foundation stores", () => {
         completion_summary TEXT,
         verification_verdict TEXT,
         verification_report TEXT,
+        fallback_agent_chain TEXT DEFAULT '[]',
+        enable_automatic_fallback INTEGER DEFAULT 0,
+        max_fallback_attempts INTEGER,
         version INTEGER NOT NULL DEFAULT 1,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL

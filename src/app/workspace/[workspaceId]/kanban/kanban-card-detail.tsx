@@ -18,6 +18,7 @@ import { KanbanDescriptionEditor } from "./kanban-description-editor";
 import { KanbanTaskChangesTab } from "./components/kanban-task-changes-tab";
 import { MarkdownViewer } from "@/client/components/markdown/markdown-viewer";
 import { splitLegacyTaskComment } from "@/core/models/task";
+import type { FallbackAgent } from "@/core/models/task";
 import {
   createKanbanSpecialistResolver,
   getOrderedSessionIds,
@@ -1087,6 +1088,16 @@ function ExecutionSection({
           )}
         </div>
       </details>
+      {hasCardOverride && (
+        <FallbackAgentChainEditor
+          task={task}
+          specialists={specialists}
+          availableProviders={availableProviders}
+          specialistLanguage={specialistLanguage}
+          compact={compact}
+          onPatchTask={onPatchTask}
+        />
+      )}
       {canRunTask && (usesSelectedProvider || manualRunTarget !== lanePipeline || hasCardOverride) && (
         <div className={`mt-2 border-l-2 border-sky-300/80 px-3 py-2 text-xs text-sky-800 dark:border-sky-700/70 dark:text-sky-200 ${compact ? "leading-[1.125rem]" : "leading-[1.2rem]"}`}>
           Manual {hasRecordedRuns ? "reruns" : "runs"} use {manualRunSourceLabel}:
@@ -1142,6 +1153,133 @@ function ExecutionSection({
         )}
       </div>
     </DetailSection>
+  );
+}
+
+function FallbackAgentChainEditor({
+  task,
+  specialists,
+  availableProviders,
+  specialistLanguage,
+  compact,
+  onPatchTask,
+}: {
+  task: TaskInfo;
+  specialists: SpecialistOption[];
+  availableProviders: AcpProviderInfo[];
+  specialistLanguage: KanbanSpecialistLanguage;
+  compact?: boolean;
+  onPatchTask: (taskId: string, payload: Record<string, unknown>) => Promise<TaskInfo>;
+}) {
+  const { t } = useTranslation();
+  const chain: FallbackAgent[] = (task as TaskInfo & { fallbackAgentChain?: FallbackAgent[] }).fallbackAgentChain ?? [];
+  const enableFallback = (task as TaskInfo & { enableAutomaticFallback?: boolean }).enableAutomaticFallback ?? false;
+
+  const addFallbackAgent = async () => {
+    const next = [...chain, { providerId: undefined, role: "DEVELOPER", specialistId: undefined }];
+    await onPatchTask(task.id, { fallbackAgentChain: next, enableAutomaticFallback: true });
+  };
+
+  const removeFallbackAgent = async (index: number) => {
+    const next = chain.filter((_, i) => i !== index);
+    await onPatchTask(task.id, {
+      fallbackAgentChain: next.length > 0 ? next : undefined,
+      enableAutomaticFallback: next.length > 0,
+    });
+  };
+
+  const updateFallbackAgent = async (index: number, patch: Partial<FallbackAgent>) => {
+    const next = chain.map((agent, i) => (i === index ? { ...agent, ...patch } : agent));
+    await onPatchTask(task.id, { fallbackAgentChain: next });
+  };
+
+  const toggleFallback = async () => {
+    await onPatchTask(task.id, { enableAutomaticFallback: !enableFallback });
+  };
+
+  return (
+    <details className={`mt-2 border border-slate-200/70 dark:border-slate-700/70 ${compact ? "px-2.5 py-2.5" : "px-3 py-2.5"}`}>
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+            {t.kanbanDetail.fallbackAgentChain}
+          </div>
+          <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+            {t.kanbanDetail.fallbackAgentChainHint}
+          </div>
+        </div>
+        <span className="rounded border border-slate-300 px-3 py-1 text-[11px] font-medium text-slate-600 transition-colors hover:border-amber-300 hover:text-amber-700 dark:border-slate-600 dark:text-slate-300 dark:hover:border-amber-600 dark:hover:text-amber-200">
+          {chain.length > 0 ? `${chain.length} ${t.kanbanDetail.fallbackAgentsConfigured}` : t.kanbanDetail.addFallbackAgent}
+        </span>
+      </summary>
+      <div className="mt-2.5 space-y-2">
+        <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+          <input
+            type="checkbox"
+            checked={enableFallback}
+            onChange={toggleFallback}
+            className="rounded border-slate-300 dark:border-slate-600"
+          />
+          {t.kanbanDetail.enableAutomaticFallback}
+        </label>
+        {chain.map((agent, index) => (
+          <div key={index} className="flex items-center gap-2 rounded border border-slate-200/60 p-2 dark:border-slate-700/60">
+            <span className="shrink-0 text-[10px] font-semibold text-slate-400 dark:text-slate-500">#{index + 1}</span>
+            <Select
+              value={agent.providerId ?? ""}
+              onChange={async (event) => {
+                await updateFallbackAgent(index, { providerId: event.target.value || undefined });
+              }}
+              className="min-w-0 flex-1 border border-slate-200/80 bg-transparent text-xs text-slate-700 outline-none focus:border-amber-400 dark:border-slate-700 dark:bg-transparent dark:text-slate-300 px-2 py-1.5"
+            >
+              <option value="">{t.kanbanDetail.fallbackProviderDefault}</option>
+              {availableProviders.map((provider) => (
+                <option key={provider.id} value={provider.id}>{provider.name ?? provider.id}</option>
+              ))}
+            </Select>
+            <Select
+              value={agent.role ?? "DEVELOPER"}
+              onChange={async (event) => {
+                await updateFallbackAgent(index, { role: event.target.value });
+              }}
+              className="min-w-0 flex-1 border border-slate-200/80 bg-transparent text-xs text-slate-700 outline-none focus:border-amber-400 dark:border-slate-700 dark:bg-transparent dark:text-slate-300 px-2 py-1.5"
+            >
+              {ROLE_OPTIONS.map((role) => <option key={role} value={role}>{role}</option>)}
+            </Select>
+            <Select
+              value={agent.specialistId ?? ""}
+              onChange={async (event) => {
+                const specialist = findSpecialistById(specialists, event.target.value);
+                await updateFallbackAgent(index, {
+                  specialistId: event.target.value || undefined,
+                  specialistName: specialist?.name,
+                });
+              }}
+              className="min-w-0 flex-1 border border-slate-200/80 bg-transparent text-xs text-slate-700 outline-none focus:border-amber-400 dark:border-slate-700 dark:bg-transparent dark:text-slate-300 px-2 py-1.5"
+            >
+              <option value="">{KANBAN_SPECIALIST_LANGUAGE_LABELS[specialistLanguage].noSpecialist}</option>
+              {specialists.map((specialist) => (
+                <option key={specialist.id} value={specialist.id}>{getSpecialistDisplayName(specialist)}</option>
+              ))}
+            </Select>
+            <button
+              type="button"
+              onClick={() => removeFallbackAgent(index)}
+              className="shrink-0 rounded px-1.5 py-1 text-xs text-rose-500 transition-colors hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-900/30"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={addFallbackAgent}
+          className="rounded border border-dashed border-slate-300 px-3 py-1.5 text-xs text-slate-500 transition-colors hover:border-amber-300 hover:text-amber-700 dark:border-slate-600 dark:text-slate-400 dark:hover:border-amber-600 dark:hover:text-amber-200"
+        >
+          + {t.kanbanDetail.addFallbackAgent}
+        </button>
+      </div>
+    </details>
   );
 }
 

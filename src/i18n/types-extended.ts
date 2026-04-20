@@ -863,6 +863,12 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     failedToSwitchRepo: string;
     failedToUpdateRepos: string;
     resetOverride: string;
+    fallbackAgentChain: string;
+    fallbackAgentChainHint: string;
+    fallbackAgentsConfigured: string;
+    addFallbackAgent: string;
+    enableAutomaticFallback: string;
+    fallbackProviderDefault: string;
   };
 
   // Kanban modal dialogs

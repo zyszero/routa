@@ -4,6 +4,7 @@ import {
   type KanbanAutomationStep,
   type KanbanColumnAutomation,
 } from "../models/kanban";
+import type { FallbackAgent } from "../models/task";
 
 export interface AutomationSpecialistSummary {
   name?: string;
@@ -28,6 +29,9 @@ type TaskAutomationFields = {
   assignedRole?: string;
   assignedSpecialistId?: string;
   assignedSpecialistName?: string;
+  fallbackAgentChain?: FallbackAgent[];
+  enableAutomaticFallback?: boolean;
+  maxFallbackAttempts?: number;
 };
 
 type ColumnAutomationFields = {
@@ -125,6 +129,17 @@ export function resolveKanbanAutomationStep(
   };
 }
 
+function buildFallbackSteps(chain?: FallbackAgent[]): KanbanAutomationStep[] {
+  if (!chain || chain.length === 0) return [];
+  return chain.map((agent, index) => ({
+    id: `fallback-${index + 1}`,
+    providerId: agent.providerId,
+    role: agent.role,
+    specialistId: agent.specialistId,
+    specialistName: agent.specialistName,
+  }));
+}
+
 export function resolveEffectiveTaskAutomation(
   task: TaskAutomationFields,
   boardColumns: ColumnAutomationFields[] = [],
@@ -148,7 +163,9 @@ export function resolveEffectiveTaskAutomation(
       role: task.assignedRole,
       specialistId: task.assignedSpecialistId,
       specialistName: task.assignedSpecialistName,
-    }]
+    },
+    ...buildFallbackSteps(task.fallbackAgentChain),
+    ]
         .map((step) => resolveKanbanAutomationStep(step, resolveSpecialist, options))
         .filter((step): step is ResolvedKanbanAutomationStep => Boolean(step))
     : resolvedLaneSteps;
