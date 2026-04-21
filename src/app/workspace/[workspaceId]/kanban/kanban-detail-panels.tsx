@@ -5,7 +5,7 @@ import type { AcpTaskAdaptiveHarnessOptions } from "@/client/acp-client";
 import { MarkdownViewer } from "@/client/components/markdown/markdown-viewer";
 import { desktopAwareFetch, toErrorMessage } from "@/client/utils/diagnostics";
 import { useTranslation } from "@/i18n";
-import type { TaskAdaptiveHarnessPack } from "@/core/harness/task-adaptive";
+import type { TaskAdaptiveHarnessPack, TaskAdaptiveMatchedFileDetail } from "@/core/harness/task-adaptive";
 import type { TaskInfo } from "../types";
 import { buildKanbanTaskAdaptiveHarnessOptions } from "./kanban-task-adaptive";
 import type { KanbanSpecialistLanguage } from "./kanban-specialist-language";
@@ -87,6 +87,23 @@ function hasTaskAdaptiveSearchHints(options: AcpTaskAdaptiveHarnessOptions): boo
     || (options.moduleHints?.length ?? 0) > 0
     || (options.symptomHints?.length ?? 0) > 0
   );
+}
+
+function getMatchedFileDetails(pack: TaskAdaptiveHarnessPack | null): TaskAdaptiveMatchedFileDetail[] {
+  if (!pack) {
+    return [];
+  }
+
+  if ((pack.matchedFileDetails?.length ?? 0) > 0) {
+    return pack.matchedFileDetails;
+  }
+
+  return pack.selectedFiles.map((filePath) => ({
+    filePath,
+    changes: 0,
+    sessions: 0,
+    updatedAt: "",
+  }));
 }
 
 function SummaryGridItem({
@@ -421,7 +438,8 @@ export function JitContextPanel({
   const canLoadContext = hasTaskAdaptiveSearchHints(harnessOptions);
   const historicalIssueCount = (pack?.failures.length ?? 0) + (pack?.repeatedReadFiles.length ?? 0);
   const relatedSessionCount = pack?.sessions.length ?? 0;
-  const matchedFileCount = pack?.selectedFiles.length ?? 0;
+  const matchedFileDetails = getMatchedFileDetails(pack);
+  const matchedFileCount = matchedFileDetails.length;
   const historySessionKey = (harnessOptions.historySessionIds ?? []).join("|");
 
   useEffect(() => {
@@ -548,7 +566,7 @@ export function JitContextPanel({
             <div className="border-b border-slate-200/70 px-1 pb-2 text-sm text-slate-500 dark:border-slate-700/70 dark:text-slate-400">
               {t.kanbanDetail.jitContextNoHistorySessions}
             </div>
-          ) : !pack || (pack.failures.length === 0 && pack.repeatedReadFiles.length === 0 && pack.sessions.length === 0 && pack.selectedFiles.length === 0) ? (
+          ) : !pack || (pack.failures.length === 0 && pack.repeatedReadFiles.length === 0 && pack.sessions.length === 0 && matchedFileDetails.length === 0) ? (
             <div className="border-b border-slate-200/70 px-1 pb-2 text-sm text-slate-500 dark:border-slate-700/70 dark:text-slate-400">
               {t.kanbanDetail.noJitContext}
             </div>
@@ -604,7 +622,7 @@ export function JitContextPanel({
                 ) : null}
               </div>
 
-              {pack.selectedFiles.length > 0 ? (
+              {matchedFileDetails.length > 0 ? (
                 <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 px-3 py-2.5 dark:border-slate-700/70 dark:bg-slate-900/20">
                   {(pack.featureName || pack.featureId) ? (
                     <div className="mb-3">
@@ -624,14 +642,29 @@ export function JitContextPanel({
                   <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
                     {t.kanbanDetail.matchedFiles}
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {pack.selectedFiles.map((filePath) => (
-                      <span
-                        key={filePath}
-                        className="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-mono text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-300"
+                  <div className="mt-2 space-y-2">
+                    {matchedFileDetails.map((fileDetail) => (
+                      <div
+                        key={fileDetail.filePath}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950/60"
                       >
-                        {filePath}
-                      </span>
+                        <div className="font-mono text-[11px] text-slate-700 dark:text-slate-200">
+                          {fileDetail.filePath}
+                        </div>
+                        {(fileDetail.changes > 0 || fileDetail.sessions > 0 || fileDetail.updatedAt) ? (
+                          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                            {fileDetail.changes > 0 ? (
+                              <span>{t.kanbanDetail.changes}: {fileDetail.changes}</span>
+                            ) : null}
+                            {fileDetail.sessions > 0 ? (
+                              <span>{t.trace.sessions}: {fileDetail.sessions}</span>
+                            ) : null}
+                            {fileDetail.updatedAt ? (
+                              <span>{t.kanbanDetail.updatedAt}: {formatTimestamp(fileDetail.updatedAt) ?? fileDetail.updatedAt}</span>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
                     ))}
                   </div>
                 </div>

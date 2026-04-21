@@ -5,6 +5,12 @@ const { assembleTaskAdaptiveHarnessFromToolArgs } = vi.hoisted(() => ({
     summary: "Recovered history-session context for the current task.",
     warnings: [],
     selectedFiles: ["src/core/mcp/routa-mcp-tool-manager.ts"],
+    matchedFileDetails: [{
+      filePath: "src/core/mcp/routa-mcp-tool-manager.ts",
+      changes: 1,
+      sessions: 1,
+      updatedAt: "2026-04-21T12:00:00.000Z",
+    }],
     matchedSessionIds: ["session-123"],
     failures: [],
     repeatedReadFiles: [],

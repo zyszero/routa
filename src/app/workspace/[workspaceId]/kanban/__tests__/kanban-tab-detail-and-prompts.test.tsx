@@ -322,6 +322,12 @@ describe("KanbanCardDetail repository health", () => {
           summary: "history summary",
           warnings: [],
           selectedFiles: ["src/app/page.tsx"],
+          matchedFileDetails: [{
+            filePath: "src/app/page.tsx",
+            changes: 1,
+            sessions: 1,
+            updatedAt: "2026-04-21T02:03:00.000Z",
+          }],
           matchedSessionIds: ["session-trigger", "session-history"],
           failures: [{
             provider: "codex",
@@ -400,6 +406,8 @@ describe("KanbanCardDetail repository health", () => {
     expect(screen.getByText("Operation not permitted")).toBeTruthy();
     expect(screen.getByText("Repeated read hotspots")).toBeTruthy();
     expect(screen.getAllByText("src/app/page.tsx").length).toBeGreaterThan(0);
+    expect(screen.getByText("Changes: 1")).toBeTruthy();
+    expect(screen.getByText("sessions: 1")).toBeTruthy();
     expect(screen.getByText("session-history")).toBeTruthy();
     expect(screen.getByText(/Matched files: src\/app\/page\.tsx/)).toBeTruthy();
 
@@ -434,6 +442,20 @@ describe("KanbanCardDetail repository health", () => {
           selectedFiles: [
             "src/app/workspace/[workspaceId]/kanban/kanban-card-detail.tsx",
             "src/app/api/tasks/route.ts",
+          ],
+          matchedFileDetails: [
+            {
+              filePath: "src/app/workspace/[workspaceId]/kanban/kanban-card-detail.tsx",
+              changes: 0,
+              sessions: 0,
+              updatedAt: "",
+            },
+            {
+              filePath: "src/app/api/tasks/route.ts",
+              changes: 0,
+              sessions: 0,
+              updatedAt: "",
+            },
           ],
           matchedSessionIds: [],
           failures: [],

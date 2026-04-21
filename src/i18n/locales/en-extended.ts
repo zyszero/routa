@@ -781,6 +781,7 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     changesHint: "Task-scoped local changes from the attached worktree or fallback repository.",
     committedChanges: "Committed Changes",
     localChanges: "Local Changes",
+    updatedAt: "Updated",
     pullRequestSpecialist: "PR specialist",
     pullRequestSpecialistHint: "Start a dedicated session to prepare and publish a pull request or merge request for this {platform} branch.",
     runPullRequestSpecialist: "Open PR session",

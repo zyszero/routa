@@ -41,6 +41,13 @@ export interface TaskAdaptiveHarnessFailureSignal {
   command?: string;
 }
 
+export interface TaskAdaptiveMatchedFileDetail {
+  filePath: string;
+  changes: number;
+  sessions: number;
+  updatedAt: string;
+}
+
 export interface TaskAdaptiveHarnessSessionSummary {
   provider: string;
   sessionId: string;
@@ -62,6 +69,7 @@ export interface TaskAdaptiveHarnessPack {
   featureId?: string;
   featureName?: string;
   selectedFiles: string[];
+  matchedFileDetails: TaskAdaptiveMatchedFileDetail[];
   matchedSessionIds: string[];
   failures: TaskAdaptiveHarnessFailureSignal[];
   repeatedReadFiles: string[];
@@ -1194,6 +1202,43 @@ function inferFilesFromSessionIds(
   return trimTo(uniqueSorted(inferred), maxFiles);
 }
 
+function buildMatchedFileDetails(
+  selectedFiles: string[],
+  fileSignals: Record<string, TaskAdaptiveFileSignal>,
+): TaskAdaptiveMatchedFileDetail[] {
+  return selectedFiles.map((filePath) => {
+    const signal = fileSignals[filePath];
+    if (!signal) {
+      return {
+        filePath,
+        changes: 0,
+        sessions: 0,
+        updatedAt: "",
+      };
+    }
+
+    let updatedAt = "";
+    let changes = 0;
+    const seenSessions = new Set<string>();
+    for (const session of signal.sessions) {
+      seenSessions.add(`${session.provider}:${session.sessionId}`);
+      if (session.changedFiles?.includes(filePath)) {
+        changes += 1;
+      }
+      if (session.updatedAt && session.updatedAt > updatedAt) {
+        updatedAt = session.updatedAt;
+      }
+    }
+
+    return {
+      filePath,
+      changes,
+      sessions: seenSessions.size,
+      updatedAt,
+    };
+  });
+}
+
 function recommendTooling(
   taskType: TaskAdaptiveHarnessTaskType | undefined,
   role: string | undefined,
@@ -1236,6 +1281,7 @@ function buildHarnessSummary(input: {
   featureName?: string;
   featureId?: string;
   selectedFiles: string[];
+  matchedFileDetails: TaskAdaptiveMatchedFileDetail[];
   matchedSessionIds: string[];
   failures: TaskAdaptiveHarnessFailureSignal[];
   repeatedReadFiles: string[];
@@ -1251,6 +1297,22 @@ function buildHarnessSummary(input: {
 
   const failureLines = trimTo(input.failures, MAX_FAILURE_SIGNALS).map((failure) =>
     `${failure.provider}:${failure.sessionId} | ${failure.toolName} | ${failure.message}${failure.command ? ` | ${failure.command}` : ""}`);
+  const fileLines = input.matchedFileDetails.map((detail) => {
+    const stats: string[] = [];
+    if (detail.changes > 0) {
+      stats.push(`${isZh ? "变更" : "changes"} ${detail.changes}`);
+    }
+    if (detail.sessions > 0) {
+      stats.push(`${isZh ? "会话" : "sessions"} ${detail.sessions}`);
+    }
+    if (detail.updatedAt) {
+      stats.push(`${isZh ? "更新于" : "updated"} ${detail.updatedAt}`);
+    }
+
+    return stats.length > 0
+      ? `${detail.filePath} | ${stats.join(" | ")}`
+      : detail.filePath;
+  });
   const sessionLines = input.sessions.map((session) => {
     const relevantFiles = session.matchedFiles.length > 0 ? session.matchedFiles.join(", ") : none;
     const failedReads = session.failedReadSignals.length;
@@ -1293,7 +1355,7 @@ function buildHarnessSummary(input: {
     formatBulletList(input.repeatedReadFiles, isZh ? "没有高信号重复读取" : "No high-signal repeated reads"),
     "",
     isZh ? "### 已恢复的相关文件" : "### Recovered Relevant Files",
-    formatBulletList(input.selectedFiles, none),
+    formatBulletList(fileLines, none),
     "",
     isZh ? "### 相关历史会话" : "### Relevant History Sessions",
     sessionLines.length > 0 ? sessionLines.join("\n") : `- ${none}`,
@@ -1463,6 +1525,7 @@ export async function assembleTaskAdaptiveHarness(
     sessions.flatMap((session) => session.failedReadSignals),
     MAX_FAILURE_SIGNALS,
   );
+  const matchedFileDetails = buildMatchedFileDetails(selectedFiles, fileSignals);
   const repeatedReadFiles = trimTo(
     uniqueSorted(sessions.flatMap((session) => session.repeatedReadFiles)),
     MAX_REPEATED_READS,
@@ -1477,6 +1540,7 @@ export async function assembleTaskAdaptiveHarness(
       featureName: primaryFeature?.name,
       featureId: primaryFeature?.id ?? requestedFeatureIds[0],
       selectedFiles,
+      matchedFileDetails,
       matchedSessionIds,
       failures,
       repeatedReadFiles,
@@ -1487,6 +1551,7 @@ export async function assembleTaskAdaptiveHarness(
     featureId: primaryFeature?.id ?? requestedFeatureIds[0],
     featureName: primaryFeature?.name,
     selectedFiles,
+    matchedFileDetails,
     matchedSessionIds,
     failures,
     repeatedReadFiles,

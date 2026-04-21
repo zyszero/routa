@@ -781,6 +781,7 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     changesHint: "显示当前任务关联 worktree，或回退仓库中的本地变更。",
     committedChanges: "已提交变更",
     localChanges: "本地变更",
+    updatedAt: "更新于",
     pullRequestSpecialist: "PR 专家",
     pullRequestSpecialistHint: "启动一个专门的 session，为当前 {platform} 分支准备并发布 Pull Request 或 Merge Request。",
     runPullRequestSpecialist: "启动 PR 会话",

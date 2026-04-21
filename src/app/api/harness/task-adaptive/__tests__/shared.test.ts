@@ -153,6 +153,12 @@ describe("assembleTaskAdaptiveHarness", () => {
     });
     expect(pack.summary).toContain("High-Priority Friction Signals");
     expect(pack.summary).toContain("Operation not permitted");
+    expect(pack.matchedFileDetails).toEqual([expect.objectContaining({
+      filePath: "src/app/page.tsx",
+      changes: 1,
+      sessions: 1,
+      updatedAt: expect.stringContaining("2026-04-21T01:04:00"),
+    })]);
     expect(pack.recommendedToolMode).toBe("essential");
     expect(pack.recommendedAllowedNativeTools).toEqual(["Read", "Grep", "Glob"]);
   });
@@ -206,6 +212,12 @@ describe("assembleTaskAdaptiveHarness", () => {
     });
 
     expect(pack.selectedFiles).toContain("src/app/layout.tsx");
+    expect(pack.matchedFileDetails).toEqual([expect.objectContaining({
+      filePath: "src/app/layout.tsx",
+      changes: 1,
+      sessions: 1,
+      updatedAt: expect.stringContaining("2026-04-21T02:03:00"),
+    })]);
     expect(pack.matchedSessionIds).toContain("session-b");
     expect(pack.recommendedMcpProfile).toBe("kanban-planning");
     expect(pack.recommendedAllowedNativeTools).toEqual(["Read", "Grep", "Glob"]);
@@ -275,6 +287,20 @@ describe("assembleTaskAdaptiveHarness", () => {
     expect(pack.selectedFiles).toEqual([
       "src/app/api/tasks/route.ts",
       "src/app/workspace/[workspaceId]/kanban/kanban-card-detail.tsx",
+    ]);
+    expect(pack.matchedFileDetails).toEqual([
+      {
+        filePath: "src/app/api/tasks/route.ts",
+        changes: 0,
+        sessions: 0,
+        updatedAt: "",
+      },
+      {
+        filePath: "src/app/workspace/[workspaceId]/kanban/kanban-card-detail.tsx",
+        changes: 0,
+        sessions: 0,
+        updatedAt: "",
+      },
     ]);
     expect(pack.warnings).not.toContain("No task-adaptive files could be resolved from the current request.");
     expect(pack.matchedSessionIds).toEqual([]);

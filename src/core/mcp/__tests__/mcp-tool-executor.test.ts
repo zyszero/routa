@@ -5,6 +5,12 @@ const { assembleTaskAdaptiveHarnessFromToolArgs } = vi.hoisted(() => ({
     summary: "Recovered read failures and repeated path lookups from history.",
     warnings: [],
     selectedFiles: ["src/app/workspace/[workspaceId]/kanban/kanban-tab.tsx"],
+    matchedFileDetails: [{
+      filePath: "src/app/workspace/[workspaceId]/kanban/kanban-tab.tsx",
+      changes: 1,
+      sessions: 1,
+      updatedAt: "2026-04-21T12:00:00.000Z",
+    }],
     matchedSessionIds: ["session-123"],
     failures: [],
     repeatedReadFiles: [],
