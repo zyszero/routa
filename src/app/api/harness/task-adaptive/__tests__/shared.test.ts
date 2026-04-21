@@ -528,6 +528,73 @@ describe("assembleTaskAdaptiveHarness", () => {
     );
   });
 
+  it("falls back from repo root and task title when query hints are omitted", async () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "task-adaptive-harness-task-label-fallback-"));
+    process.env.HOME = tempRoot;
+    process.env.CLAUDE_CONFIG_DIR = "";
+
+    const repoRoot = path.join(tempRoot, "repo");
+    ensureFile(
+      path.join(repoRoot, "src/app/workspace/[workspaceId]/kanban/kanban-page-client.tsx"),
+      "export function KanbanPageClient() { return null; }\n",
+    );
+    ensureFile(
+      path.join(repoRoot, "src/app/api/kanban/events/route.ts"),
+      "export async function GET() { return Response.json({ ok: true }); }\n",
+    );
+    writeFeatureSurfaceIndex(repoRoot, {
+      generatedAt: "2026-04-21T12:00:00.000Z",
+      pages: [{
+        route: "/workspace/:workspaceId/kanban",
+        title: "Kanban Board",
+        description: "Kanban board workflow with flow events and execution history.",
+        sourceFile: "src/app/workspace/[workspaceId]/kanban/kanban-page-client.tsx",
+      }],
+      implementationApis: [{
+        label: "nextjs",
+        domain: "kanban",
+        method: "GET",
+        path: "/api/kanban/events",
+        sourceFiles: ["src/app/api/kanban/events/route.ts"],
+      }],
+      metadata: {
+        schemaVersion: 1,
+        capabilityGroups: [],
+        features: [{
+          id: "kanban-workflow",
+          name: "Kanban Workflow",
+          group: "coordination",
+          summary: "Persistent flow events, execution history, and kanban board lifecycle.",
+          status: "active",
+          pages: ["/workspace/:workspaceId/kanban"],
+          apis: ["GET /api/kanban/events"],
+          sourceFiles: [
+            "src/app/workspace/[workspaceId]/kanban/kanban-page-client.tsx",
+            "src/app/api/kanban/events/route.ts",
+          ],
+          relatedFeatures: [],
+          domainObjects: ["task", "kanban-event"],
+        }],
+      },
+    });
+
+    const pack = await assembleTaskAdaptiveHarness(repoRoot, {
+      taskLabel: "为 Kanban 建立可持久化的流动事件模型",
+      taskType: "implementation",
+      locale: "zh-CN",
+    });
+
+    expect(pack.featureId).toBe("kanban-workflow");
+    expect(pack.featureName).toBe("Kanban Workflow");
+    expect(pack.selectedFiles).toEqual([
+      "src/app/api/kanban/events/route.ts",
+      "src/app/workspace/[workspaceId]/kanban/kanban-page-client.tsx",
+    ]);
+    expect(pack.warnings).not.toContain("No task-adaptive files could be resolved from the current request.");
+    expect(pack.matchConfidence).toBe("medium");
+    expect(pack.matchReasons).toContain("根据任务标题和搜索线索收敛出 1 个 feature 候选。");
+  });
+
   it("persists reusable friction profiles for hotspot files and features", async () => {
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "task-adaptive-friction-profiles-"));
     process.env.HOME = tempRoot;

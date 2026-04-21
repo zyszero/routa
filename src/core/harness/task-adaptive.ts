@@ -1226,6 +1226,12 @@ function buildTaskAdaptiveMatchDiagnostics(params: {
       : `Matched ${params.inferenceSeed.matchedApis.length} API hints to implementation entry points.`);
   }
 
+  if (params.inferenceSeed.featureIds.length > 0) {
+    reasons.push(isZh
+      ? `根据任务标题和搜索线索收敛出 ${params.inferenceSeed.featureIds.length} 个 feature 候选。`
+      : `Narrowed the search to ${params.inferenceSeed.featureIds.length} feature candidates from task/search hints.`);
+  }
+
   if (params.inferenceSeed.signalFiles.length > 0) {
     reasons.push(isZh
       ? `在 feature/file 线索不足时，根据 history-session prompt 和文件信号补回了 ${params.inferenceSeed.signalFiles.length} 个文件。`
@@ -1245,7 +1251,9 @@ function buildTaskAdaptiveMatchDiagnostics(params: {
   }
 
   const explicitSeedStrength = params.explicitFileCount + params.explicitFeatureCount + params.historySessionCount;
-  const structuredSeedStrength = params.inferenceSeed.matchedRoutes.length + params.inferenceSeed.matchedApis.length;
+  const structuredSeedStrength = params.inferenceSeed.matchedRoutes.length
+    + params.inferenceSeed.matchedApis.length
+    + params.inferenceSeed.featureIds.length;
 
   let confidence: TaskAdaptiveMatchConfidence = "low";
   if (explicitSeedStrength > 0 || params.frictionProfiles.length > 0) {
@@ -1628,16 +1636,21 @@ function inferFeatureIdsFromFiles(
     .filter(Boolean);
 }
 
+function collectTaskAdaptiveHintTexts(options: TaskAdaptiveHarnessOptions): string[] {
+  return [
+    ...(options.taskLabel ? [options.taskLabel] : []),
+    ...(options.query ? [options.query] : []),
+    ...normalizeUniqueStringArray(options.moduleHints),
+    ...normalizeUniqueStringArray(options.symptomHints),
+  ];
+}
+
 function inferSignalBackedFiles(input: {
   options: TaskAdaptiveHarnessOptions;
   fileSignals: Record<string, TaskAdaptiveFileSignal>;
   maxFiles: number;
 }): string[] {
-  const hintTokens = splitHintTokens([
-    ...(input.options.query ? [input.options.query] : []),
-    ...normalizeUniqueStringArray(input.options.moduleHints),
-    ...normalizeUniqueStringArray(input.options.symptomHints),
-  ]);
+  const hintTokens = splitHintTokens(collectTaskAdaptiveHintTexts(input.options));
 
   if (hintTokens.length === 0) {
     return [];
@@ -1673,11 +1686,7 @@ function inferTaskAdaptiveSeed(input: {
 }): TaskAdaptiveInferenceSeed {
   const routeCandidates = normalizeUniqueStringArray(input.options.routeCandidates).map(normalizeRouteCandidate).filter(Boolean);
   const apiCandidates = normalizeUniqueStringArray(input.options.apiCandidates).map(normalizeApiCandidate).filter((candidate) => candidate.path.length > 0);
-  const hintTokens = splitHintTokens([
-    ...(input.options.query ? [input.options.query] : []),
-    ...normalizeUniqueStringArray(input.options.moduleHints),
-    ...normalizeUniqueStringArray(input.options.symptomHints),
-  ]);
+  const hintTokens = splitHintTokens(collectTaskAdaptiveHintTexts(input.options));
 
   const pageScores = new Map<string, number>();
   for (const page of input.surfaceIndex.pages) {
