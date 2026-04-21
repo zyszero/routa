@@ -8,6 +8,7 @@ const MAX_KEY_RELATED_FILES = 8;
 const MAX_REPEATED_READ_ITEMS = 4;
 const MAX_REPEATED_COMMAND_ITEMS = 4;
 const MAX_FAILED_TOOL_ITEMS = 4;
+const COMPACT_SESSION_THRESHOLD = 4;
 const NOISE_TOOL_NAMES = new Set(["update_plan", "write_stdin"]);
 
 export interface BuildSessionAnalysisPromptInput {
@@ -319,7 +320,7 @@ function buildSessionBlocks(
   const noToolBreakdown = locale === "zh" ? "没有可信的工具调用分布" : "No trustworthy tool-call breakdown";
   const noSelectedEvidence = locale === "zh" ? "无" : "None";
 
-  return sessions
+  const rankedSessions = sessions
     .map((session) => ({
       session,
       evidence: buildSessionFileEvidence(locale, selectedFiles, session),
@@ -329,8 +330,23 @@ function buildSessionBlocks(
         return right.evidence.relevanceScore - left.evidence.relevanceScore;
       }
       return right.session.updatedAt.localeCompare(left.session.updatedAt);
-    })
-    .map(({ session, evidence }, index) => {
+    });
+  const compactMode = rankedSessions.length >= COMPACT_SESSION_THRESHOLD;
+  if (compactMode) {
+    return locale === "zh"
+      ? [
+        `- 当前共有 ${rankedSessions.length} 个已选 session。为避免 prompt 过长，这里不再内联逐条 session 证据块。`,
+        "- 请直接使用上面的 Transcript Hints 读取对应 JSONL，并以你自己的分析为主。",
+        "- 如有必要，请编写小脚本或使用工具批量提取 opening prompt、prompt history、selected-file read/write/change、failed tools、scope drift 等结构化信号，再基于结果分层判断。",
+      ].join("\n")
+      : [
+        `- There are ${rankedSessions.length} selected sessions. To keep the prompt compact, detailed per-session evidence blocks are omitted.`,
+        "- Read the matching JSONL files from Transcript Hints directly and prioritize your own analysis over the pre-baked summary.",
+        "- If needed, write a small script or use tools to batch-extract opening prompts, prompt history, selected-file reads/writes/changes, failed tools, scope drift, and other structured signals before drawing conclusions.",
+      ].join("\n");
+  }
+
+  return rankedSessions.map(({ session, evidence }, index) => {
       const promptHistory = limitItems(uniquePreserveOrder(session.promptHistory), MAX_PROMPT_HISTORY_ITEMS);
       const diagnostics = session.diagnostics;
       const toolCallBreakdown = diagnostics
@@ -388,8 +404,7 @@ function buildSessionBlocks(
           locale === "zh" ? "没有发现高价值的失败工具调用" : "No high-signal failed tool calls detected",
         ),
       ].filter(Boolean).join("\n");
-    })
-    .join("\n\n");
+    }).join("\n\n");
 }
 
 export function buildSessionAnalysisPrompt({
@@ -424,7 +439,8 @@ export function buildSessionAnalysisPrompt({
       "7. 明确区分“证据支持”的判断和“你的推断”。每条结论尽量引用具体 session ID。",
       "8. 给出更好的用户输入建议，重点是下一次应该怎样一句话开场、怎样补上下文、怎样限定范围。",
       "9. 产出 2 到 4 个可直接复用的提示词模板，偏向这个文件/这个 feature 的真实场景。",
-      "10. 只有在下面的摘要证据仍不足以支撑判断，或者你需要恢复真实用户开场、确认范围漂移时，才去读少量 transcript JSONL。优先读取高相关 session；如果权限被拒或读取受阻，就基于现有证据继续，并把这个限制写出来。",
+      "10. 如果 session 数量较多，优先直接读 Transcript Hints 里的 JSONL；必要时编写小脚本或使用工具批量提取证据，再做你的判断。",
+      "11. 只有在下面的摘要证据仍不足以支撑判断，或者你需要恢复真实用户开场、确认范围漂移时，才去读少量 transcript JSONL。优先读取高相关 session；如果权限被拒或读取受阻，就基于现有证据继续，并把这个限制写出来。",
       "",
       "输出格式：",
       "## 会话相关性分层",
@@ -475,7 +491,8 @@ export function buildSessionAnalysisPrompt({
     "7. Distinguish clearly between evidence-backed conclusions and your own inference. Cite concrete session IDs when possible.",
     "8. Recommend better user inputs for next time: how to open the request, what context to include up front, and how to constrain the scope.",
     "9. Produce 2 to 4 reusable prompt templates tailored to this file or feature, not generic prompt-engineering advice.",
-    "10. Only inspect a small number of matching transcript JSONL files if the summarized evidence is still insufficient or if you need to recover the user's true opening request or confirm scope drift. If permissions are blocked, continue with the available evidence and state that limitation explicitly.",
+    "10. If there are many sessions, prefer reading the JSONL files from Transcript Hints directly; when useful, write a small script or use tools to batch-extract evidence before judging.",
+    "11. Only inspect a small number of matching transcript JSONL files if the summarized evidence is still insufficient or if you need to recover the user's true opening request or confirm scope drift. If permissions are blocked, continue with the available evidence and state that limitation explicitly.",
     "",
     "Output format:",
     "## Session Relevance",
