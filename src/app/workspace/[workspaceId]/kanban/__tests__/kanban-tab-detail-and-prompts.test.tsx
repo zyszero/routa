@@ -251,7 +251,7 @@ describe("KanbanCardDetail repository health", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Execution" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Execution" }));
     fireEvent.click(screen.getByText("Repo").closest("summary")!);
 
     expect(await screen.findByText("Repo Health")).toBeTruthy();
@@ -310,7 +310,7 @@ describe("KanbanCardDetail repository health", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Execution" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Execution" }));
     expect(screen.getByText(/Current run failed on Auggie:/i)).toBeTruthy();
     expect(screen.getByText(/403 Forbidden/i)).toBeTruthy();
   });
@@ -402,7 +402,7 @@ describe("KanbanCardDetail repository health", () => {
     );
 
     expect(desktopAwareFetch).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "JIT Context" }));
+    fireEvent.click(screen.getByRole("tab", { name: "JIT Context" }));
     fireEvent.click(screen.getByRole("button", { name: "Show JIT Context" }));
 
     expect(await screen.findByText("Historical issues")).toBeTruthy();
@@ -514,7 +514,7 @@ describe("KanbanCardDetail repository health", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "JIT Context" }));
+    fireEvent.click(screen.getByRole("tab", { name: "JIT Context" }));
     fireEvent.click(screen.getByRole("button", { name: "Show JIT Context" }));
 
     expect(await screen.findByText("Matched feature")).toBeTruthy();
@@ -593,7 +593,7 @@ describe("KanbanCardDetail repository health", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "JIT Context" }));
+    fireEvent.click(screen.getByRole("tab", { name: "JIT Context" }));
     fireEvent.click(screen.getByRole("button", { name: "Show JIT Context" }));
 
     expect(await screen.findByText("Warnings")).toBeTruthy();
@@ -678,7 +678,7 @@ describe("KanbanCardDetail repository health", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "JIT Context" }));
+    fireEvent.click(screen.getByRole("tab", { name: "JIT Context" }));
     fireEvent.click(screen.getByRole("button", { name: "Show JIT Context" }));
     expect(await screen.findByText("Feature A")).toBeTruthy();
 
@@ -696,7 +696,7 @@ describe("KanbanCardDetail repository health", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "JIT Context" }));
+    fireEvent.click(screen.getByRole("tab", { name: "JIT Context" }));
     fireEvent.click(screen.getByRole("button", { name: "Show JIT Context" }));
     expect(await screen.findByText("Feature B")).toBeTruthy();
 
@@ -762,7 +762,7 @@ describe("KanbanCardDetail repository health", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Execution" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Execution" }));
     expect(screen.getByText(/Current run failed on Claude Code:/i)).toBeTruthy();
     expect(screen.queryByText(/Current run failed on Codex:/i)).toBeNull();
   });
@@ -827,7 +827,7 @@ describe("KanbanCardDetail repository health", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Execution" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Execution" }));
     expect(screen.getAllByText(/Workspace default · GATE · Remote Review/i).length).toBeGreaterThan(0);
   });
 
@@ -961,11 +961,11 @@ describe("KanbanCardDetail repository health", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Story Readiness" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Story Readiness" }));
+    expect(screen.getByRole("tab", { name: "Story Readiness" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Story Readiness" }));
     expect(screen.getAllByText("Blocked for Dev").length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: "Evidence Bundle" }));
-    expect(screen.getByRole("button", { name: "Evidence Bundle" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Evidence Bundle" }));
+    expect(screen.getByRole("tab", { name: "Evidence Bundle" })).toBeTruthy();
     expect(screen.getAllByText("Evidence incomplete").length).toBeGreaterThan(0);
     expect(screen.getByText(/test_results/i)).toBeTruthy();
     expect(screen.queryByText("Latest Run")).toBeNull();
@@ -1063,7 +1063,7 @@ describe("KanbanCardDetail repository health", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Runs" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Runs" })).toBeTruthy();
   });
 
   it("shows full review feedback in the description tab after review sends the card back", () => {

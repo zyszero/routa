@@ -972,7 +972,7 @@ describe("KanbanTab manual run provider selection", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Open Story One" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Execution" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Execution" }));
 
     const runButton = await screen.findByTestId("kanban-detail-run");
     expect(screen.getByText(/Manual runs use the current ACP provider with this lane's role and specialist/i)).toBeTruthy();
@@ -1083,7 +1083,7 @@ describe("KanbanTab manual run provider selection", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Open Story One" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Execution" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Execution" }));
 
     const runButton = await screen.findByTestId("kanban-detail-run");
     // The manual run message is only shown when it differs from lane defaults
@@ -1305,7 +1305,7 @@ describe("KanbanCardDetail changes tab", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Changes" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Changes" }));
 
     await waitFor(() => {
       expect(desktopAwareFetch).toHaveBeenCalledWith("/api/tasks/task-1/changes", { cache: "no-store" });
@@ -1418,7 +1418,7 @@ describe("KanbanCardDetail changes tab", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Changes" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Changes" }));
 
     await waitFor(() => {
       expect(desktopAwareFetch).toHaveBeenCalledWith("/api/tasks/task-1/changes", { cache: "no-store" });
@@ -1590,7 +1590,7 @@ describe("KanbanCardDetail changes tab", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Changes" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Changes" }));
 
     expect(await screen.findByText("Upgrade tiptap core")).toBeTruthy();
     expect(screen.getByText("Add regression coverage")).toBeTruthy();
@@ -1706,7 +1706,7 @@ describe("KanbanCardDetail changes tab", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Changes" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Changes" }));
 
     expect(await screen.findByText("Committed Changes")).toBeTruthy();
     expect(screen.getByText("Local Changes")).toBeTruthy();
@@ -2875,7 +2875,7 @@ describe("KanbanTab JIT Context session hydration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open Story One" }));
     await screen.findByText("Card Detail");
 
-    fireEvent.click(screen.getByRole("button", { name: "JIT Context" }));
+    fireEvent.click(screen.getByRole("tab", { name: "JIT Context" }));
     fireEvent.click(screen.getByRole("button", { name: "Show JIT Context" }));
     await screen.findByText("Matched feature");
 
@@ -2959,7 +2959,7 @@ describe("KanbanTab quick ACP assignment", () => {
     expect(screen.queryByTestId("kanban-detail-provider-override")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Open Story One" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Execution" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Execution" }));
     fireEvent.click(screen.getByText("Card session override").closest("summary")!);
 
     const providerDropdown = await screen.findByTestId("kanban-detail-provider-override");
