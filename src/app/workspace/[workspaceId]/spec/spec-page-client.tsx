@@ -27,6 +27,7 @@ import {
   type ResolvedRelation,
   type SpecIssue,
   type SpecStatus,
+  STATUS_COLUMNS,
   type SurfaceHit,
 } from "./spec-board-model";
 
@@ -313,6 +314,128 @@ function SpecToolbar({
         <CompactBadge className="bg-black/[0.04] text-slate-600 dark:bg-white/8 dark:text-slate-200">
           {filteredCount} / {totalCount}
         </CompactBadge>
+      </div>
+    </section>
+  );
+}
+
+function SpecStatusBoard({
+  issues,
+  selectedIssue,
+  onSelectIssue,
+}: {
+  issues: SpecIssue[];
+  selectedIssue: SpecIssue | null;
+  onSelectIssue: (issue: SpecIssue) => void;
+}) {
+  const { t } = useTranslation();
+  const statusLabels = getStatusLabels(t);
+  const statusBuckets = useMemo(
+    () => Object.fromEntries(
+      STATUS_COLUMNS.map((status) => [
+        status,
+        issues.filter((issue) => normalizeSpecStatus(issue.status) === status),
+      ]),
+    ) as Record<SpecStatus, SpecIssue[]>,
+    [issues],
+  );
+
+  return (
+    <section
+      aria-label={t.specBoard.status}
+      className="rounded-2xl border border-black/6 bg-white/88 p-3 shadow-[0_8px_20px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-[#0f1722]/88 dark:shadow-none"
+    >
+      <div className="mb-3 flex items-center gap-2">
+        <CompactBadge className="bg-black/[0.04] text-slate-700 dark:bg-white/8 dark:text-slate-100">
+          {t.specBoard.status}
+        </CompactBadge>
+        <span className="text-xs text-slate-500 dark:text-slate-400">{issues.length}</span>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {STATUS_COLUMNS.map((status) => {
+          const columnIssues = statusBuckets[status];
+          const theme = STATUS_THEMES[status];
+
+          return (
+            <article
+              key={status}
+              className="min-h-[13rem] rounded-xl border border-black/6 bg-[#f8fafc] p-3 dark:border-white/10 dark:bg-[#0c121b]"
+            >
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className={`h-2.5 w-2.5 rounded-full ${theme.dot}`} />
+                  <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                    {statusLabels[status]}
+                  </h3>
+                </div>
+                <CompactBadge className={theme.badge}>{columnIssues.length}</CompactBadge>
+              </div>
+
+              {columnIssues.length > 0 ? (
+                <div className="space-y-2">
+                  {columnIssues.map((issue) => {
+                    const isSelected = selectedIssue?.filename === issue.filename;
+
+                    return (
+                      <button
+                        key={issue.filename}
+                        type="button"
+                        onClick={() => onSelectIssue(issue)}
+                        className={`flex w-full flex-col items-start gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
+                          isSelected
+                            ? theme.selected
+                            : "border-black/8 bg-white/90 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+                        }`}
+                      >
+                        <div className="line-clamp-2 text-sm font-semibold text-slate-900 dark:text-slate-50">
+                          {issue.title}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <CompactBadge className={SEVERITY_STYLES[issue.severity] ?? SEVERITY_STYLES.medium}>
+                            {issue.severity}
+                          </CompactBadge>
+                          {issue.area ? (
+                            <CompactBadge className="border border-black/6 bg-[#f6f3ee] text-slate-600 dark:border-white/10 dark:bg-white/6 dark:text-slate-200">
+                              {issue.area}
+                            </CompactBadge>
+                          ) : null}
+                          {issue.kind ? (
+                            <CompactBadge className="bg-black/[0.04] text-slate-600 dark:bg-white/8 dark:text-slate-200">
+                              {issue.kind}
+                            </CompactBadge>
+                          ) : null}
+                        </div>
+
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                          {issue.date || issue.filename}
+                        </div>
+
+                        {issue.tags.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {issue.tags.map((tag) => (
+                              <CompactBadge
+                                key={`${issue.filename}-${tag}`}
+                                className="border border-black/6 bg-[#f6f3ee] text-slate-600 dark:border-white/10 dark:bg-white/6 dark:text-slate-200"
+                              >
+                                {tag}
+                              </CompactBadge>
+                            ))}
+                          </div>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex min-h-[8rem] items-center justify-center rounded-lg border border-dashed border-black/8 px-3 text-center text-xs text-slate-500 dark:border-white/10 dark:text-slate-400">
+                  {t.specBoard.noIssues}
+                </div>
+              )}
+            </article>
+          );
+        })}
       </div>
     </section>
   );
@@ -1126,22 +1249,30 @@ export function SpecBoardPanel({ workspaceId }: { workspaceId: string }) {
       ) : null}
 
       {!loading && !error ? (
-        <section className="grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
-          <SpecFamilyExplorer
-            families={visibleFamilies}
-            relationsByFilename={boardModel.relationsByFilename}
+        <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+          <SpecStatusBoard
+            issues={filteredIssues}
             selectedIssue={selectedIssue}
             onSelectIssue={setSelectedIssue}
           />
 
-          <SpecDetailPane
-            issue={selectedIssue}
-            relations={selectedIssueRelations}
-            surfaceHits={selectedIssue ? boardModel.surfaceHitsByFilename.get(selectedIssue.filename) ?? [] : []}
-            surfaceWarnings={surfaceIndex.warnings}
-            onSelectLinkedIssue={handleSelectLinkedIssue}
-          />
-        </section>
+          <section className="grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
+            <SpecFamilyExplorer
+              families={visibleFamilies}
+              relationsByFilename={boardModel.relationsByFilename}
+              selectedIssue={selectedIssue}
+              onSelectIssue={setSelectedIssue}
+            />
+
+            <SpecDetailPane
+              issue={selectedIssue}
+              relations={selectedIssueRelations}
+              surfaceHits={selectedIssue ? boardModel.surfaceHitsByFilename.get(selectedIssue.filename) ?? [] : []}
+              surfaceWarnings={surfaceIndex.warnings}
+              onSelectLinkedIssue={handleSelectLinkedIssue}
+            />
+          </section>
+        </div>
       ) : null}
     </div>
   );

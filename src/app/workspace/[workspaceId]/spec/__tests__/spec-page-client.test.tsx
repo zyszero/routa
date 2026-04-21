@@ -165,17 +165,22 @@ describe("SpecPageClient", () => {
 
     render(<SpecPageClient />);
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Spec board/i })).toBeTruthy();
-    });
+    const detailPane = await screen.findByRole("region", { name: "Spec board" });
 
     const requestedPaths = desktopAwareFetch.mock.calls.map(([path]) => path);
     expect(requestedPaths).toContain("/api/spec/issues?workspaceId=default");
     expect(requestedPaths).toContain("/api/spec/surface-index?workspaceId=default");
 
+    const statusBoard = screen.getByRole("region", { name: "Status" });
+    expect(within(statusBoard).getByText("Resolved")).toBeTruthy();
+    expect(within(statusBoard).getByText("Open")).toBeTruthy();
+    expect(within(statusBoard).getByRole("button", { name: /Spec board/i })).toBeTruthy();
+    expect(within(statusBoard).getByText("2026-04-11")).toBeTruthy();
+    expect(within(statusBoard).getAllByText("kanban").length).toBeGreaterThan(0);
+    expect(within(statusBoard).getAllByText("board").length).toBeGreaterThan(0);
+
     expect(screen.getAllByText("Families").length).toBeGreaterThan(0);
 
-    const detailPane = await screen.findByRole("region", { name: "Spec board" });
     expect(within(detailPane).getByText("Feature Footprint")).toBeTruthy();
     expect(within(detailPane).getAllByText("/workspace/:workspaceId/kanban").length).toBeGreaterThan(0);
     expect(within(detailPane).getByText("GET /api/kanban/boards")).toBeTruthy();
@@ -227,7 +232,7 @@ describe("SpecPageClient", () => {
     render(<SpecPageClient />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Spec board/i })).toBeTruthy();
+      expect(screen.getByRole("region", { name: "Spec board" })).toBeTruthy();
     });
 
     expect(screen.getAllByText("Feature map unavailable").length).toBeGreaterThan(0);
@@ -239,7 +244,7 @@ describe("SpecPageClient", () => {
     render(<SpecPageClient />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Spec board/i })).toBeTruthy();
+      expect(screen.getByRole("region", { name: "Spec board" })).toBeTruthy();
     });
 
     fireEvent.change(screen.getByRole("combobox", { name: "Kind" }), {
