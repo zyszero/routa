@@ -106,6 +106,86 @@ function getMatchedFileDetails(pack: TaskAdaptiveHarnessPack | null): TaskAdapti
   }));
 }
 
+function formatMatchedFileSeed(fileDetail: TaskAdaptiveMatchedFileDetail): string {
+  const stats: string[] = [];
+  if (fileDetail.changes > 0) {
+    stats.push(`changes ${fileDetail.changes}`);
+  }
+  if (fileDetail.sessions > 0) {
+    stats.push(`sessions ${fileDetail.sessions}`);
+  }
+  return stats.length > 0 ? `${fileDetail.filePath} (${stats.join(", ")})` : fileDetail.filePath;
+}
+
+function buildJitContextSessionPrompt(
+  task: TaskInfo,
+  pack: TaskAdaptiveHarnessPack,
+  matchedFileDetails: TaskAdaptiveMatchedFileDetail[],
+  specialistLanguage: KanbanSpecialistLanguage,
+): string {
+  const fileLines = matchedFileDetails.slice(0, 8).map((fileDetail, index) => `${index + 1}. ${formatMatchedFileSeed(fileDetail)}`);
+  const warningLines = pack.warnings.slice(0, 3).map((warning) => `- ${warning}`);
+  const failureLines = pack.failures.slice(0, 3).map((failure) => `- ${failure.message} [${failure.toolName}] (${failure.sessionId})`);
+  const repeatedReadLines = pack.repeatedReadFiles.slice(0, 5).map((filePath) => `- ${filePath}`);
+  const sessionLines = pack.sessions.slice(0, 3).map((session) => `- ${session.sessionId}: ${session.promptSnippet}`);
+
+  if (specialistLanguage === "zh-CN") {
+    return [
+      "继续当前 Kanban 卡片，不要复述下面的上下文，把它当作阅读和排查线索直接使用。",
+      "",
+      "卡片上下文：",
+      `- 标题：${task.title}`,
+      task.objective ? `- 目标：${task.objective}` : null,
+      pack.featureName || pack.featureId ? `- 命中功能：${pack.featureName ?? pack.featureId}` : null,
+      pack.summary ? `- JIT 摘要：${pack.summary}` : null,
+      "",
+      fileLines.length > 0 ? "优先阅读文件：" : null,
+      ...fileLines,
+      "",
+      warningLines.length > 0 ? "检索警告：" : null,
+      ...warningLines,
+      "",
+      failureLines.length > 0 ? "历史问题：" : null,
+      ...failureLines,
+      "",
+      repeatedReadLines.length > 0 ? "重复读取热点：" : null,
+      ...repeatedReadLines,
+      "",
+      sessionLines.length > 0 ? "可复用的历史会话：" : null,
+      ...sessionLines,
+      "",
+      "下一步：先阅读优先文件，再继续当前卡片最小的下一步实现、修复或验证动作。",
+    ].filter(Boolean).join("\n");
+  }
+
+  return [
+    "Continue the current Kanban card. Do not summarize the context back; use it as a reading and debugging seed.",
+    "",
+    "Card context:",
+    `- Title: ${task.title}`,
+    task.objective ? `- Objective: ${task.objective}` : null,
+    pack.featureName || pack.featureId ? `- Matched feature: ${pack.featureName ?? pack.featureId}` : null,
+    pack.summary ? `- JIT summary: ${pack.summary}` : null,
+    "",
+    fileLines.length > 0 ? "Read these files first:" : null,
+    ...fileLines,
+    "",
+    warningLines.length > 0 ? "Retrieval warnings:" : null,
+    ...warningLines,
+    "",
+    failureLines.length > 0 ? "Historical friction:" : null,
+    ...failureLines,
+    "",
+    repeatedReadLines.length > 0 ? "Repeated-read hotspots:" : null,
+    ...repeatedReadLines,
+    "",
+    sessionLines.length > 0 ? "Reusable history sessions:" : null,
+    ...sessionLines,
+    "",
+    "Next: inspect the priority files first, then continue with the smallest useful implementation, debugging, or verification step for this card.",
+  ].filter(Boolean).join("\n");
+}
+
 function SummaryGridItem({
   label,
   value,
@@ -411,6 +491,8 @@ export function JitContextPanel({
   workspaceId,
   repoPath,
   specialistLanguage,
+  activeSessionId,
+  onLoadIntoSession,
   compact = false,
   showTitle = false,
 }: {
@@ -418,6 +500,8 @@ export function JitContextPanel({
   workspaceId?: string;
   repoPath?: string | null;
   specialistLanguage: KanbanSpecialistLanguage;
+  activeSessionId?: string | null;
+  onLoadIntoSession?: (sessionId: string, prompt: string) => Promise<void>;
   compact?: boolean;
   showTitle?: boolean;
 }) {
@@ -427,6 +511,9 @@ export function JitContextPanel({
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pack, setPack] = useState<TaskAdaptiveHarnessPack | null>(null);
+  const [injecting, setInjecting] = useState(false);
+  const [injectError, setInjectError] = useState<string | null>(null);
+  const [injectSuccess, setInjectSuccess] = useState(false);
   const harnessOptions = useMemo(
     () => buildKanbanTaskAdaptiveHarnessOptions(task.title, {
       locale: specialistLanguage,
@@ -451,6 +538,9 @@ export function JitContextPanel({
     setLoaded(false);
     setError(null);
     setPack(null);
+    setInjecting(false);
+    setInjectError(null);
+    setInjectSuccess(false);
   }, [harnessSignature, repoPath, workspaceId]);
 
   const loadContext = async () => {
@@ -474,6 +564,8 @@ export function JitContextPanel({
 
     setLoading(true);
     setError(null);
+    setInjectError(null);
+    setInjectSuccess(false);
 
     try {
       const response = await desktopAwareFetch("/api/harness/task-adaptive", {
@@ -508,6 +600,28 @@ export function JitContextPanel({
     }
   };
 
+  const handleLoadIntoSession = async () => {
+    if (!pack || !activeSessionId || !onLoadIntoSession || injecting) {
+      return;
+    }
+
+    setInjecting(true);
+    setInjectError(null);
+    setInjectSuccess(false);
+
+    try {
+      await onLoadIntoSession(
+        activeSessionId,
+        buildJitContextSessionPrompt(task, pack, matchedFileDetails, specialistLanguage),
+      );
+      setInjectSuccess(true);
+    } catch (sessionError) {
+      setInjectError(toErrorMessage(sessionError));
+    } finally {
+      setInjecting(false);
+    }
+  };
+
   return (
     <div className="space-y-3">
       <div className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 ${compact ? "px-3 py-2" : "px-3.5 py-2.5"} dark:border-slate-700/70 dark:bg-slate-900/20`}>
@@ -533,6 +647,18 @@ export function JitContextPanel({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {expanded && loaded && pack && activeSessionId && onLoadIntoSession ? (
+            <button
+              type="button"
+              onClick={() => {
+                void handleLoadIntoSession();
+              }}
+              disabled={injecting}
+              className="rounded-md border border-emerald-200 px-2 py-1 text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-900/50 dark:text-emerald-300 dark:hover:bg-emerald-900/20"
+            >
+              {injecting ? t.kanbanDetail.loadingJitContextIntoCurrentSession : t.kanbanDetail.loadJitContextIntoCurrentSession}
+            </button>
+          ) : null}
           {expanded && canLoadContext && loaded ? (
             <button
               type="button"
@@ -557,6 +683,18 @@ export function JitContextPanel({
 
       {expanded && (
         <div className="space-y-3">
+          {injectError ? (
+            <div className="rounded-xl border border-rose-200/80 bg-rose-50/80 px-3 py-2.5 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-900/10 dark:text-rose-200">
+              {injectError}
+            </div>
+          ) : null}
+
+          {injectSuccess ? (
+            <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/80 px-3 py-2.5 text-sm text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-900/10 dark:text-emerald-200">
+              {t.kanbanDetail.jitContextLoadedIntoCurrentSession}
+            </div>
+          ) : null}
+
           {loading ? (
             <div className="border-b border-slate-200/70 px-1 pb-2 text-sm text-slate-500 dark:border-slate-700/70 dark:text-slate-400">
               {t.kanbanDetail.loadingJitContext}

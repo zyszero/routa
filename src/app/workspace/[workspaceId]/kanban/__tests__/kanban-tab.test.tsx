@@ -78,6 +78,7 @@ vi.mock("@/client/utils/diagnostics", async () => {
 
 vi.mock("@/client/components/repo-picker", () => ({
   RepoPicker: () => <div data-testid="repo-picker-mock" />,
+  shortenRepoPath: (value: string) => value,
 }));
 
 vi.mock("../use-runtime-fitness-status", async () => {
@@ -2761,6 +2762,136 @@ describe.skip("KanbanTab card detail manual runs", () => {
     await waitFor(() => {
       expect(screen.queryByText("Card Detail")).toBeNull();
     });
+  });
+});
+
+describe("KanbanTab JIT Context session hydration", () => {
+  it("loads matched file seeds into the active ACP session", async () => {
+    desktopAwareFetch.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/harness/task-adaptive") {
+        return new Response(JSON.stringify({
+          summary: "Use the Kanban workflow history as a seed.",
+          warnings: ["Prefer the API route before the UI shell."],
+          featureId: "kanban-workflow",
+          featureName: "Kanban Workflow",
+          selectedFiles: ["src/app/page.tsx"],
+          matchedFileDetails: [{
+            filePath: "src/app/page.tsx",
+            changes: 2,
+            sessions: 1,
+            updatedAt: "2026-04-21T02:03:00.000Z",
+          }],
+          matchedSessionIds: [],
+          failures: [{
+            provider: "codex",
+            sessionId: "session-history",
+            message: "Operation not permitted",
+            toolName: "exec_command",
+          }],
+          repeatedReadFiles: ["src/app/page.tsx"],
+          sessions: [],
+          frictionProfiles: [],
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (url === "/api/sessions/session-123/history?consolidated=true") {
+        return new Response(JSON.stringify({ history: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      throw new Error(`Unexpected desktopAwareFetch: ${url}`);
+    });
+
+    const acp = {
+      connected: true,
+      sessionId: "session-123",
+      updates: [],
+      providers: [{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }],
+      selectedProvider: "claude",
+      loading: false,
+      error: null,
+      authError: null,
+      dockerConfigError: null,
+      connect: vi.fn(),
+      createSession: vi.fn(),
+      resumeSession: vi.fn(),
+      forkSession: vi.fn(),
+      selectSession: vi.fn(),
+      setProvider: vi.fn(),
+      setMode: vi.fn(),
+      prompt: vi.fn(),
+      promptSession: vi.fn(async () => {}),
+      respondToUserInput: vi.fn(),
+      respondToUserInputForSession: vi.fn(),
+      writeTerminal: vi.fn(),
+      resizeTerminal: vi.fn(),
+      cancel: vi.fn(),
+      disconnect: vi.fn(),
+      clearAuthError: vi.fn(),
+      clearDockerConfigError: vi.fn(),
+      listProviderModels: vi.fn(),
+    } satisfies Partial<UseAcpState & UseAcpActions> as UseAcpState & UseAcpActions;
+
+    render(
+      <KanbanTab
+        workspaceId="workspace-1"
+        boards={[board]}
+        tasks={[createTask("task-1", "Story One", {
+          codebaseIds: ["repo-a"],
+          triggerSessionId: "session-123",
+          assignedRole: "DEVELOPER",
+        })]}
+        sessions={[{
+          sessionId: "session-123",
+          workspaceId: "workspace-1",
+          cwd: "/tmp/repo-a",
+          provider: "claude",
+          role: "DEVELOPER",
+          createdAt: "2025-01-01T00:00:00.000Z",
+        }]}
+        providers={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
+        specialists={[]}
+        codebases={[{
+          id: "repo-a",
+          workspaceId: "workspace-1",
+          repoPath: "/tmp/repo-a",
+          label: "Repo A",
+          isDefault: true,
+          sourceType: "local",
+          createdAt: "2025-01-01T00:00:00.000Z",
+          updatedAt: "2025-01-01T00:00:00.000Z",
+        }]}
+        onRefresh={vi.fn()}
+        acp={acp}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Story One" }));
+    await screen.findByText("Card Detail");
+
+    fireEvent.click(screen.getByRole("button", { name: "JIT Context" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show JIT Context" }));
+    await screen.findByText("Matched feature");
+
+    fireEvent.click(screen.getByRole("button", { name: "Load into current session" }));
+
+    await waitFor(() => {
+      expect(acp.promptSession).toHaveBeenCalledWith(
+        "session-123",
+        expect.stringContaining("Matched feature: Kanban Workflow"),
+      );
+    });
+    expect(acp.promptSession).toHaveBeenCalledWith(
+      "session-123",
+      expect.stringContaining("src/app/page.tsx (changes 2, sessions 1)"),
+    );
+    expect(screen.getByText("JIT Context was queued in the current session.")).toBeTruthy();
   });
 });
 

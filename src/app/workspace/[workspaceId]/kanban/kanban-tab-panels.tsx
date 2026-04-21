@@ -873,6 +873,15 @@ export function KanbanTaskDetailOverlay({
                   onSelectSession={(sessionId) => {
                     selectTaskSession(task, sessionId);
                   }}
+                  jitContextSessionId={activeSessionId}
+                  onLoadJitContextIntoSession={acp && activeSessionId
+                    ? async (sessionId, prompt) => {
+                      setHiddenSessionPaneTaskId(null);
+                      setActiveSessionId(sessionId);
+                      acp.selectSession(sessionId);
+                      await acp.promptSession(sessionId, prompt);
+                    }
+                    : undefined}
                   isFullscreen={isTaskDetailFullscreen}
                   onToggleFullscreen={onToggleTaskDetailFullscreen}
                   onClose={closeTaskDetail}

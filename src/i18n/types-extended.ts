@@ -771,6 +771,9 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     showJitContext: string;
     hideJitContext: string;
     refreshJitContext: string;
+    loadJitContextIntoCurrentSession: string;
+    loadingJitContextIntoCurrentSession: string;
+    jitContextLoadedIntoCurrentSession: string;
     loadingJitContext: string;
     jitContextUnavailable: string;
     jitContextNoHistorySessions: string;

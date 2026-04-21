@@ -63,6 +63,8 @@ export interface KanbanCardDetailProps {
   onProviderChange?: (providerId: string | null) => void;
   onRepositoryChange?: (codebaseIds: string[]) => void;
   onSelectSession?: (sessionId: string) => void;
+  jitContextSessionId?: string | null;
+  onLoadJitContextIntoSession?: (sessionId: string, prompt: string) => Promise<void>;
   isFullscreen?: boolean;
   onToggleFullscreen?: (next: boolean) => void;
   onClose?: () => void;
@@ -245,6 +247,8 @@ export function KanbanCardDetail({
   onProviderChange,
   onRepositoryChange,
   onSelectSession,
+  jitContextSessionId,
+  onLoadJitContextIntoSession,
   isFullscreen = false,
   onToggleFullscreen,
   onClose,
@@ -745,6 +749,8 @@ export function KanbanCardDetail({
               workspaceId={resolvedWorkspaceId || undefined}
               repoPath={getTaskRepositoryPath()}
               specialistLanguage={specialistLanguage}
+              activeSessionId={jitContextSessionId}
+              onLoadIntoSession={onLoadJitContextIntoSession}
               compact={compactMode}
             />
           )}

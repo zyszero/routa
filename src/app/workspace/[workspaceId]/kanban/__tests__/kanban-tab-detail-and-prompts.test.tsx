@@ -24,6 +24,7 @@ vi.mock("@/client/utils/diagnostics", async () => {
 
 vi.mock("@/client/components/repo-picker", () => ({
   RepoPicker: () => <div data-testid="repo-picker-mock" />,
+  shortenRepoPath: (value: string) => value,
 }));
 
 vi.mock("../use-runtime-fitness-status", async () => {
