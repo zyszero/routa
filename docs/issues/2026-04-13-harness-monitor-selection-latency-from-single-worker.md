@@ -2,7 +2,8 @@
 title: "Harness monitor 文件切换仍会被 facts / git history enrichment 拖慢"
 date: "2026-04-13"
 kind: issue
-status: open
+status: resolved
+resolved_at: "2026-04-21"
 severity: high
 area: "harness-monitor"
 tags: ["harness-monitor", "tui", "performance", "selection-latency", "background-worker"]
@@ -81,3 +82,13 @@ github_url: null
 ## References
 
 - `docs/issues/2026-04-13-harness-monitor-user-value-gap-to-decision-console.md`
+
+## Resolution Update (2026-04-21)
+
+- Split `git history` loading out of the shared facts worker into a dedicated background worker in `crates/harness-monitor/src/ui/cache.rs`.
+- `warm_selected_detail()` now keeps file facts and diff stats on the facts lane while routing slow `git log --follow` enrichment through the separate git-history lane.
+- This removes the main head-of-line blocking path that made metadata lag feel like file-selection lag when switching dirty files in large repos.
+- Verified with:
+  - `cargo test -p harness-monitor git_history_worker_coalesces_to_latest_request`
+  - `cargo test -p harness-monitor warm_selected_detail_requests_git_history_once_detail_is_focused`
+  - `cargo test -p harness-monitor warm_selected_detail_does_not_request_git_history_outside_detail_focus`

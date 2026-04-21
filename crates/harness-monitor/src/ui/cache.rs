@@ -102,12 +102,6 @@ enum FactsCommand {
         version: i64,
         entry_kind: crate::shared::models::EntryKind,
     },
-    LoadGitHistoryCount {
-        repo_root: String,
-        rel_path: String,
-        version: i64,
-        entry_kind: crate::shared::models::EntryKind,
-    },
 }
 
 #[derive(Debug)]
@@ -169,7 +163,6 @@ struct PendingPreviewCommands {
 struct PendingFactsCommands {
     stats: Option<PendingStats>,
     facts: Option<PendingFacts>,
-    git_history: Option<PendingFacts>,
 }
 
 #[derive(Debug, Default)]
@@ -226,6 +219,7 @@ pub(super) struct AppCache {
     review_triggers: ReviewTriggerCache,
     preview_worker_tx: Sender<PreviewCommand>,
     facts_worker_tx: Sender<FactsCommand>,
+    git_history_worker_tx: Sender<GitHistoryCommand>,
     eval_worker_tx: Sender<EvalCommand>,
     worker_rx: Receiver<BackgroundResult>,
     result_signal_rx: Option<Receiver<()>>,
@@ -283,13 +277,16 @@ impl AppCache {
     pub(super) fn new(repo_root: &str) -> Self {
         let (preview_worker_tx, preview_worker_rx_cmd) = mpsc::channel();
         let (facts_worker_tx, facts_worker_rx_cmd) = mpsc::channel();
+        let (git_history_worker_tx, git_history_worker_rx_cmd) = mpsc::channel();
         let (eval_worker_tx, eval_worker_rx_cmd) = mpsc::channel();
         let (result_tx, worker_rx) = mpsc::channel();
         let (result_signal_tx, result_signal_rx) = mpsc::channel();
         let preview_result_tx = result_tx.clone();
         let facts_result_tx = result_tx.clone();
+        let git_history_result_tx = result_tx.clone();
         let preview_result_signal_tx = result_signal_tx.clone();
         let facts_result_signal_tx = result_signal_tx.clone();
+        let git_history_result_signal_tx = result_signal_tx.clone();
         thread::spawn(move || {
             preview_worker(
                 preview_worker_rx_cmd,
@@ -299,6 +296,13 @@ impl AppCache {
         });
         thread::spawn(move || {
             facts_worker(facts_worker_rx_cmd, facts_result_tx, facts_result_signal_tx)
+        });
+        thread::spawn(move || {
+            git_history_worker(
+                git_history_worker_rx_cmd,
+                git_history_result_tx,
+                git_history_result_signal_tx,
+            )
         });
         thread::spawn(move || eval_worker(eval_worker_rx_cmd, result_tx, result_signal_tx));
         let mut cache = Self {
@@ -338,6 +342,7 @@ impl AppCache {
             review_triggers: ReviewTriggerCache::load(repo_root),
             preview_worker_tx,
             facts_worker_tx,
+            git_history_worker_tx,
             eval_worker_tx,
             worker_rx,
             result_signal_rx: Some(result_signal_rx),
@@ -702,8 +707,8 @@ impl AppCache {
             && self.pending_git_history_key.as_deref() != Some(facts_key.as_str())
         {
             let _ = self
-                .facts_worker_tx
-                .send(FactsCommand::LoadGitHistoryCount {
+                .git_history_worker_tx
+                .send(GitHistoryCommand::LoadCount {
                     repo_root: state.repo_root.clone(),
                     rel_path: file.rel_path.clone(),
                     version: file.last_modified_at_ms,
@@ -1637,16 +1642,6 @@ fn facts_worker(
                 },
             );
         }
-        if let Some((repo_root, rel_path, version, entry_kind)) = pending.git_history.take() {
-            send_background_result(
-                &tx,
-                &result_signal_tx,
-                BackgroundResult::GitHistoryCount {
-                    key: facts_cache_key(&rel_path, version, entry_kind),
-                    count: git_file_change_count(&repo_root, &rel_path),
-                },
-            );
-        }
     }
 }
 
@@ -1766,14 +1761,6 @@ fn queue_facts_command(pending: &mut PendingFactsCommands, command: FactsCommand
             entry_kind,
         } => {
             pending.facts = Some((repo_root, rel_path, version, entry_kind));
-        }
-        FactsCommand::LoadGitHistoryCount {
-            repo_root,
-            rel_path,
-            version,
-            entry_kind,
-        } => {
-            pending.git_history = Some((repo_root, rel_path, version, entry_kind));
         }
     }
 }
@@ -1971,6 +1958,10 @@ mod scc_tests {
 #[cfg(test)]
 #[path = "cache_tests.rs"]
 mod tests;
+
+#[path = "cache_git_history.rs"]
+mod git_history;
+use self::git_history::{git_history_worker, GitHistoryCommand};
 
 #[path = "cache_test_mapping.rs"]
 mod test_mapping;
