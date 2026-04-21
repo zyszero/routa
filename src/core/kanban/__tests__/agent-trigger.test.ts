@@ -720,6 +720,7 @@ describe("triggerAssignedTaskAgent ACP prompt lifecycle", () => {
     const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(requestBody.params.taskAdaptiveHarness).toEqual({
       taskLabel: "Run ACP task",
+      query: "Run ACP task",
       historySessionIds: ["session-trigger", "session-history", "session-lane"],
       taskType: "implementation",
       role: "DEVELOPER",

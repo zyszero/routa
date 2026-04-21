@@ -38,10 +38,15 @@ export interface AcpNewSessionResult {
 export interface AcpTaskAdaptiveHarnessOptions {
   taskLabel?: string;
   locale?: string;
+  query?: string;
   featureId?: string;
   featureIds?: string[];
   filePaths?: string[];
+  routeCandidates?: string[];
+  apiCandidates?: string[];
   historySessionIds?: string[];
+  moduleHints?: string[];
+  symptomHints?: string[];
   taskType?: "implementation" | "planning" | "analysis" | "review";
   maxFiles?: number;
   maxSessions?: number;

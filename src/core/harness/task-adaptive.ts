@@ -2,6 +2,11 @@ import * as fs from "fs";
 import * as path from "path";
 import type { McpServerProfile } from "@/core/mcp/mcp-server-profiles";
 import {
+  readFeatureSurfaceIndex,
+  type FeatureSurfaceIndexResponse,
+  type FeatureSurfaceMetadataItem,
+} from "@/core/spec/feature-surface-index";
+import {
   collectMatchingTranscriptSessions,
   commandFromUnknown,
   commandOutputFromUnknown,
@@ -13,10 +18,15 @@ export type TaskAdaptiveHarnessTaskType = "implementation" | "planning" | "analy
 export interface TaskAdaptiveHarnessOptions {
   taskLabel?: string;
   locale?: string;
+  query?: string;
   featureId?: string;
   featureIds?: string[];
   filePaths?: string[];
+  routeCandidates?: string[];
+  apiCandidates?: string[];
   historySessionIds?: string[];
+  moduleHints?: string[];
+  symptomHints?: string[];
   taskType?: TaskAdaptiveHarnessTaskType;
   maxFiles?: number;
   maxSessions?: number;
@@ -111,6 +121,7 @@ type TaskAdaptiveFileSignal = {
 
 const DEFAULT_MAX_FILES = 8;
 const DEFAULT_MAX_SESSIONS = 6;
+const MAX_INFERRED_FEATURES = 3;
 const MAX_FAILURE_SIGNALS = 8;
 const MAX_REPEATED_READS = 8;
 const MAX_TOOLS_PER_SESSION = 6;
@@ -131,6 +142,26 @@ const HIGH_SIGNAL_FAILURE_PATTERNS = [
   /cannot read/i,
   /failed to read/i,
 ] as const;
+const TASK_ADAPTIVE_HINT_STOPWORDS = new Set([
+  "the",
+  "and",
+  "for",
+  "with",
+  "from",
+  "that",
+  "this",
+  "into",
+  "card",
+  "task",
+  "story",
+  "read",
+  "path",
+  "file",
+  "files",
+  "context",
+  "jit",
+  "feature",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -155,6 +186,14 @@ function normalizeStringArray(value: unknown): string[] | undefined {
     .filter((item): item is string => Boolean(item));
 
   return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeUniqueStringArray(values: readonly string[] | undefined): string[] {
+  return [...new Set(
+    (values ?? [])
+      .map((value) => normalizeString(value))
+      .filter((value): value is string => Boolean(value)),
+  )];
 }
 
 function toPosix(value: string): string {
@@ -205,6 +244,58 @@ function readFeatureTreeFeatures(repoRoot: string): FeatureTreeFeature[] {
   } catch {
     return [];
   }
+}
+
+function featureTreeFeatureFromMetadata(
+  feature: FeatureSurfaceMetadataItem,
+): FeatureTreeFeature | null {
+  const id = normalizeString(feature.id) ?? "";
+  const name = normalizeString(feature.name) ?? "";
+  if (!id && !name) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    group: normalizeString(feature.group) ?? "",
+    summary: normalizeString(feature.summary) ?? "",
+    status: normalizeString(feature.status) ?? "",
+    pages: feature.pages ?? [],
+    apis: feature.apis ?? [],
+    sourceFiles: feature.sourceFiles ?? [],
+    relatedFeatures: feature.relatedFeatures ?? [],
+    domainObjects: feature.domainObjects ?? [],
+  };
+}
+
+function mergeFeatureTreeFeatures(
+  fileFeatures: FeatureTreeFeature[],
+  surfaceIndex: FeatureSurfaceIndexResponse,
+): FeatureTreeFeature[] {
+  const merged = new Map<string, FeatureTreeFeature>();
+
+  for (const feature of fileFeatures) {
+    const key = feature.id || feature.name;
+    if (!key) {
+      continue;
+    }
+    merged.set(key, feature);
+  }
+
+  for (const metadataFeature of surfaceIndex.metadata?.features ?? []) {
+    const normalized = featureTreeFeatureFromMetadata(metadataFeature);
+    if (!normalized) {
+      continue;
+    }
+    const key = normalized.id || normalized.name;
+    if (!key || merged.has(key)) {
+      continue;
+    }
+    merged.set(key, normalized);
+  }
+
+  return [...merged.values()];
 }
 
 function shellLikeSplit(command: string): string[] {
@@ -798,10 +889,15 @@ export function parseTaskAdaptiveHarnessOptions(value: unknown): TaskAdaptiveHar
   return {
     taskLabel: normalizeString(value.taskLabel),
     locale: normalizeString(value.locale),
+    query: normalizeString(value.query),
     featureId: normalizeString(value.featureId),
     featureIds: normalizeStringArray(value.featureIds),
     filePaths: normalizeStringArray(value.filePaths),
+    routeCandidates: normalizeStringArray(value.routeCandidates),
+    apiCandidates: normalizeStringArray(value.apiCandidates),
     historySessionIds: normalizeStringArray(value.historySessionIds),
+    moduleHints: normalizeStringArray(value.moduleHints),
+    symptomHints: normalizeStringArray(value.symptomHints),
     taskType: taskType === "planning" || taskType === "analysis" || taskType === "review" || taskType === "implementation"
       ? taskType
       : undefined,
@@ -817,6 +913,180 @@ export function parseTaskAdaptiveHarnessOptions(value: unknown): TaskAdaptiveHar
 
 function uniqueSorted(values: Iterable<string>): string[] {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+}
+
+function normalizeRouteCandidate(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (trimmed === "/") {
+    return "/";
+  }
+  return trimmed.replace(/\/+$/u, "");
+}
+
+function normalizeApiCandidate(value: string): { method?: string; path: string } {
+  const trimmed = value.trim().replace(/\s+/g, " ");
+  const match = trimmed.match(/^([A-Za-z]+)\s+(.+)$/u);
+  if (match?.[2]) {
+    return {
+      method: match[1]?.toUpperCase(),
+      path: match[2].trim(),
+    };
+  }
+  return { path: trimmed };
+}
+
+function splitHintTokens(values: string[]): string[] {
+  return uniqueSorted(values.flatMap((value) =>
+    value
+      .toLowerCase()
+      .split(/[^a-z0-9]+/u)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 3 && !TASK_ADAPTIVE_HINT_STOPWORDS.has(token))
+  ));
+}
+
+function countTokenMatches(haystack: string, tokens: string[]): number {
+  if (tokens.length === 0) {
+    return 0;
+  }
+
+  const lowered = haystack.toLowerCase();
+  return tokens.reduce((score, token) => score + (lowered.includes(token) ? 1 : 0), 0);
+}
+
+function featureApiMatchesCandidate(featureApis: string[], candidate: { method?: string; path: string }): boolean {
+  const candidatePath = candidate.path.trim().toLowerCase();
+  if (!candidatePath) {
+    return false;
+  }
+
+  return featureApis.some((api) => {
+    const normalized = api.trim().toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+    if (candidate.method) {
+      return normalized === `${candidate.method.toLowerCase()} ${candidatePath}`
+        || normalized.endsWith(` ${candidatePath}`);
+    }
+    return normalized === candidatePath || normalized.endsWith(` ${candidatePath}`) || normalized.includes(candidatePath);
+  });
+}
+
+function inferTaskAdaptiveSeed(input: {
+  options: TaskAdaptiveHarnessOptions;
+  featureTreeFeatures: FeatureTreeFeature[];
+  surfaceIndex: FeatureSurfaceIndexResponse;
+  maxFiles: number;
+}): { featureIds: string[]; filePaths: string[] } {
+  const routeCandidates = normalizeUniqueStringArray(input.options.routeCandidates).map(normalizeRouteCandidate).filter(Boolean);
+  const apiCandidates = normalizeUniqueStringArray(input.options.apiCandidates).map(normalizeApiCandidate).filter((candidate) => candidate.path.length > 0);
+  const hintTokens = splitHintTokens([
+    ...(input.options.query ? [input.options.query] : []),
+    ...normalizeUniqueStringArray(input.options.moduleHints),
+    ...normalizeUniqueStringArray(input.options.symptomHints),
+  ]);
+
+  const pageScores = new Map<string, number>();
+  for (const page of input.surfaceIndex.pages) {
+    const route = normalizeRouteCandidate(page.route);
+    let score = 0;
+    if (routeCandidates.includes(route)) {
+      score += 12;
+    }
+    score += countTokenMatches([page.route, page.title, page.description, page.sourceFile].join(" "), hintTokens);
+    if (score > 0 && page.sourceFile) {
+      pageScores.set(page.sourceFile, score);
+    }
+  }
+
+  const apiFileScores = new Map<string, number>();
+  for (const api of input.surfaceIndex.implementationApis) {
+    let score = 0;
+    for (const candidate of apiCandidates) {
+      const apiPath = api.path.trim().toLowerCase();
+      const candidatePath = candidate.path.trim().toLowerCase();
+      if (!candidatePath) {
+        continue;
+      }
+      const methodMatches = !candidate.method || candidate.method === api.method.trim().toUpperCase();
+      if (methodMatches && (apiPath === candidatePath || apiPath.includes(candidatePath) || candidatePath.includes(apiPath))) {
+        score += 12;
+      }
+    }
+    score += countTokenMatches([
+      api.domain,
+      api.method,
+      api.path,
+      ...api.sourceFiles,
+    ].join(" "), hintTokens);
+    if (score > 0) {
+      for (const sourceFile of api.sourceFiles) {
+        if (!sourceFile) {
+          continue;
+        }
+        apiFileScores.set(sourceFile, Math.max(apiFileScores.get(sourceFile) ?? 0, score));
+      }
+    }
+  }
+
+  const featureScores = new Map<string, number>();
+  const explicitFeatureIds = new Set(normalizeUniqueStringArray(input.options.featureIds));
+  for (const feature of input.featureTreeFeatures) {
+    let score = 0;
+    if (explicitFeatureIds.has(feature.id)) {
+      score += 20;
+    }
+    if (routeCandidates.some((route) => feature.pages.includes(route))) {
+      score += 10;
+    }
+    if (apiCandidates.some((candidate) => featureApiMatchesCandidate(feature.apis, candidate))) {
+      score += 10;
+    }
+    score += countTokenMatches([
+      feature.id,
+      feature.name,
+      feature.summary,
+      ...feature.pages,
+      ...feature.apis,
+      ...feature.sourceFiles,
+      ...feature.relatedFeatures,
+      ...feature.domainObjects,
+    ].join(" "), hintTokens) * 2;
+    if (score > 0) {
+      featureScores.set(feature.id, score);
+    }
+  }
+
+  const inferredFeatureIds = trimTo(
+    [...featureScores.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .map(([featureId]) => featureId),
+    MAX_INFERRED_FEATURES,
+  );
+
+  const inferredFiles = uniqueSorted([
+    ...[...pageScores.entries()]
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+      .map(([filePath]) => filePath),
+    ...[...apiFileScores.entries()]
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+      .map(([filePath]) => filePath),
+    ...inferredFeatureIds.flatMap((featureId) =>
+      collectFeatureFiles(
+        input.featureTreeFeatures.find((feature) => feature.id === featureId),
+        input.maxFiles,
+      )
+    ),
+  ]);
+
+  return {
+    featureIds: inferredFeatureIds,
+    filePaths: trimTo(inferredFiles, input.maxFiles),
+  };
 }
 
 function trimTo<T>(values: T[], max: number): T[] {
@@ -1049,10 +1319,21 @@ export async function assembleTaskAdaptiveHarness(
   const maxSessions = options.maxSessions ?? DEFAULT_MAX_SESSIONS;
   const warnings: string[] = [];
 
-  const featureTree = { features: readFeatureTreeFeatures(repoRoot) };
+  const surfaceIndex = await readFeatureSurfaceIndex(repoRoot);
+  warnings.push(...surfaceIndex.warnings);
+  const featureTree = {
+    features: mergeFeatureTreeFeatures(readFeatureTreeFeatures(repoRoot), surfaceIndex),
+  };
+  const inferredSeed = inferTaskAdaptiveSeed({
+    options,
+    featureTreeFeatures: featureTree.features,
+    surfaceIndex,
+    maxFiles,
+  });
   const requestedFeatureIds = uniqueSorted([
     ...(options.featureId ? [options.featureId] : []),
     ...(options.featureIds ?? []),
+    ...inferredSeed.featureIds,
   ]);
   const features = requestedFeatureIds
     .map((featureId) => featureTree.features.find((item) => item.id === featureId))
@@ -1069,6 +1350,7 @@ export async function assembleTaskAdaptiveHarness(
   const selectedFiles = trimTo(
     uniqueSorted([
       ...(options.filePaths ?? []),
+      ...inferredSeed.filePaths,
       ...features.flatMap((feature) => collectFeatureFiles(feature, maxFiles)),
       ...inferFilesFromSessionIds(options.historySessionIds, fileSignals, maxFiles),
     ]),

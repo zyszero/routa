@@ -104,6 +104,8 @@ That gives `Task-Adaptive Harness` a just-in-time seed even before the first imp
 - 2026-04-21: validated that repo-root-only requests stay empty while file-scoped requests immediately recover sessions and friction signals
 - 2026-04-21: confirmed `Feature Explorer` can already map files to `feature/page/session` evidence and should be treated as the structural fallback
 - 2026-04-21: implementation started for task-level `contextSearchSpec` persistence and Kanban/tooling propagation
+- 2026-04-21: `Task-Adaptive Harness` now seeds file/feature inference from `query`, `routeCandidates`, `apiCandidates`, `moduleHints`, and `symptomHints` via the feature surface index
+- 2026-04-21: Kanban task-adaptive wiring now falls back to the card title as an implicit query when older cards do not yet have an explicit `contextSearchSpec.query`
 
 ## Relevant Files
 

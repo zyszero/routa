@@ -14,6 +14,16 @@ function ensureFile(filePath: string, content = ""): void {
   fs.writeFileSync(filePath, content, "utf8");
 }
 
+function writeFeatureSurfaceIndex(
+  repoRoot: string,
+  payload: Record<string, unknown>,
+): void {
+  ensureFile(
+    path.join(repoRoot, "docs", "product-specs", "feature-tree.index.json"),
+    `${JSON.stringify(payload, null, 2)}\n`,
+  );
+}
+
 function writeTranscript(
   filePath: string,
   cwd: string,
@@ -199,5 +209,76 @@ describe("assembleTaskAdaptiveHarness", () => {
     expect(pack.matchedSessionIds).toContain("session-b");
     expect(pack.recommendedMcpProfile).toBe("kanban-planning");
     expect(pack.recommendedAllowedNativeTools).toEqual(["Read", "Grep", "Glob"]);
+  });
+
+  it("infers features and files from context search hints when history and files are absent", async () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "task-adaptive-harness-hints-"));
+    process.env.HOME = tempRoot;
+    process.env.CLAUDE_CONFIG_DIR = "";
+
+    const repoRoot = path.join(tempRoot, "repo");
+    ensureFile(
+      path.join(repoRoot, "src/app/workspace/[workspaceId]/kanban/kanban-card-detail.tsx"),
+      "export function KanbanCardDetail() { return null; }\n",
+    );
+    ensureFile(
+      path.join(repoRoot, "src/app/api/tasks/route.ts"),
+      "export async function POST() { return Response.json({ ok: true }); }\n",
+    );
+    writeFeatureSurfaceIndex(repoRoot, {
+      generatedAt: "2026-04-21T12:00:00.000Z",
+      pages: [{
+        route: "/workspace/:workspaceId/kanban",
+        title: "Kanban Board",
+        description: "Backlog refine and JIT context card detail",
+        sourceFile: "src/app/workspace/[workspaceId]/kanban/kanban-card-detail.tsx",
+      }],
+      implementationApis: [{
+        label: "nextjs",
+        domain: "kanban",
+        method: "POST",
+        path: "/api/tasks",
+        sourceFiles: ["src/app/api/tasks/route.ts"],
+      }],
+      metadata: {
+        schemaVersion: 1,
+        capabilityGroups: [],
+        features: [{
+          id: "kanban-workflow",
+          name: "Kanban Workflow",
+          group: "coordination",
+          summary: "Backlog refine, card detail, and JIT context loading.",
+          status: "active",
+          pages: ["/workspace/:workspaceId/kanban"],
+          apis: ["POST /api/tasks"],
+          sourceFiles: [
+            "src/app/workspace/[workspaceId]/kanban/kanban-card-detail.tsx",
+            "src/app/api/tasks/route.ts",
+          ],
+          relatedFeatures: ["feature-explorer"],
+          domainObjects: ["task"],
+        }],
+      },
+    });
+
+    const pack = await assembleTaskAdaptiveHarness(repoRoot, {
+      query: "kanban card detail jit context",
+      routeCandidates: ["/workspace/:workspaceId/kanban"],
+      apiCandidates: ["POST /api/tasks"],
+      moduleHints: ["kanban-card-detail"],
+      symptomHints: ["operation not permitted"],
+      taskType: "planning",
+    });
+
+    expect(pack.featureId).toBe("kanban-workflow");
+    expect(pack.featureName).toBe("Kanban Workflow");
+    expect(pack.selectedFiles).toEqual([
+      "src/app/api/tasks/route.ts",
+      "src/app/workspace/[workspaceId]/kanban/kanban-card-detail.tsx",
+    ]);
+    expect(pack.warnings).not.toContain("No task-adaptive files could be resolved from the current request.");
+    expect(pack.matchedSessionIds).toEqual([]);
+    expect(pack.summary).toContain("Kanban Workflow");
+    expect(pack.summary).toContain("src/app/workspace/[workspaceId]/kanban/kanban-card-detail.tsx");
   });
 });
