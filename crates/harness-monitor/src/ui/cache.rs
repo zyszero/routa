@@ -791,8 +791,7 @@ impl AppCache {
             if !self.test_mapping_auto_full_refresh_enabled {
                 self.pending_test_mapping_full_key = None;
                 self.test_mapping_full_refresh_note = Some(format!(
-                    "graph refresh skipped: auto Full refresh disabled by default (set {}=1 to enable)",
-                    TEST_MAPPING_AUTO_FULL_REFRESH_ENV
+                    "graph refresh skipped: auto Full refresh disabled by default (set {TEST_MAPPING_AUTO_FULL_REFRESH_ENV}=1 to enable)"
                 ));
                 return;
             }
