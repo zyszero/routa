@@ -596,6 +596,111 @@ describe("KanbanCardDetail repository health", () => {
     expect(screen.queryByText("No historical issues were recovered from the linked sessions.")).toBeNull();
   });
 
+  it("resets JIT Context when the task context search spec changes on the same card", async () => {
+    desktopAwareFetch
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        summary: "First JIT result",
+        warnings: [],
+        featureId: "feature-a",
+        featureName: "Feature A",
+        selectedFiles: ["src/app/alpha.tsx"],
+        matchedFileDetails: [{
+          filePath: "src/app/alpha.tsx",
+          changes: 1,
+          sessions: 1,
+          updatedAt: "2026-04-21T10:00:00.000Z",
+        }],
+        matchedSessionIds: [],
+        failures: [],
+        repeatedReadFiles: [],
+        sessions: [],
+      })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        summary: "Second JIT result",
+        warnings: [],
+        featureId: "feature-b",
+        featureName: "Feature B",
+        selectedFiles: ["src/app/beta.tsx"],
+        matchedFileDetails: [{
+          filePath: "src/app/beta.tsx",
+          changes: 2,
+          sessions: 1,
+          updatedAt: "2026-04-21T11:00:00.000Z",
+        }],
+        matchedSessionIds: [],
+        failures: [],
+        repeatedReadFiles: [],
+        sessions: [],
+      })));
+
+    const baseProps = {
+      boardColumns: board.columns,
+      availableProviders: [],
+      specialists: [],
+      specialistLanguage: "en" as const,
+      codebases: [{
+        id: "repo-a",
+        workspaceId: "workspace-1",
+        repoPath: "/tmp/repo-a",
+        label: "Repo A",
+        isDefault: true,
+        sourceType: "local" as const,
+        createdAt: "2025-01-01T00:00:00.000Z",
+        updatedAt: "2025-01-01T00:00:00.000Z",
+      }],
+      allCodebaseIds: ["repo-a"],
+      worktreeCache: {},
+      sessions: [],
+      fullWidth: true,
+      onPatchTask: vi.fn(async () => createTask("task-jit-refresh", "Refresh JIT context")),
+      onRetryTrigger: vi.fn(),
+      onDelete: vi.fn(),
+      onRefresh: vi.fn(),
+    };
+
+    const { rerender } = render(
+      <KanbanCardDetail
+        {...baseProps}
+        task={{
+          ...createTask("task-jit-refresh", "Refresh JIT context"),
+          assignedRole: "CRAFTER",
+          codebaseIds: ["repo-a"],
+          contextSearchSpec: {
+            query: "first-query",
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "JIT Context" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show JIT Context" }));
+    expect(await screen.findByText("Feature A")).toBeTruthy();
+
+    rerender(
+      <KanbanCardDetail
+        {...baseProps}
+        task={{
+          ...createTask("task-jit-refresh", "Refresh JIT context"),
+          assignedRole: "CRAFTER",
+          codebaseIds: ["repo-a"],
+          contextSearchSpec: {
+            query: "second-query",
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "JIT Context" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show JIT Context" }));
+    expect(await screen.findByText("Feature B")).toBeTruthy();
+
+    const firstRequestBody = JSON.parse(String(desktopAwareFetch.mock.calls[0]?.[1]?.body));
+    const secondRequestBody = JSON.parse(String(desktopAwareFetch.mock.calls[1]?.[1]?.body));
+    expect(firstRequestBody.taskAdaptiveHarness.query).toBe("first-query");
+    expect(secondRequestBody.taskAdaptiveHarness.query).toBe("second-query");
+    expect(screen.queryByText("Feature A")).toBeNull();
+  });
+
   it("prefers the current override provider over a stale selected session when a rerun fails before session creation", () => {
     render(
       <KanbanCardDetail

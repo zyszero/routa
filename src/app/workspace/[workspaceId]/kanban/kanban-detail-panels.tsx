@@ -440,7 +440,10 @@ export function JitContextPanel({
   const relatedSessionCount = pack?.sessions.length ?? 0;
   const matchedFileDetails = getMatchedFileDetails(pack);
   const matchedFileCount = matchedFileDetails.length;
-  const historySessionKey = (harnessOptions.historySessionIds ?? []).join("|");
+  const harnessSignature = useMemo(
+    () => JSON.stringify(harnessOptions),
+    [harnessOptions],
+  );
 
   useEffect(() => {
     setExpanded(false);
@@ -448,7 +451,7 @@ export function JitContextPanel({
     setLoaded(false);
     setError(null);
     setPack(null);
-  }, [historySessionKey, repoPath, specialistLanguage, task.id, workspaceId]);
+  }, [harnessSignature, repoPath, workspaceId]);
 
   const loadContext = async () => {
     if (loading) {
