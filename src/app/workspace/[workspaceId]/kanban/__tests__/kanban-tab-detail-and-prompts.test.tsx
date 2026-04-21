@@ -489,6 +489,8 @@ describe("KanbanCardDetail repository health", () => {
     fireEvent.click(screen.getByRole("button", { name: "JIT Context" }));
     fireEvent.click(screen.getByRole("button", { name: "Show JIT Context" }));
 
+    expect(await screen.findByText("Matched feature")).toBeTruthy();
+    expect(screen.getByText("Kanban Workflow")).toBeTruthy();
     expect(await screen.findByText("Matched files")).toBeTruthy();
     expect(screen.getByText("src/app/workspace/[workspaceId]/kanban/kanban-card-detail.tsx")).toBeTruthy();
     expect(screen.getByText("src/app/api/tasks/route.ts")).toBeTruthy();

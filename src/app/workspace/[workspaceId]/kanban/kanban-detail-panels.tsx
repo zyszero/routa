@@ -606,6 +606,21 @@ export function JitContextPanel({
 
               {pack.selectedFiles.length > 0 ? (
                 <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 px-3 py-2.5 dark:border-slate-700/70 dark:bg-slate-900/20">
+                  {(pack.featureName || pack.featureId) ? (
+                    <div className="mb-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                        {t.kanbanDetail.matchedFeature}
+                      </div>
+                      <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-200">
+                        <span>{pack.featureName ?? pack.featureId}</span>
+                        {pack.featureName && pack.featureId ? (
+                          <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                            {pack.featureId}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
                     {t.kanbanDetail.matchedFiles}
                   </div>

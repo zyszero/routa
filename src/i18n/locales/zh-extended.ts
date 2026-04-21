@@ -775,6 +775,7 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     noHistoricalIssues: "未检测到历史问题。",
     repeatedReadHotspots: "重复读取热点",
     relatedSessions: "相关会话",
+    matchedFeature: "命中功能",
     matchedFiles: "命中文件",
     changes: "变更",
     changesHint: "显示当前任务关联 worktree，或回退仓库中的本地变更。",

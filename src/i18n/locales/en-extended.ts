@@ -775,6 +775,7 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     noHistoricalIssues: "No historical issues were detected.",
     repeatedReadHotspots: "Repeated read hotspots",
     relatedSessions: "Related sessions",
+    matchedFeature: "Matched feature",
     matchedFiles: "Matched files",
     changes: "Changes",
     changesHint: "Task-scoped local changes from the attached worktree or fallback repository.",

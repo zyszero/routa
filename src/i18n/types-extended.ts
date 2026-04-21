@@ -780,6 +780,7 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     noHistoricalIssues: string;
     repeatedReadHotspots: string;
     relatedSessions: string;
+    matchedFeature: string;
     matchedFiles: string;
     changes: string;
     changesHint: string;
