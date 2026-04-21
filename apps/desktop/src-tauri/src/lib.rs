@@ -5,6 +5,8 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use tauri::menu::{Menu, MenuItem, Submenu};
 use tauri::{Manager, State};
 use tokio::sync::RwLock;
@@ -25,6 +27,9 @@ use routa_server::acp::{
 };
 use routa_server::rpc::RpcRouter;
 use routa_server::state::AppState;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 // ─── Shared RPC State ─────────────────────────────────────────────────────
 
@@ -612,14 +617,20 @@ fn start_local_next_server(host: &str, port: u16) -> Result<Child, String> {
         repo_root.to_string_lossy()
     );
 
-    let mut child = Command::new("npm")
+    let mut command = Command::new("npm");
+    command
         .arg("run")
         .arg("start:desktop:server")
         .current_dir(repo_root)
         .env("HOSTNAME", host)
         .env("PORT", port.to_string())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+
+    let mut child = command
         .spawn()
         .map_err(|e| format!("Failed to spawn desktop API server: {e}"))?;
 
@@ -662,7 +673,8 @@ fn start_embedded_next_server(
     );
     println!("[desktop-server] Database path: {db_path}");
 
-    let mut child = Command::new(node_bin)
+    let mut command = Command::new(node_bin);
+    command
         .arg("server.js")
         .current_dir(&server_root)
         .env("HOSTNAME", host)
@@ -671,7 +683,12 @@ fn start_embedded_next_server(
         .env("ROUTA_DB_DRIVER", "sqlite")
         .env("ROUTA_DB_PATH", &db_path)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+
+    let mut child = command
         .spawn()
         .map_err(|e| {
             format!(
