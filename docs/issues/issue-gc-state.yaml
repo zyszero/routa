@@ -1,10 +1,9 @@
-last_reviewed_at: "2026-04-17"
+last_reviewed_at: "2026-04-21"
 cadence_days: 7
 owner: "agent"
 notes: "Weekly issue hygiene heartbeat for status/implementation sync checks."
 last_cleanup_summary: |
-  2026-04-17 cleanup:
-  - Synced harness-monitor local state drift with GitHub closures: marked #413 and #442 local mirrors as resolved/closed after verifying shipped code paths
-  - Narrowed the harness-monitor selection-latency issue from the outdated "single worker" framing to the remaining facts/git-history enrichment bottleneck
-  - Narrowed the decision-console issue to the remaining journey/go-no-go summary gaps after Run Details moved to a decision-first layout
-  - Refreshed the issue hygiene heartbeat after a focused harness-monitor local issue review
+  2026-04-21 cleanup:
+  - Verified `cargo test api_mcp_tools_delegate_task_to_agent_contract -- --nocapture` passes and marked the local smoke-test tracker as resolved
+  - Normalized local issue taxonomy by changing `status: closed` to `status: resolved` for the routa-watch fast fitness tracker
+  - Recounted active local `kind: issue` trackers after cleanup; 11 remain open/investigating/in_progress and no local/GitHub state drift was found

@@ -2,7 +2,8 @@
 title: "Smoke test for delegate_task_to_agent MCP tool"
 date: "2026-04-11"
 kind: issue
-status: open
+status: resolved
+resolved_at: "2026-04-21"
 severity: medium
 area: mcp-tools
 tags: [smoke-test, delegate-task, mcp, crafter]
@@ -33,3 +34,8 @@ cd crates/routa-server && cargo test api_mcp_tools_delegate_task_to_agent_contra
 ## Test Cases
 
 Test creating a task then delegating it to CRAFTER agent via delegate_task_to_agent tool call
+
+## Resolution Update (2026-04-21)
+
+- Verified `crates/routa-server/tests/rust_api_end_to_end.rs::api_mcp_tools_delegate_task_to_agent_contract` exists and passes.
+- The end-to-end contract covers task creation, `delegate_task_to_agent` execution, and the success payload shape for delegated specialist sessions.

@@ -2,7 +2,8 @@
 title: "Routa-watch 增加 Entrix fast fitness 图表面板"
 date: "2026-04-11"
 kind: issue
-status: closed
+status: resolved
+resolved_at: "2026-04-11"
 github_issue: 410
 github_state: closed
 github_url: "https://github.com/phodal/routa/issues/410"
