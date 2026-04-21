@@ -113,6 +113,68 @@ That gives `Task-Adaptive Harness` a just-in-time seed even before the first imp
 - 2026-04-21: added MCP tool `summarize_task_history_context` and new read-only specialist `history-summary-analyst` so future analysis can start from compressed seed evidence rather than rereading all linked transcripts
 - 2026-04-21: `JIT Context` now exposes `Open History Analysis`, which starts a dedicated `history-summary-analyst` session from the card detail instead of forcing users to inject raw linked sessions into the current implementation session
 - 2026-04-21: `Open History Analysis` was adjusted again to launch a separate session page instead of hijacking the current Kanban session pane, so history analysis no longer interferes with the active execution chat
+- 2026-04-21: repo-root-only fallback is no longer empty. Re-validating `assembleTaskAdaptiveHarness("/Users/phodal/ai/routa-js", { taskLabel: "为 Kanban 建立可持久化的流动事件模型", taskType: "implementation", locale: "zh-CN" })` now returns `featureId=kanban-workflow`, `selectedFiles=17`, `matchedSessionIds=6`, and no longer emits `No task-adaptive files could be resolved from the current request.`
+- 2026-04-21: the issue is now primarily a verification problem rather than a missing retrieval primitive; the next pass should dogfood multiple hotspot features and compare `JIT Context` / `History Analysis` quality across strong vs weak hints.
+- 2026-04-21: hotspot validation exposed a ranking bug in `Task-Adaptive Harness`: explicit `featureIds` were merged with inferred feature candidates via `uniqueSorted(...)`, which reordered `["feature-explorer", "a2a"]` into `["a2a", "feature-explorer"]` and let unrelated fallback features become the primary feature.
+- 2026-04-21: file ranking also drifted because `inferredSeed.filePaths` was merged ahead of explicit feature files, so even when `featureId` was corrected, `selectedFiles` still started with unrelated fallback files.
+- 2026-04-21: after preserving explicit feature order and prioritizing explicit feature files, re-validating hotspot cases against `/Users/phodal/ai/routa-js` returned the expected primary features for `feature-explorer`, `tasks`, `mcp`, and `spec`.
+- 2026-04-21: post-fix API validation snapshot:
+  - `feature-explorer -> featureId=feature-explorer, selectedFiles=16, matchedSessions=6`
+  - `tasks -> featureId=tasks, selectedFiles=8, matchedSessions=6`
+  - `mcp -> featureId=mcp, selectedFiles=16, matchedSessions=6`
+  - `spec -> featureId=spec, selectedFiles=8, matchedSessions=6`
+
+## Verification Shortlist
+
+Use `Feature Explorer` friction profiles as the first-pass validation queue instead of picking arbitrary cards.
+
+Top hotspot features in the current local snapshot `.routa/feature-explorer/friction-profiles.json`:
+
+1. `kanban-workflow`
+   - `matchedSessions=6`, `selectedFiles=8`, `failures=8`, `repeatedReads=5`
+   - Best primary validation target because it is the exact product surface for `JIT Context` and `History Analysis`
+   - Representative recovered sessions:
+     - `019daf46-1a5b-7001-8a17-df4a7053ace0`
+     - `019da9f5-4a31-7bf0-9ac0-f836f2307537`
+     - `019daf30-4f25-78f2-bb4f-1dabbd464cc5`
+
+2. `tasks`
+   - `matchedSessions=6`, `selectedFiles=8`, `failures=8`, `repeatedReads=5`
+   - Good secondary validation target because it overlaps with the same Rust/TS backend surfaces as Kanban but exercises task APIs rather than board UI
+
+3. `feature-explorer`
+   - `matchedSessions=6`, `selectedFiles=7`, `failures=6`, `repeatedReads=4`
+   - Best cross-check target for evaluating whether `History Analysis` prompt structure now approaches the quality of the existing file/session analysis flow
+   - Representative recovered sessions:
+     - `019daf79-02ec-71a2-832d-8e87b62e060a`
+     - `019da5f2-e28c-7361-8978-11dfde7f2c4f`
+     - `019da900-d2f6-7f03-a752-15a4feae8ec3`
+
+4. `spec`
+   - `matchedSessions=6`, `selectedFiles=4`, `failures=2`, `repeatedReads=4`
+   - Useful lower-noise target to see whether the same retrieval pipeline behaves better on a smaller, more structured surface
+
+5. `mcp`
+   - `matchedSessions=4`, `selectedFiles=8`, `failures=8`, `repeatedReads=6`
+   - Useful stress case because it has dense backend hotspots and many path-resolution failures
+
+Cross-feature sessions that are high-volume but noisier:
+
+- `019dad6c-1d0f-7781-81ad-1cdbceac12e2`
+  - appears in `7` feature profiles (`kanban-workflow`, `acp`, `codebases`, `health`, `mcp`, `traces`, `workspaces`)
+  - likely useful as weak/noisy evidence, but not ideal as the first verification target because it spans too many surfaces
+
+- `019daf46-1a5b-7001-8a17-df4a7053ace0`
+  - appears in `3` focused feature profiles (`kanban-workflow`, `mcp`, `tasks`)
+  - better candidate for hotspot validation because it is still shared, but much more anchored to the current Kanban/task backend cluster
+
+Recommended verification order:
+
+1. `kanban-workflow`
+2. `feature-explorer`
+3. `tasks`
+4. `mcp`
+5. `spec`
 
 ## Relevant Files
 
