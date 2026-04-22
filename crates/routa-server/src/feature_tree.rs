@@ -48,7 +48,7 @@ fn feature_tree_script_candidates() -> Vec<PathBuf> {
 pub fn feature_tree_script_path() -> Result<PathBuf, String> {
     let candidates = feature_tree_script_candidates();
     for script in &candidates {
-        if script.exists() {
+        if script.is_file() {
             return Ok(script.to_path_buf());
         }
     }
@@ -199,6 +199,7 @@ mod tests {
         feature_tree_script_path, workspace_root,
     };
     use std::path::Path;
+    use tempfile::tempdir;
 
     #[test]
     fn resolves_workspace_root_to_repo_root() {
@@ -211,6 +212,21 @@ mod tests {
     fn resolves_feature_tree_script_from_workspace_root() {
         let script = feature_tree_script_path().expect("script path should resolve");
         assert!(script.ends_with(super::FEATURE_TREE_TS_RELATIVE_PATH));
+    }
+
+    #[test]
+    fn ignores_directory_override_when_resolving_script_path() {
+        let temp_dir = tempdir().expect("tempdir");
+        unsafe {
+            std::env::set_var("ROUTA_FEATURE_TREE_GENERATOR_PATH", temp_dir.path());
+        }
+
+        let script = feature_tree_script_path().expect("workspace fallback should resolve");
+        assert!(script.ends_with(super::FEATURE_TREE_TS_RELATIVE_PATH));
+
+        unsafe {
+            std::env::remove_var("ROUTA_FEATURE_TREE_GENERATOR_PATH");
+        }
     }
 
     #[test]

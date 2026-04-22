@@ -9,7 +9,7 @@ area: "desktop-feature-tree"
 tags: ["desktop", "feature-tree", "tauri", "release"]
 reported_by: "codex"
 github_issue: 522
-github_state: open
+github_state: closed
 github_url: "https://github.com/phodal/routa/issues/522"
 ---
 

@@ -19,9 +19,18 @@ fn repo_root(repo_path: Option<&str>) -> Result<PathBuf, String> {
         ));
     }
 
-    resolved
+    let canonical = resolved
         .canonicalize()
-        .map_err(|e| format!("Failed to resolve repository path: {e}"))
+        .map_err(|e| format!("Failed to resolve repository path: {e}"))?;
+
+    if !canonical.is_dir() {
+        return Err(format!(
+            "Repository path must be a directory: {}",
+            canonical.display()
+        ));
+    }
+
+    Ok(canonical)
 }
 
 fn print_stdout(output: &std::process::Output) {
@@ -215,8 +224,10 @@ pub fn inspect(repo_path: Option<&str>) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    use super::repo_root;
     use routa_server::feature_tree::feature_tree_script_path;
     use routa_server::feature_tree::workspace_root;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn resolves_workspace_root_to_repo_root() {
@@ -229,5 +240,13 @@ mod tests {
     fn resolves_feature_tree_script_from_workspace_root() {
         let script = feature_tree_script_path().expect("script path should resolve");
         assert!(script.ends_with("scripts/docs/feature-tree-generator.ts"));
+    }
+
+    #[test]
+    fn rejects_repo_paths_that_are_not_directories() {
+        let temp_file = NamedTempFile::new().expect("temp file");
+        let error = repo_root(Some(temp_file.path().to_str().expect("utf-8 path")))
+            .expect_err("file path should fail");
+        assert!(error.contains("must be a directory"));
     }
 }
