@@ -99,6 +99,13 @@ describe("session-analysis", () => {
     expect(prompt).toContain("可直接复用的提示词模板");
     expect(prompt).toContain("load_feature_retrospective_memory");
     expect(prompt).toContain("save_feature_retrospective_memory");
+    expect(prompt).toContain("Scope: file:<path> | feature:<id>");
+    expect(prompt).toContain("Next ask: <one sentence>");
+    expect(prompt).toContain("Must include: <4-6 comma-separated fields>");
+    expect(prompt).toContain("Avoid: <2-4 concise pitfalls or scope drifts>");
+    expect(prompt).toContain("Still need: <what still requires repo or transcript reread>");
+    expect(prompt).toContain("这 5 个标签必须全部出现");
+    expect(prompt).toContain("未知时明确写 `unknown`");
     expect(prompt).toContain("### 选中文件重复读取");
     expect(prompt).not.toContain("git status --short");
     expect(prompt).not.toContain("Operation not permitted");
@@ -172,6 +179,13 @@ describe("session-analysis", () => {
     expect(prompt).toContain("scripts/harness/inspect-transcript-turns.ts");
     expect(prompt).toContain("load_feature_retrospective_memory");
     expect(prompt).toContain("save_feature_retrospective_memory");
+    expect(prompt).toContain("Scope: file:<path> | feature:<id>");
+    expect(prompt).toContain("Next ask: <one sentence>");
+    expect(prompt).toContain("Must include: <4-6 comma-separated fields>");
+    expect(prompt).toContain("Avoid: <2-4 concise pitfalls or scope drifts>");
+    expect(prompt).toContain("Still need: <what still requires repo or transcript reread>");
+    expect(prompt).toContain("这 5 个标签必须全部出现");
+    expect(prompt).toContain("未知时明确写 `unknown`");
     expect(prompt).toContain("已从 Transcript Hints 中省略明显是在调当前复盘 / prompt / JSONL 流程本身的元会话");
     expect(prompt).toContain("只提取真实用户 turns");
     expect(prompt).toContain("不要用 rg/grep 按关键字扫描整行 JSONL 再回显整段对象");

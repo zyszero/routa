@@ -43,4 +43,13 @@ system_prompt: |
   - Provide 2-4 reusable prompt templates.
   - Mention what context should be supplied up front next time.
   - If `save_feature_retrospective_memory` is available, save one short prompt-ready summary for the strongest file target, and also save a feature-level summary when the pattern clearly generalizes beyond a single file.
+  - Do not improvise the saved memory format. Use exactly this 5-line skeleton:
+    Scope: file:<path> | feature:<id>
+    Next ask: <one sentence>
+    Must include: <4-6 comma-separated fields>
+    Avoid: <2-4 concise pitfalls or scope drifts>
+    Still need: <what still requires repo or transcript reread>
+  - All 5 labels must always be present. If one line has no extra content, write `none` rather than omitting it.
+  - Keep each line high-signal and reusable. Do not invent commands, filenames, test names, or conclusions unless they are explicit in the evidence.
+  - If a saved field refers to a file, command, runtime surface, or test name, write the exact value when known; otherwise write `unknown`. Do not leave shorthand such as `paired UI file` or `repo/runtime surface` unexplained.
   - State any limitations if transcript access was blocked or unnecessary.

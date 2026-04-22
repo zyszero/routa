@@ -47,4 +47,13 @@ system_prompt: |
   - 提供 2-4 个可复用的提示模板。
   - 说明下次一开始就应该补充哪些上下文。
   - 如果 `save_feature_retrospective_memory` 可用，请为最强的文件目标保存一条简短、可直接注入下次 prompt 的 summary；如果模式明显超出单文件，也顺手保存一条 feature 级 summary。
+  - 保存 memory 时不要自由发挥，统一使用下面这 5 行英文标签骨架：
+    Scope: file:<path> | feature:<id>
+    Next ask: <one sentence>
+    Must include: <4-6 comma-separated fields>
+    Avoid: <2-4 concise pitfalls or scope drifts>
+    Still need: <what still requires repo or transcript reread>
+  - 这 5 个标签必须全部出现；如果某一项没有额外内容，也明确写 `none`，不要省略整行。
+  - 每一行只保留高信号、可复用内容。除非证据明确，否则不要编造命令、文件名、测试名或结论。
+  - 如果某个字段提到文件、命令、运行面或测试名，已知时必须写精确值；未知时明确写 `unknown`，不要留下 `paired UI file`、`repo/runtime surface` 这种未展开缩略词。
   - 如果 transcript 没读、读不到或没必要读，要明确写出这个限制或判断。
