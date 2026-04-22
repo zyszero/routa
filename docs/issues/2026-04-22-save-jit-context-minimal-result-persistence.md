@@ -2,7 +2,7 @@
 title: "History Analysis should save a minimal task-adaptive history memory result instead of relying on generic update_task"
 date: "2026-04-22"
 kind: issue
-status: open
+status: closed
 severity: medium
 area: "kanban"
 tags: ["jit-context", "history-analysis", "mcp", "kanban"]
@@ -10,7 +10,7 @@ reported_by: "codex"
 related_issues:
   - "docs/issues/2026-04-21-jit-context-needs-repo-root-context-discovery.md"
 github_issue: 519
-github_state: open
+github_state: closed
 github_url: "https://github.com/phodal/routa/issues/519"
 ---
 
@@ -110,3 +110,15 @@ Process-oriented data such as matched files, warnings, failures, and history sum
 ## References
 
 - `docs/issues/2026-04-21-jit-context-needs-repo-root-context-discovery.md`
+
+## Resolution
+
+- 2026-04-22: closed after live verification confirmed the dedicated minimal save path is working.
+- Verified on the live app with:
+  - task `bc897ba8-b85f-49ce-9564-81acde182001`
+  - history-analysis session `24bcb54f-bd07-46ec-8509-4f5f42b822bd`
+- Evidence:
+  - the session transcript contains a real `save_history_memory_context` MCP tool call
+  - the saved payload persists back to `task.jitContextSnapshot.analysis`
+  - the stored result contains the intended minimal reusable shape (`summary`, `topFiles`, `topSessions`, `reusablePrompts`, `recommendedContextSearchSpec`)
+- Any remaining card-detail visibility problems now belong to the Kanban surface issue `#516`, not to the save path itself.

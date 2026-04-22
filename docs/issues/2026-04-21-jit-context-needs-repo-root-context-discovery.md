@@ -2,7 +2,7 @@
 title: "JIT Context stays empty for repo-root-only requests even when history sessions exist"
 date: "2026-04-21"
 kind: issue
-status: open
+status: closed
 severity: medium
 area: "kanban"
 tags: ["jit-context", "task-adaptive-harness", "feature-explorer", "history-session", "kanban"]
@@ -11,7 +11,7 @@ related_issues:
   - "docs/issues/2026-04-21-task-adaptive-harness-jit-history-session-context.md"
   - "docs/issues/2026-04-21-task-adaptive-harness-kanban-backlog-refine-and-card-detail.md"
 github_issue: 517
-github_state: open
+github_state: closed
 github_url: "https://github.com/phodal/routa/issues/517"
 ---
 
@@ -204,3 +204,18 @@ Recommended verification order:
 
 - `docs/issues/2026-04-21-task-adaptive-harness-jit-history-session-context.md`
 - `docs/issues/2026-04-21-task-adaptive-harness-kanban-backlog-refine-and-card-detail.md`
+
+## Resolution
+
+- 2026-04-22: closed after re-validating the live `POST /api/harness/task-adaptive` path with repo-root-only input.
+- Validation request:
+  - `workspaceId=default`
+  - `repoPath=/Users/phodal/ai/routa-js/.routa/repos/phodal--routa`
+  - `taskLabel=为 Kanban 建立可持久化的流动事件模型`
+  - `taskType=implementation`
+- Validation result:
+  - `featureId=kanban-workflow`
+  - `selectedFiles=16`
+  - `matchedSessionIds=6`
+  - no longer returns the old `No task-adaptive files could be resolved from the current request.` empty-state failure
+- Remaining visible Kanban UX issues are tracked separately in `#516`; this repo-root fallback gap itself is no longer open.

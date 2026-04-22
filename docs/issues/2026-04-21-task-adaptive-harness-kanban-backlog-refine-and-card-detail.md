@@ -94,6 +94,18 @@ Specifically:
   - backlog/task prompts now explicitly instruct agents to consume history memory first, then write confirmed `featureCandidates` / `relatedFiles` back through `contextSearchSpec`
 - 2026-04-22 task execution prompts now include `Saved History Memory` from the current card, so Todo/Dev/Review sessions can reuse prior summaries, top files, top sessions, and reusable prompts without opening card detail first
 - 2026-04-22 MCP now also exposes `load_feature_tree_context`, so backlog/task specialists can drill into feature tree context on demand instead of relying only on preloaded prompt sections
+- 2026-04-22 live validation on `http://localhost:3000/workspace/default/kanban?boardId=4e8e567c-e308-48cd-a4f6-e3d8e1d17839` confirms the upgraded backlog planner is consuming the new preload path in behavior, not just configuration:
+  - starting a new planning session with the story input `为 Kanban 增加 flow event 的查询与趋势摘要能力，优先复用现有事件持久化和读取契约`
+  - produced ACP session `2f1f35f2-d7fe-48e5-8e1b-2d2581f52918`
+  - created card `4d69f47a-371b-4191-81a0-7c89c06a028e`
+  - persisted `contextSearchSpec.featureCandidates=["kanban-workflow"]`
+  - persisted `contextSearchSpec.relatedFiles` with `crates/routa-server/src/api/kanban.rs`, `src/app/api/kanban/events/route.ts`, `src/app/api/kanban/boards/[boardId]/route.ts`, `src/app/api/kanban/boards/route.ts`, and `src/app/workspace/[workspaceId]/kanban/kanban-page-client.tsx`
+  - persisted `moduleHints` / `symptomHints` that explicitly preserve the `reuse existing event persistence / read contract` constraint
+- 2026-04-22 the same live validation uncovered a new user-facing regression in the card-detail inspection surface:
+  - card detail for task `8370421b-46fd-4cd3-bd98-89390b7c2006` renders the `HISTORY MEMORY` tab
+  - but repeated clicks on that tab leave `OVERVIEW` selected and the body content unchanged
+  - page text does not expose the saved history memory block, so the regression is no longer "memory not saved" but "saved memory hidden behind a tab-switch failure"
+  - this now blocks reliable dogfooding of the saved-memory UX even though the prompt/session plumbing is working
 
 ## References
 
