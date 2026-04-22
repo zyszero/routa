@@ -16,6 +16,7 @@ import {
 export type TaskAdaptiveHarnessTaskType = "implementation" | "planning" | "analysis" | "review";
 
 export interface TaskAdaptiveHarnessOptions {
+  taskId?: string;
   taskLabel?: string;
   locale?: string;
   query?: string;
@@ -1553,6 +1554,7 @@ export function parseTaskAdaptiveHarnessOptions(value: unknown): TaskAdaptiveHar
 
   const taskType = normalizeString(value.taskType);
   return {
+    taskId: normalizeString(value.taskId),
     taskLabel: normalizeString(value.taskLabel),
     locale: normalizeString(value.locale),
     query: normalizeString(value.query),
