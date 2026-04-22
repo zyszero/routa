@@ -1953,8 +1953,8 @@ export function KanbanTab({
     ) => {
       const updatedColumns = newColumns.map((col) => ({
         ...col,
-        automation: newColumnAutomation[col.id]?.enabled
-          ? normalizeKanbanAutomation(newColumnAutomation[col.id])
+        automation: newColumnAutomation[col.id]
+          ? (normalizeKanbanAutomation(newColumnAutomation[col.id]) ?? newColumnAutomation[col.id])
           : undefined,
       }));
 

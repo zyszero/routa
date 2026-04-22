@@ -219,6 +219,78 @@ describe("KanbanTab lane automation labels", () => {
   });
 });
 
+describe("KanbanTab board settings persistence", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("persists explicit disabled lane automation in the board PATCH payload", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "PATCH" && url === "/api/kanban/boards/board-1") {
+        return {
+          ok: true,
+          json: async () => ({
+            board: {
+              ...board,
+              columns: [{
+                ...board.columns[0],
+                automation: { enabled: false },
+              }],
+            },
+          }),
+        } as Response;
+      }
+      throw new Error(`Unexpected fetch: ${init?.method ?? "GET"} ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <KanbanTab
+        workspaceId="workspace-1"
+        boards={[{
+          ...board,
+          columns: [{
+            ...board.columns[0],
+            automation: {
+              enabled: true,
+              transitionType: "entry",
+              steps: [{
+                id: "backlog-refiner",
+                role: "CRAFTER",
+                specialistId: "kanban-backlog-refiner",
+                specialistName: "Backlog Refiner",
+              }],
+            },
+          }],
+        }]}
+        tasks={[]}
+        sessions={[]}
+        providers={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
+        specialists={[{ id: "kanban-backlog-refiner", name: "Backlog Refiner", role: "CRAFTER" }]}
+        codebases={[]}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: /toggle automation for backlog/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save board settings/i }));
+
+    await waitFor(() => {
+      const patchCall = fetchMock.mock.calls.find(
+        ([input, init]) => init?.method === "PATCH" && String(input) === "/api/kanban/boards/board-1",
+      );
+      expect(patchCall).toBeDefined();
+      const requestInit = patchCall?.[1] as RequestInit | undefined;
+      const body = JSON.parse(String(requestInit?.body));
+      expect(body.columns[0]?.automation).toEqual(expect.objectContaining({
+        enabled: false,
+      }));
+    });
+  });
+});
+
 describe("KanbanTab session task visibility", () => {
   it("hides session-only tasks from the board", () => {
     render(
