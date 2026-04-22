@@ -1054,7 +1054,9 @@ export function JitContextPanel({
     () => packFromTaskJitContextSnapshot(task.jitContextSnapshot),
     [task.jitContextSnapshot],
   );
-  const [expanded, setExpanded] = useState(false);
+  const savedAnalysis = task.jitContextSnapshot?.analysis;
+  const hasSavedAnalysis = Boolean(savedAnalysis);
+  const [expanded, setExpanded] = useState(hasSavedAnalysis);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(Boolean(persistedPack));
   const [error, setError] = useState<string | null>(null);
@@ -1092,7 +1094,6 @@ export function JitContextPanel({
   );
   const historicalIssueCount = uniqueFailures.length + uniqueRepeatedReadFiles.length;
   const historySummary = pack?.historySummary ?? null;
-  const savedAnalysis = task.jitContextSnapshot?.analysis;
   const historySeedSessionCount = historySummary?.seedSessionCount ?? 0;
   const recoveredSessionCount = pack?.sessions.length ?? 0;
   const matchedFileDetails = getMatchedFileDetails(pack);
@@ -1104,7 +1105,7 @@ export function JitContextPanel({
   );
 
   useEffect(() => {
-    setExpanded(false);
+    setExpanded(hasSavedAnalysis);
     setLoading(false);
     setLoaded(Boolean(persistedPack));
     setError(null);
@@ -1115,7 +1116,7 @@ export function JitContextPanel({
     setOpeningAnalysis(false);
     setAnalysisError(null);
     setAnalysisSuccess(false);
-  }, [harnessSignature, persistedPack, repoPath, workspaceId]);
+  }, [hasSavedAnalysis, harnessSignature, persistedPack, repoPath, workspaceId]);
 
   const loadContext = async () => {
     if (loading) {
@@ -1301,6 +1302,12 @@ export function JitContextPanel({
                 <span>{t.kanbanDetail.relatedSessions}: {recoveredSessionCount}</span>
                 <span>{t.kanbanDetail.matchedFiles}: {matchedFileCount}</span>
               </>
+            ) : hasSavedAnalysis && savedAnalysis ? (
+              <>
+                <span>{t.kanbanDetail.savedHistoryAnalysis}</span>
+                <span>{t.kanbanDetail.analysisTopFiles}: {savedAnalysis.topFiles.length}</span>
+                <span>{t.kanbanDetail.analysisTopSessions}: {savedAnalysis.topSessions.length}</span>
+              </>
             ) : (
               <span>{canLoadContext ? t.kanbanDetail.jitContextHint : t.kanbanDetail.jitContextNoHistorySessions}</span>
             )}
@@ -1379,23 +1386,105 @@ export function JitContextPanel({
             </div>
           ) : null}
 
-          {loading ? (
+          {savedAnalysis ? (
+            <div className="rounded-xl border border-sky-200/80 bg-sky-50/70 px-3 py-2.5 dark:border-sky-900/50 dark:bg-sky-900/10">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-700 dark:text-sky-300">
+                  {t.kanbanDetail.savedHistoryAnalysis}
+                </div>
+                {formatTimestamp(savedAnalysis.updatedAt) ? (
+                  <span className="text-[11px] text-sky-700/80 dark:text-sky-200/80">
+                    {t.kanbanDetail.updatedAt}: {formatTimestamp(savedAnalysis.updatedAt)}
+                  </span>
+                ) : null}
+              </div>
+              <div className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-200">
+                {savedAnalysis.summary}
+              </div>
+
+              {savedAnalysis.topFiles.length > 0 ? (
+                <div className="mt-3 space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                    {t.kanbanDetail.analysisTopFiles}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {savedAnalysis.topFiles.map((filePath, index) => (
+                      <span
+                        key={`analysis-file:${index}:${filePath}`}
+                        className="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-mono text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-300"
+                      >
+                        {filePath}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {savedAnalysis.topSessions.length > 0 ? (
+                <div className="mt-3 space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                    {t.kanbanDetail.analysisTopSessions}
+                  </div>
+                  <div className="space-y-2">
+                    {savedAnalysis.topSessions.map((session, index) => (
+                      <div
+                        key={`analysis-session:${index}:${session.sessionId}`}
+                        className="rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 dark:border-slate-700/70 dark:bg-slate-950/40"
+                      >
+                        <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
+                          <span>{session.sessionId}</span>
+                          {session.provider ? (
+                            <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                              {session.provider}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="mt-1 text-sm text-slate-700 dark:text-slate-200">
+                          {session.reason}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {savedAnalysis.reusablePrompts.length > 0 ? (
+                <div className="mt-3 space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                    {t.kanbanDetail.analysisReusablePrompts}
+                  </div>
+                  <div className="space-y-2">
+                    {savedAnalysis.reusablePrompts.map((prompt, index) => (
+                      <div
+                        key={`analysis-prompt:${index}:${prompt}`}
+                        className="rounded-md bg-white/80 px-2 py-1.5 text-sm text-slate-700 dark:bg-slate-950/60 dark:text-slate-200"
+                      >
+                        {prompt}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {!hasSavedAnalysis && loading ? (
             <div className="border-b border-slate-200/70 px-1 pb-2 text-sm text-slate-500 dark:border-slate-700/70 dark:text-slate-400">
               {t.kanbanDetail.loadingJitContext}
             </div>
-          ) : error ? (
+          ) : !hasSavedAnalysis && error ? (
             <div className="rounded-xl border border-rose-200/80 bg-rose-50/80 px-3 py-2.5 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-900/10 dark:text-rose-200">
               {error}
             </div>
-          ) : !canLoadContext ? (
+          ) : !hasSavedAnalysis && !canLoadContext ? (
             <div className="border-b border-slate-200/70 px-1 pb-2 text-sm text-slate-500 dark:border-slate-700/70 dark:text-slate-400">
               {t.kanbanDetail.jitContextNoHistorySessions}
             </div>
-          ) : !pack || (uniqueFailures.length === 0 && uniqueRepeatedReadFiles.length === 0 && pack.sessions.length === 0 && matchedFileDetails.length === 0 && uniqueWarnings.length === 0 && !pack.historySummary) ? (
+          ) : !hasSavedAnalysis && (!pack || (uniqueFailures.length === 0 && uniqueRepeatedReadFiles.length === 0 && pack.sessions.length === 0 && matchedFileDetails.length === 0 && uniqueWarnings.length === 0 && !pack.historySummary)) ? (
             <div className="border-b border-slate-200/70 px-1 pb-2 text-sm text-slate-500 dark:border-slate-700/70 dark:text-slate-400">
               {t.kanbanDetail.noJitContext}
             </div>
-          ) : (
+          ) : pack ? (
             <>
               {historySummary ? (
                 <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 px-3 py-2.5 dark:border-slate-700/70 dark:bg-slate-900/20">
@@ -1410,88 +1499,6 @@ export function JitContextPanel({
                     <span>{t.kanbanDetail.relatedSessions}: {historySummary.recoveredSessionCount}</span>
                     <span>{t.kanbanDetail.matchedFiles}: {historySummary.matchedFileCount}</span>
                   </div>
-                </div>
-              ) : null}
-
-              {savedAnalysis ? (
-                <div className="rounded-xl border border-sky-200/80 bg-sky-50/70 px-3 py-2.5 dark:border-sky-900/50 dark:bg-sky-900/10">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-700 dark:text-sky-300">
-                      {t.kanbanDetail.savedHistoryAnalysis}
-                    </div>
-                    {formatTimestamp(savedAnalysis.updatedAt) ? (
-                      <span className="text-[11px] text-sky-700/80 dark:text-sky-200/80">
-                        {t.kanbanDetail.updatedAt}: {formatTimestamp(savedAnalysis.updatedAt)}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-200">
-                    {savedAnalysis.summary}
-                  </div>
-
-                  {savedAnalysis.topFiles.length > 0 ? (
-                    <div className="mt-3 space-y-2">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                        {t.kanbanDetail.analysisTopFiles}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {savedAnalysis.topFiles.map((filePath, index) => (
-                          <span
-                            key={`analysis-file:${index}:${filePath}`}
-                            className="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-mono text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-300"
-                          >
-                            {filePath}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {savedAnalysis.topSessions.length > 0 ? (
-                    <div className="mt-3 space-y-2">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                        {t.kanbanDetail.analysisTopSessions}
-                      </div>
-                      <div className="space-y-2">
-                        {savedAnalysis.topSessions.map((session, index) => (
-                          <div
-                            key={`analysis-session:${index}:${session.sessionId}`}
-                            className="rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 dark:border-slate-700/70 dark:bg-slate-950/40"
-                          >
-                            <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
-                              <span>{session.sessionId}</span>
-                              {session.provider ? (
-                                <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
-                                  {session.provider}
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="mt-1 text-sm text-slate-700 dark:text-slate-200">
-                              {session.reason}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {savedAnalysis.reusablePrompts.length > 0 ? (
-                    <div className="mt-3 space-y-2">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                        {t.kanbanDetail.analysisReusablePrompts}
-                      </div>
-                      <div className="space-y-2">
-                        {savedAnalysis.reusablePrompts.map((prompt, index) => (
-                          <div
-                            key={`analysis-prompt:${index}:${prompt}`}
-                            className="rounded-md bg-white/80 px-2 py-1.5 text-sm text-slate-700 dark:bg-slate-950/60 dark:text-slate-200"
-                          >
-                            {prompt}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
                 </div>
               ) : null}
 
@@ -1755,7 +1762,7 @@ export function JitContextPanel({
                 </div>
               ) : null}
             </>
-          )}
+          ) : null}
         </div>
       )}
     </div>

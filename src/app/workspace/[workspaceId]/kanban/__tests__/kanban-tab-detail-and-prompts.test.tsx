@@ -731,13 +731,13 @@ describe("KanbanCardDetail repository health", () => {
     );
 
     fireEvent.click(screen.getByRole("tab", { name: "History Memory" }));
-    fireEvent.click(screen.getByRole("button", { name: "Show History Memory" }));
 
     expect(screen.getByText("Saved History Memory")).toBeTruthy();
     expect(screen.getByText("Start from the Kanban API and blocked interval reconstruction before touching the dashboard.")).toBeTruthy();
     expect(screen.getByText("Top files")).toBeTruthy();
     expect(screen.getByText("Top sessions")).toBeTruthy();
     expect(screen.getByText("Reusable prompts")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Hide History Memory" })).toBeTruthy();
   });
 
   it("loads JIT Context from search hints even when no history sessions are linked", async () => {
