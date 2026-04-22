@@ -2,7 +2,7 @@
 title: "Kanban should surface Task-Adaptive Harness in backlog refinement and card detail"
 date: "2026-04-21"
 kind: issue
-status: open
+status: closed
 severity: medium
 area: kanban
 tags:
@@ -16,7 +16,7 @@ reported_by: "codex"
 related_issues:
   - "docs/issues/2026-04-21-task-adaptive-harness-jit-history-session-context.md"
 github_issue: 516
-github_state: open
+github_state: closed
 github_url: "https://github.com/phodal/routa/issues/516"
 ---
 
@@ -101,11 +101,19 @@ Specifically:
   - persisted `contextSearchSpec.featureCandidates=["kanban-workflow"]`
   - persisted `contextSearchSpec.relatedFiles` with `crates/routa-server/src/api/kanban.rs`, `src/app/api/kanban/events/route.ts`, `src/app/api/kanban/boards/[boardId]/route.ts`, `src/app/api/kanban/boards/route.ts`, and `src/app/workspace/[workspaceId]/kanban/kanban-page-client.tsx`
   - persisted `moduleHints` / `symptomHints` that explicitly preserve the `reuse existing event persistence / read contract` constraint
-- 2026-04-22 the same live validation uncovered a new user-facing regression in the card-detail inspection surface:
-  - card detail for task `8370421b-46fd-4cd3-bd98-89390b7c2006` renders the `HISTORY MEMORY` tab
-  - but repeated clicks on that tab leave `OVERVIEW` selected and the body content unchanged
-  - page text does not expose the saved history memory block, so the regression is no longer "memory not saved" but "saved memory hidden behind a tab-switch failure"
-  - this now blocks reliable dogfooding of the saved-memory UX even though the prompt/session plumbing is working
+- 2026-04-22 a deeper Playwright DOM probe disproved the earlier tab regression report:
+  - for task `8370421b-46fd-4cd3-bd98-89390b7c2006`, clicking `HISTORY MEMORY` changes `aria-selected` from `overview=true` / `jitContext=false` to `overview=false` / `jitContext=true`
+  - the rendered panel text includes `SAVED HISTORY MEMORY`, saved summary content, top files, top sessions, reusable prompts, and the recovered history/process sections
+  - the earlier `agent-browser` reading was a false negative caused by that tool's interaction/snapshot path, not a product bug in the card-detail tabs
+
+## Resolution
+
+- 2026-04-22: closed after live validation confirmed that both halves of this follow-up are now productized:
+  - backlog refinement/planning sessions preload relevant history memory and feature tree context, and write the resulting high-signal hints back into `contextSearchSpec`
+  - card detail exposes the saved `History Memory` result together with the process/retrieval view, including confidence, matched files, recovered sessions, warnings, failures, and reusable prompts
+- Verified in the live app on `http://localhost:3000/workspace/default/kanban?boardId=4e8e567c-e308-48cd-a4f6-e3d8e1d17839`:
+  - creating a new backlog story persisted `featureCandidates` / `relatedFiles` / `moduleHints` / `symptomHints`
+  - opening the existing flow-event card and switching to `HISTORY MEMORY` displayed the saved history memory and the recovered task-adaptive context
 
 ## References
 
